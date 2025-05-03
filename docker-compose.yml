@@ -1,0 +1,123 @@
+services:
+    fastapi:
+        build: .
+        command: >
+          sh -c "python migrate.py && poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000"
+        ports:
+          - "8000:8000"
+        depends_on:
+          postgres:
+              condition: service_healthy
+          redis:
+            condition: service_started
+        environment:
+          - DATABASE_URL=postgresql://user:pass@postgres:5432/servit
+          - REDIS_URL=redis://redis:6379/0
+        volumes:
+          - ./logs:/logs
+
+    celery_worker:
+        build: .
+        command: celery -A app.celery_app.celery_app worker --loglevel=debug
+        depends_on:
+          - rabbitmq
+          - postgres
+        environment:
+          - CELERY_BROKER_URL=redis://redis:6379/0
+          - DATABASE_URL=postgresql://user:pass@postgres:5432/servit
+          - REDIS_URL=redis://redis:6379/0
+
+    celery_beat:
+        build: .
+        command: celery -A app.celery_app.celery_app beat --loglevel=debug
+        depends_on:
+          - rabbitmq
+          - postgres
+        environment:
+          - CELERY_BROKER_URL=redis://redis:6379/0
+          - DATABASE_URL=postgresql://user:pass@postgres:5432/servit
+          - REDIS_URL=redis://redis:6379/0
+
+    redis:
+        image: redis:latest
+        ports:
+          - "6379:6379"
+
+    postgres:
+        image: timescale/timescaledb:latest-pg16
+        environment:
+            POSTGRES_USER: user
+            POSTGRES_PASSWORD: pass
+            POSTGRES_DB: servit
+            LANG: en_US.UTF-8
+            LC_ALL: en_US.UTF-8
+            LC_COLLATE: en_US.UTF-8
+            LC_CTYPE: en_US.UTF-8
+        ports:
+            - "5432:5432"
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        command: >
+            postgres -c shared_preload_libraries=timescaledb
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U user -d servit"]
+            interval: 5s
+            retries: 5
+            timeout: 3s
+
+    prometheus:
+        image: prom/prometheus:latest
+        volumes:
+          - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+          - prometheus_data:/prometheus
+        ports:
+          - "9090:9090"
+
+    grafana:
+        image: grafana/grafana:latest
+        ports:
+          - "3000:3000"
+        volumes:
+          - grafana_data:/var/lib/grafana
+        environment:
+          - GF_SECURITY_ADMIN_PASSWORD=admin
+        depends_on:
+          - prometheus
+
+    loki:
+        image: grafana/loki:2.7.1
+        ports:
+          - "3100:3100"
+        volumes:
+          - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+          - loki_data:/loki
+        entrypoint: sh -c "mkdir -p /loki/compactor /loki/index /loki/boltdb-cache /loki/chunks /loki/wal && /usr/bin/loki -config.file=/etc/loki/local-config.yaml"
+
+    promtail:
+        image: grafana/promtail:2.7.1
+        volumes:
+          - ./logs:/logs
+          - ./promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+        command: -config.file=/etc/promtail/promtail-config.yaml
+
+    localstack:
+        image: localstack/localstack:latest
+        container_name: localstack
+        environment:
+            - SERVICES=s3,sqs,sns,dynamodb
+            - DEFAULT_REGION=us-east-1
+            - EDGE_PORT=4566
+            - AWS_ACCESS_KEY_ID=test
+            - AWS_SECRET_ACCESS_KEY=test
+            - DEBUG=1
+        ports:
+            - "4566:4566" # Main LocalStack endpoint
+            - "4571:4571" # Alternative API endpoint
+        volumes:
+            - "/var/run/docker.sock:/var/run/docker.sock"
+
+volumes:
+    pgdata:
+    prometheus_data:
+    grafana_data:
+    loki_data:

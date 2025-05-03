@@ -1,0 +1,13 @@
+version: 1
+disable_existing_loggers: false
+formatters:
+  default:
+    format: '%(asctime)s - %(levelname)s - %(message)s'
+handlers:
+  file:
+    class: logging.FileHandler
+    formatter: default
+    filename: /logs/fastapi.log
+root:
+  level: INFO
+  handlers: [file]

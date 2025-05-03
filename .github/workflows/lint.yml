@@ -1,0 +1,38 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.12
+
+    - name: Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        export PATH="$HOME/.local/bin:$PATH"
+
+    - name: Install dependencies with Poetry
+      run: |
+        poetry install --no-interaction --no-root
+
+    - name: Run pre-commit hooks.
+      run: SKIP=flake8;
+
+    - name: Lint with flake8
+      run: |
+        poetry run flake8 .

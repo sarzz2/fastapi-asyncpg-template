@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: "fastapi"
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ["fastapi:8000"]
+
+    metric_relabel_configs:
+      - source_labels: [endpoint]
+        regex: '(\/.*?\/)(?:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|\d+)(.*)'
+        target_label: endpoint
+        replacement: '${1}{id}${2}'
+        action: replace
