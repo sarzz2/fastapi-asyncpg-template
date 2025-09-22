@@ -30,7 +30,7 @@ redis= "^5.2.0"
 requests = "^2.32.3"
 celery = "^5.4.0"
 pydantic-extra-types = "^2.10.2"
-phonenumbers = "^8.13.55"
+phonenumbers = "^9.0.14"
 stripe = "^11.6.0"
 prometheus-client = "^0.21.1"
 
