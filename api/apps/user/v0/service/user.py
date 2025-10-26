@@ -1,0 +1,48 @@
+from typing import Optional
+
+from fastapi import Depends, HTTPException, status
+
+from api.apps.user.schemas.user import (
+    Token,
+    UserCreate,
+    UserInDB,
+    UserLogin,
+    UserResponse,
+)
+from api.apps.user.v0.dao.user import UserDAO
+from api.core.auth import create_access_token, get_password_hash, verify_password
+
+
+class UserService:
+    """Service layer for user operations.
+
+    This class expects a `UserDAO` to be injected. FastAPI will construct the
+    DAO (and the DAO will obtain a database via its own Depends(get_db)).
+    """
+
+    def __init__(self, dao: UserDAO = Depends(UserDAO)):
+        self.dao = dao
+
+    async def create_user(self, user_in: UserCreate) -> UserResponse:
+        """Create a new user and return a response model."""
+        hashed_password = get_password_hash(user_in.password)
+        user_db = await self.dao.create_user(user_in, hashed_password)
+        return UserResponse(**user_db)
+
+    async def authenticate_user(self, login_data: UserLogin) -> Token:
+        """Authenticate user and return an access token."""
+        user = await self.dao.get_by_username(login_data.username)
+        if not user or not verify_password(login_data.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        token_data = {
+            "sub": user.username,
+            "id": user.id,
+            "role": "superuser" if user.is_superuser else "user",
+        }
+        access_token = create_access_token(token_data)
+        return Token(access_token=access_token)

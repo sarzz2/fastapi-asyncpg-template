@@ -1,0 +1,675 @@
+import asyncio
+import json
+import logging
+import re
+import time
+from dataclasses import dataclass
+from typing import (
+    Any,
+    AsyncGenerator,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+)
+
+from asyncpg import Connection, Pool, Record, create_pool
+from pydantic import BaseModel
+
+
+class DatabaseError(Exception):
+    """Base exception for database errors"""
+
+    pass
+
+
+class ConnectionError(DatabaseError):
+    """Error when connection cannot be established or is lost"""
+
+    pass
+
+
+class QueryError(DatabaseError):
+    """Error during query execution"""
+
+    pass
+
+
+class PoolExhaustedError(DatabaseError):
+    """Error when connection pool is exhausted"""
+
+    pass
+
+
+# from app.middlewares.region_middleware import CLIENT_REGION
+
+BM = TypeVar("BM", bound="DataBase")
+log = logging.getLogger("fastapi")
+
+
+class CustomRecord(Record):
+    """A custom record class that extends asyncpg.Record to provide Pydantic-style model access.
+
+    This class allows:
+    1. Dictionary-style access (record['field'])
+    2. Attribute-style access (record.field)
+    3. Fast conversion to Pydantic models using model_construct
+    """
+
+    def __getattr__(self, item: str):
+        """Attempt to get an attribute by first trying dictionary access, then falling back to normal attribute access.
+
+        Args:
+            item (str): The name of the attribute to retrieve
+
+        Returns:
+            Any: The value of the requested attribute
+
+        Raises:
+            AttributeError: If the attribute doesn't exist
+        """
+        try:
+            return self[item]
+        except KeyError:
+            pass
+
+        return super().__getattr__(item)
+
+    def dict(self) -> dict:
+        """Convert record to a dictionary for Pydantic model construction.
+        
+        Returns:
+            dict: Dictionary representation of the record
+        """
+        return {key: value for key, value in self.items()}
+
+
+@dataclass
+class PoolMeta:
+    """Metadata container for database connection pools.
+
+    This class holds information about a database connection pool including its URI,
+    the pool object itself, associated region, health status, and latency metrics.
+
+    Attributes:
+        uri (str): The database connection URI
+        pool (Pool): The asyncpg connection pool object
+        region (str): The geographic region identifier for this pool
+        healthy (bool): Flag indicating if the pool is currently healthy (default: True)
+        last_latency (Optional[float]): The last measured latency in seconds for this pool (default: None)
+    """
+
+    uri: str
+    pool: Pool
+    region: str
+    healthy: bool = True
+    last_latency: Optional[float] = None
+
+
+class DataBase(BaseModel):
+    """A database management class that handles connection pools for read and write operations.
+
+    This class provides functionality for managing multiple database connection pools across
+    different regions, supporting read-write splitting, and automatic failover. It includes
+    features like health checking, round-robin load balancing, and region-aware routing.
+
+    Class Variables:
+        write_pool (ClassVar[Optional[Pool]]): The primary write connection pool
+        read_pools_by_region (ClassVar[Dict[str, List[PoolMeta]]]): Mapping of regions to their read pools
+        _region_rr_index (ClassVar[Dict[str, int]]): Round-robin index counter per region
+        _region_locks (ClassVar[Dict[str, asyncio.Lock]]): Synchronization locks per region
+        _global_lock (ClassVar[Optional[asyncio.Lock]]): Global synchronization lock
+        _health_task (ClassVar[Optional[asyncio.Task]]): Task for running health checks
+        _region_priority (ClassVar[List[str]]): Ordered list of region failover priorities
+    """
+
+    write_pool: ClassVar[Optional[Pool]] = None
+
+    # maps region -> list[PoolMeta]
+    read_pools_by_region: ClassVar[Dict[str, List[PoolMeta]]] = {}
+    # per-region round-robin index and lock
+    _region_rr_index: ClassVar[Dict[str, int]] = {}
+    _region_locks: ClassVar[Dict[str, asyncio.Lock]] = {}
+
+    # overall locks / tasks
+    _global_lock: ClassVar[Optional[asyncio.Lock]] = None
+    _health_task: ClassVar[Optional[asyncio.Task]] = None
+    _region_priority: ClassVar[List[str]] = []
+
+    @classmethod
+    async def create_pool(
+        cls,
+        write_uri: str,
+        read_uris: Dict[str, Union[str, List[str]]] = None,
+        *,
+        min_con: int = 1,
+        max_con: int = 10,
+        loop: asyncio.AbstractEventLoop = None,
+        health_check_interval: Optional[int] = None,
+        region_priority: Optional[List[str]] = None,
+        **kwargs,
+    ) -> None:
+        """Initialize database connection pools for both write and read operations.
+
+        This method sets up the primary write pool and optional read replica pools across different regions.
+        It also initializes health checking and connection management infrastructure.
+
+        Args:
+            write_uri (str): Connection URI for the primary (write) database
+            read_uris (Dict[str, Union[str, List[str]]], optional): Mapping of regions to read replica URIs.
+                Format: {"region": "uri"} or {"region": ["uri1", "uri2"]}
+                If None, read operations will use the write pool.
+            min_con (int, optional): Minimum number of connections per pool. Defaults to 1.
+            max_con (int, optional): Maximum number of connections per pool. Defaults to 10.
+            loop (asyncio.AbstractEventLoop, optional): Event loop to use for async operations.
+            health_check_interval (int, optional): Interval in seconds between health checks.
+                If None or 0, health checks are disabled.
+            region_priority (List[str], optional): Ordered list of regions for failover priority.
+                Used when client_region is not available or all replicas in a region are down.
+            **kwargs: Additional arguments passed to asyncpg.create_pool()
+
+        Raises:
+            RuntimeError: If pool creation fails critically
+
+        Note:
+            - The method automatically configures JSON/JSONB type handling for all connections
+            - Failed read replica pool creation is logged but doesn't stop overall initialization
+            - If no read pools are created, the write pool is used for all operations
+        """
+
+        async def init_connection(connection):
+            await connection.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+            await connection.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
+
+        # create write pool
+        cls.write_pool = await create_pool(
+            write_uri,
+            min_size=min_con,
+            max_size=max_con,
+            loop=loop,
+            record_class=CustomRecord,
+            init=init_connection,
+            **kwargs,
+        )
+        log.info(f"Established Write DB pool with {min_con} - {max_con} connections")
+
+        if cls._global_lock is None:
+            cls._global_lock = asyncio.Lock()
+
+        # create pools per region
+        cls.read_pools_by_region = {}
+        for region, uris in read_uris.items():
+            cls.read_pools_by_region.setdefault(region, [])
+            cls._region_rr_index.setdefault(region, 0)
+            cls._region_locks.setdefault(region, asyncio.Lock())
+            for uri in uris:
+                try:
+                    pool = await create_pool(
+                        uri,
+                        min_size=min_con,
+                        max_size=max_con,
+                        loop=loop,
+                        record_class=CustomRecord,
+                        init=init_connection,
+                        **kwargs,
+                    )
+                    cls.read_pools_by_region[region].append(PoolMeta(uri=uri, pool=pool, region=region))
+                    log.info(f"Established Read DB pool for region={region}")
+                except Exception:
+                    log.exception(f"Failed to create read pool for {uri} (region={region}); skipping.")
+
+        # fallback: if no read pools at all, use write pool under "global"
+        if not cls.read_pools_by_region:
+            cls.read_pools_by_region = {"global": [PoolMeta(uri=write_uri, pool=cls.write_pool, region="global")]}
+            cls._region_rr_index.setdefault("global", 0)
+            cls._region_locks.setdefault("global", asyncio.Lock())
+            log.info("No read replicas configured — using write pool for reads (global).")
+
+        # save region_priority on class so selection can use it
+        cls._region_priority = list(region_priority or list(cls.read_pools_by_region.keys()))
+
+        if health_check_interval and health_check_interval > 0:
+            if cls._health_task and not cls._health_task.done():
+                cls._health_task.cancel()
+            cls._health_task = asyncio.create_task(cls._health_check_loop(interval=health_check_interval))
+
+    @classmethod
+    async def _health_check_loop(cls, interval: int):
+        """Continuously monitor the health of all database connection pools.
+
+        This internal method runs an infinite loop that periodically checks each pool's
+        health by executing a simple query. It updates the health status and latency
+        metrics for each pool.
+
+        Args:
+            interval (int): Time in seconds between health check cycles
+
+        Note:
+            - The method runs indefinitely until the task is cancelled
+            - Each pool is checked independently; failure of one doesn't affect others
+            - Health metrics are used by pool selection logic for failover and routing
+            - Exceptions during health checks are logged but don't stop the loop
+        """
+        while True:
+            await asyncio.sleep(interval)
+            for region, metas in list(cls.read_pools_by_region.items()):
+                for meta in metas:
+                    try:
+                        t0 = time.perf_counter()
+                        async with meta.pool.acquire() as conn:
+                            await conn.fetchval("SELECT 1")
+                        latency = time.perf_counter() - t0
+                        meta.healthy = True
+                        meta.last_latency = latency
+                    except Exception:
+                        meta.healthy = False
+                        log.exception(f"Health check failed for {meta.uri}")
+
+    @classmethod
+    async def _choose_region(cls, client_region: Optional[str] = None) -> Optional[str]:
+        """Select the most appropriate database region based on various criteria.
+
+        This internal method implements the region selection strategy with the following
+        priority order:
+        1. Client's region if it has healthy pools
+        2. Regions from cls._region_priority list
+        3. Region with lowest average latency among healthy pools
+        4. Any available region as last resort
+
+        Args:
+            client_region (Optional[str], default=None): The preferred region based on client location
+
+        Returns:
+            Optional[str]: The selected region name, or None if no suitable region is found
+
+        Note:
+            The selection logic prioritizes:
+            - Proximity (matching client region)
+            - Configured priorities (region_priority list)
+            - Performance (lowest latency)
+            - Availability (any working pool)
+        """
+        # exact match
+        if client_region:
+            metas = cls.read_pools_by_region.get(client_region)
+            if metas:
+                if any(m.healthy for m in metas):
+                    return client_region
+
+        # region_priority fallback
+        for r in cls._region_priority:
+            metas = cls.read_pools_by_region.get(r)
+            if metas and any(m.healthy for m in metas):
+                return r
+
+        # pick by lowest avg latency
+        best_region = None
+        best_latency = None
+        for r, metas in cls.read_pools_by_region.items():
+            healthy = [m for m in metas if m.healthy and m.last_latency is not None]
+            if not healthy:
+                continue
+            avg = sum(m.last_latency for m in healthy) / len(healthy)
+            if best_latency is None or avg < best_latency:
+                best_latency = avg
+                best_region = r
+        if best_region:
+            return best_region
+
+        # last resort: any region with at least one pool
+        for r, metas in cls.read_pools_by_region.items():
+            if metas:
+                return r
+        return None
+
+    @classmethod
+    def _get_region_for_pool(cls, pool_to_find: Pool) -> Optional[str]:
+        """Find the region name associated with a given database pool.
+
+        This internal method searches through all configured regions and their pools
+        to find the region associated with a specific pool object.
+
+        Args:
+            pool_to_find (Pool): The pool object to locate
+
+        Returns:
+            Optional[str]: The region name if found, None if the pool isn't in any region
+
+        Note:
+            This is particularly useful when determining the region for the write pool
+            when it's also configured as a read replica.
+        """
+        for region, metas in cls.read_pools_by_region.items():
+            for meta in metas:
+                if meta.pool is pool_to_find:
+                    return region
+        return None
+
+    @classmethod
+    async def _select_read_pool(cls, client_region: Optional[str] = None):
+        """Select an appropriate read pool based on client region and pool health status.
+
+        This internal method implements the read pool selection strategy, considering:
+        - Geographic proximity (client region)
+        - Pool health status
+        - Load balancing (round-robin within a region)
+        - Fallback mechanisms for handling failures
+
+        Args:
+            client_region (Optional[str], default=None): The preferred region based on client location
+
+        Returns:
+            Tuple[Pool, str]: A tuple containing (selected pool object, region name)
+
+        Raises:
+            RuntimeError: If no pools are available (all pools are down and no fallback)
+
+        Note:
+            - Uses _choose_region() to select the appropriate region
+            - Implements round-robin selection within a region
+            - Includes fallback to write pool if no read pools are available
+            - Maintains fairness using per-region locks for round-robin selection
+        """
+        region = await cls._choose_region(client_region=client_region)
+        if region is None:
+            if cls.write_pool:
+                # Fallback to write pool, try to find its region if it's also a read replica
+                region_name = cls._get_region_for_pool(cls.write_pool) or "primary_fallback"
+                return cls.write_pool, region_name
+            raise RuntimeError("No DB pools available")
+
+        metas = cls.read_pools_by_region.get(region, [])
+        healthy_metas = [m for m in metas if m.healthy]
+        if not healthy_metas:
+            # if no healthy in chosen region, fallback to any healthy pool globally
+            all_healthy = []
+            for ms in cls.read_pools_by_region.values():
+                all_healthy.extend([m for m in ms if m.healthy])
+            if all_healthy:
+                metas = all_healthy
+            else:
+                # fallback to any configured pool (even unhealthy) to avoid total outage
+                metas = [m for ms in cls.read_pools_by_region.values() for m in ms]
+
+        # round-robin inside metas (use region lock keyed by chosen region for stability)
+        lock = cls._region_locks.setdefault(region, asyncio.Lock())
+        async with lock:
+            idx = cls._region_rr_index.setdefault(region, 0) % len(metas)
+            cls._region_rr_index[region] = (cls._region_rr_index.setdefault(region, 0) + 1) % 1_000_000_000
+            return metas[idx].pool, region
+
+    @classmethod
+    async def get_pool(cls, use_primary: bool = False):
+        """Get an appropriate database connection pool based on the operation type.
+
+        This method selects either the primary write pool or an appropriate read pool
+        based on the operation requirements and geographic routing rules.
+
+        Args:
+            use_primary (bool, default=False): If True, returns the write pool;
+                if False, selects an appropriate read pool
+
+        Returns:
+            Tuple[Pool, str]: A tuple containing (selected pool object, region name)
+
+        Raises:
+            RuntimeError: If write pool is requested but not initialized, or if no
+                suitable pool is available
+
+        Note:
+            - When use_primary is True, always returns the write pool
+            - When use_primary is False, uses geographic routing and load balancing
+              to select an appropriate read pool
+        """
+        if use_primary:
+            if not cls.write_pool:
+                raise RuntimeError("Write pool not initialized")
+            # Try to find the region name if the write pool is also configured as a read replica
+            region_name = cls._get_region_for_pool(cls.write_pool) or "primary"
+            return cls.write_pool, region_name
+        # client_region = CLIENT_REGION.get()
+        client_region = "us-east-1"
+        return await cls._select_read_pool(client_region=client_region)
+
+    @staticmethod
+    def clean_query(query: str) -> str:
+        """Clean and normalize a SQL query string for logging purposes.
+
+        This method processes a SQL query string by:
+        - Removing leading and trailing whitespace
+        - Replacing multiple spaces and newlines with a single space
+
+        Args:
+            query (str): The SQL query string to clean
+
+        Returns:
+            str: The cleaned and normalized query string
+
+        Note:
+            This is primarily used for logging to make query logs more readable
+            and consistent.
+        """
+        return re.sub(r"\s+", " ", query.strip())
+
+    @classmethod
+    async def fetch(cls: Type[BM], query: str, fetch_row: bool = False, *args, **kwargs) -> List[Union[Record, BM]]:
+        """Execute a read query using read replicas.
+
+        Args:
+            query: The SQL query to execute
+            *args: Query parameters to bind
+            **kwargs: Additional options including 'convert' for model conversion
+
+        Returns:
+            List[Union[Record, BM]]: List of records or model instances
+        """
+        pool, region = await cls.get_pool(use_primary=False)
+        start_time = time.perf_counter()
+        try:
+            if fetch_row:
+                records = await pool.fetchrow(query, *args)
+            else:
+                records = await pool.fetch(query, *args)
+
+            duration = time.perf_counter() - start_time
+            log.debug(f"Read query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
+            return cls.model_construct(**records.dict()) if kwargs.get("convert", True) and cls is not DataBase else records
+        except Exception as e:
+            raise QueryError(f"Read query failed: {str(e)}") from e
+
+    @classmethod
+    async def write(cls: Type[BM], query: str, *args, **kwargs) -> Union[Record, BM]:
+        """Execute a write query using primary pool with results.
+
+        Args:
+            query: The SQL query to execute
+            *args: Query parameters to bind
+            **kwargs: Additional options including 'convert' for model conversion
+
+        Returns:
+            Union[Record, BM]: Record or model instances
+        """
+        pool, _ = await cls.get_pool(use_primary=True)
+        start_time = time.perf_counter()
+        try:
+            record = await pool.fetchrow(query, *args)
+            duration = time.perf_counter() - start_time
+            log.debug(f"Write query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
+            if not record:
+                return None
+            return cls.model_construct(**record.dict()) if kwargs.get("convert", True) and cls is not DataBase else record
+        except Exception as e:
+            raise QueryError(f"Write query failed: {str(e)}") from e
+
+    @classmethod
+    async def fetchval(
+        cls,
+        query,
+        *args,
+        con: Union[Connection, Pool] = None,
+        column: int = 0,
+        use_primary: bool = False,
+    ):
+        """Execute a query and return a single value.
+
+        This method executes a SQL query and returns a single value from the first row.
+        Useful for queries that return a single value like COUNT(*) or MAX(column).
+
+        Args:
+            query: The SQL query to execute
+            *args: Query parameters to bind
+            con (Union[Connection, Pool], optional): Specific connection or pool to use.
+                If None, an appropriate pool will be selected.
+            column (int, default=0): Zero-based index of the column to return
+            use_primary (bool, default=False): If True, forces use of write pool
+
+        Returns:
+            Any: The value from the specified column of the first row, or None if no rows
+
+        Note:
+            - Returns None if no rows match the query
+            - Only returns the value of a single column
+            - Automatically handles pool selection if no connection provided
+            - Logs query execution details including duration and region
+        """
+        region = None
+        if con is None:
+            con, region = await cls.get_pool(use_primary=use_primary)
+
+        start_time = time.perf_counter()
+        value = await con.fetchval(query, *args, column=column)
+        duration = time.perf_counter() - start_time
+        log.debug(f"Running query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
+        return value
+
+    @classmethod
+    async def execute(cls, query: str, *args, con: Union[Connection, Pool] = None) -> str:
+        """Execute a query that modifies the database.
+
+        This method executes a SQL query that modifies the database (INSERT, UPDATE,
+        DELETE, etc.) and returns the command completion tag.
+
+        Args:
+            query (str): The SQL query to execute
+            *args: Query parameters to bind
+            con (Union[Connection, Pool], optional): Specific connection or pool to use.
+                If None, the primary write pool will be used.
+
+        Returns:
+            str: The command completion tag (e.g., "INSERT 0 1")
+
+        Note:
+            - Always uses the write pool if no specific connection is provided
+            - Suitable for queries that modify the database
+            - Logs query execution details including duration
+            - Returns a string indicating the operation result
+        """
+        if con is None:
+            # writes always to primary
+            con = cls.write_pool
+        start_time = time.perf_counter()
+        result = await con.execute(query, *args)
+        duration = time.perf_counter() - start_time
+        log.debug(f"Running query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
+        return result
+
+    @classmethod
+    async def close_pool(cls) -> None:
+        """Clean up and close all database connection pools.
+
+        This method performs a graceful shutdown of all database connections by:
+        1. Cancelling the health check task if running
+        2. Closing all read replica pools
+        3. Closing the primary write pool
+        4. Resetting the pool tracking variables
+
+        Returns:
+            None
+
+        Note:
+            - Should be called during application shutdown
+            - Attempts to close all pools even if some fail
+            - Logs any errors during closure
+            - Resets all pool-related class variables
+        """
+        if cls._health_task and not cls._health_task.done():
+            cls._health_task.cancel()
+        # close all pools
+        for metas in cls.read_pools_by_region.values():
+            for m in metas:
+                try:
+                    if m.pool and not getattr(m.pool, "_closed", False):
+                        await m.pool.close()
+                except Exception:
+                    log.exception("Error closing read pool")
+        if cls.write_pool and not getattr(cls.write_pool, "_closed", False):
+            try:
+                await cls.write_pool.close()
+            except Exception:
+                log.exception("Error closing write pool")
+        cls.read_pools_by_region = {}
+        cls.write_pool = None
+        log.info("Closed DB connection pools")
+
+    @classmethod
+    async def health_check(cls) -> Dict[str, Dict[str, Any]]:
+        """
+        Get health status of all database pools.
+        Returns:
+            Dict[str, Dict[str, Any]]: A dictionary mapping region names to their health status,
+            including number of healthy pools, total pools, and average latency.
+        """
+        results = {}
+        for region, metas in cls.read_pools_by_region.items():
+            results[region] = {
+                "healthy_pools": sum(1 for m in metas if m.healthy),
+                "total_pools": len(metas),
+                "avg_latency": (
+                    sum(m.last_latency for m in metas if m.healthy and m.last_latency is not None)
+                    / sum(1 for m in metas if m.healthy and m.last_latency is not None)
+                    if any(m.healthy and m.last_latency is not None for m in metas)
+                    else None
+                ),
+            }
+        return results
+
+    @classmethod
+    async def get_pool_stats(cls) -> Dict[str, Any]:
+        """
+        Get current statistics for all pools.
+        Returns:
+            Dict[str, Any]: A dictionary containing statistics for write and read pools.
+        """
+        stats = {
+            "write_pool": {
+                "size": cls.write_pool.get_size(),
+                "free_size": cls.write_pool.get_free_size(),
+                "usage": cls.write_pool.get_usage(),
+            },
+            "read_pools": {},
+        }
+
+        for region, metas in cls.read_pools_by_region.items():
+            stats["read_pools"][region] = [
+                {
+                    "healthy": meta.healthy,
+                    "last_latency": meta.last_latency,
+                    "size": meta.pool.get_size(),
+                    "free_size": meta.pool.get_free_size(),
+                    "usage": meta.pool.get_usage(),
+                }
+                for meta in metas
+            ]
+        return stats
+
+
+async def get_db() -> AsyncGenerator[DataBase, None]:
+    """FastAPI dependency for database access"""
+    try:
+        yield DataBase
+    except Exception as e:
+        log.error(f"Database error in request: {str(e)}")
+        raise
