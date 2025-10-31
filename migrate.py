@@ -7,7 +7,7 @@ import asyncpg
 from api.core.config import settings
 
 
-async def create_migrations_table(pool):
+async def create_migrations_table(pool: asyncpg.pool.Pool) -> None:
     """
     Create the schema_migrations table to track applied migrations.
     Args:
@@ -24,7 +24,7 @@ async def create_migrations_table(pool):
         )
 
 
-async def get_applied_migrations(pool) -> List[str]:
+async def get_applied_migrations(pool: asyncpg.pool.Pool) -> List[str]:
     """
     Fetch the list of applied migrations from the schema_migrations table.
     Args:
@@ -37,7 +37,7 @@ async def get_applied_migrations(pool) -> List[str]:
     return [row["version"] for row in rows]
 
 
-async def record_migration(pool, version: str):
+async def record_migration(pool: asyncpg.pool.Pool, version: str) -> None:
     """
     Record a migration as applied in the schema_migrations table.
     Args:
@@ -48,7 +48,7 @@ async def record_migration(pool, version: str):
         await connection.execute("INSERT INTO schema_migrations (version) VALUES ($1);", version)
 
 
-async def remove_migration_record(pool, version: str):
+async def remove_migration_record(pool: asyncpg.pool.Pool, version: str) -> None:
     """
     Remove a migration record from the schema_migrations table.
     Args:
@@ -59,7 +59,7 @@ async def remove_migration_record(pool, version: str):
         await connection.execute("DELETE FROM schema_migrations WHERE version = $1;", version)
 
 
-async def run_migration(pool, filename: str, direction: str):
+async def run_migration(pool: asyncpg.pool.Pool, filename: str, direction: str) -> None:
     """
     Run a migration script in the specified direction ('up' or 'down').
     Args:
@@ -84,7 +84,7 @@ async def run_migration(pool, filename: str, direction: str):
         await connection.execute(sql_to_execute)
 
 
-async def apply_migrations(pool, direction: str = "up", steps: Optional[int] = None):
+async def apply_migrations(pool: asyncpg.pool.Pool, direction: str = "up", steps: Optional[int] = None) -> None:
     """
     Apply or rollback migrations up to a specific number of steps or to the latest state.
     Args:
@@ -93,13 +93,13 @@ async def apply_migrations(pool, direction: str = "up", steps: Optional[int] = N
         steps: The number of steps to migrate. If None, migrate all pending migrations.
     """
     migrations_dir = os.path.join("api/", "migrations")
-    files = sorted(os.listdir(migrations_dir))
+    files: list[str] = sorted(os.listdir(migrations_dir))
 
     applied_migrations = await get_applied_migrations(pool)
     if direction == "down":
         if steps is None:
             steps = 1
-        files = reversed(files)
+        files = list(reversed(files))
 
     if steps is None:
         # Apply all pending migrations
@@ -125,7 +125,7 @@ async def apply_migrations(pool, direction: str = "up", steps: Optional[int] = N
             await remove_migration_record(pool, filename)
 
 
-async def run_specific_migration(pool, migration_name: str, direction: str = "up"):
+async def run_specific_migration(pool: asyncpg.pool.Pool, migration_name: str, direction: str = "up") -> None:
     """
     Run a specific migration file in the specified direction.
     Args:
@@ -156,7 +156,7 @@ async def run_specific_migration(pool, migration_name: str, direction: str = "up
         await remove_migration_record(pool, migration_name)
 
 
-async def check_all_migrations_applied():
+async def check_all_migrations_applied() -> bool:
     """
     Check if all migrations have been applied.
     Returns:
@@ -165,17 +165,17 @@ async def check_all_migrations_applied():
     migrations_dir = os.path.join("api/", "migrations")
     files = sorted(os.listdir(migrations_dir))
 
-    pool = await create_db_pool()
+    pool: asyncpg.pool.Pool = await create_db_pool()
     try:
-        applied_migration = await get_applied_migrations(pool)
+        applied_migrations = await get_applied_migrations(pool)
+        return set(applied_migrations) == set(files)
     except asyncpg.UndefinedTableError:
         return False
-    if applied_migration != files:
-        return False
-    return True
+    finally:
+        await pool.close()
 
 
-async def create_db_pool():
+async def create_db_pool() -> asyncpg.pool.Pool:
     """
     Create and return an asyncpg connection pool.
     Returns:
@@ -184,7 +184,7 @@ async def create_db_pool():
     return await asyncpg.create_pool(settings.PRIMARY_DATABASE_URL, max_inactive_connection_lifetime=3)
 
 
-async def main():
+async def main() -> None:
     """
     Main function to handle command-line migration operations.
     """

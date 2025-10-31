@@ -1,11 +1,8 @@
-from typing import Optional
-
 from fastapi import Depends, HTTPException, status
 
 from api.apps.user.schemas.user import (
     Token,
     UserCreate,
-    UserInDB,
     UserLogin,
     UserResponse,
 )
@@ -27,7 +24,7 @@ class UserService:
         """Create a new user and return a response model."""
         hashed_password = get_password_hash(user_in.password)
         user_db = await self.dao.create_user(user_in, hashed_password)
-        return UserResponse(**user_db)
+        return UserResponse.model_validate(user_db)
 
     async def authenticate_user(self, login_data: UserLogin) -> Token:
         """Authenticate user and return an access token."""

@@ -31,7 +31,7 @@ def configure_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
 
     # Create a queue for logging.
-    log_queue = Queue()
+    log_queue: Queue = Queue()
 
     # Create the console handler to output logs to stdout.
     console_handler = logging.StreamHandler(sys.stdout)
@@ -59,9 +59,11 @@ def configure_logging() -> logging.Logger:
     # Set up uvicorn.access logging if needed.
     access_logger = logging.getLogger("uvicorn.access")
     access_logger.setLevel(logging.DEBUG)
+    access_logger.addHandler(log_queue_handler)
+    access_logger.propagate = False
 
     # Start a listener thread that processes log records from the queue.
-    def listener():
+    def listener() -> None:
         while True:
             record = log_queue.get()
             if record is None:

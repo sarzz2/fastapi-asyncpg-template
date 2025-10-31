@@ -1,5 +1,7 @@
 import time
+from contextlib import asynccontextmanager
 from http import HTTPStatus
+from typing import AsyncGenerator, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +21,10 @@ from migrate import check_all_migrations_applied
 logger = configure_logging()
 
 
+@asynccontextmanager
 async def lifespan(
-    app: FastAPI,
-):  # pylint: disable=unused-argument,redefined-outer-name
+    app: FastAPI,  # pylint: disable=unused-argument
+) -> AsyncGenerator[None, None]:
     database_instance = DataBase()
     await database_instance.create_pool(
         write_uri=settings.PRIMARY_DATABASE_URL,
@@ -51,7 +54,7 @@ register_exception_handlers(app)
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def log_requests(request: Request, call_next: Callable) -> Response:
     logger.info(f"\033[1;37m{request.method}\033[0m , {request.url} params: {dict(request.query_params)}")
 
     start_time = time.time()

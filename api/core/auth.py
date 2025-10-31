@@ -7,6 +7,8 @@ import jwt
 from fastapi import HTTPException, status
 from pydantic import BaseModel
 
+from api.constants import TokenTypes
+
 from .config import settings
 from .redis import RedisClient
 
@@ -35,9 +37,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True if the passwords match, False otherwise.
     """
-    if isinstance(hashed_password, str):
-        hashed_password: bytes = hashed_password.encode("utf-8")
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def get_password_hash(password: str) -> str:
@@ -75,7 +75,7 @@ def create_access_token(data: dict) -> str:
         str: The encoded access JWT token.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return _create_token(data, expire, token_type="access")
+    return _create_token(data, expire, token_type=TokenTypes.ACCESS.value)
 
 
 def create_refresh_token(data: dict) -> str:
@@ -87,7 +87,7 @@ def create_refresh_token(data: dict) -> str:
         str: The encoded refresh JWT token.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    return _create_token(data, expire, token_type="refresh")
+    return _create_token(data, expire, token_type=TokenTypes.REFRESH.value)
 
 
 def create_sudo_token(data: dict) -> str:
@@ -99,7 +99,7 @@ def create_sudo_token(data: dict) -> str:
         str: The encoded sudo JWT token.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=SUDO_TOKEN_EXPIRE_MINUTES)
-    return _create_token(data, expire, token_type="sudo")
+    return _create_token(data, expire, token_type=TokenTypes.SUDO.value)
 
 
 async def verify_token(token: str, token_type: Optional[str] = "access") -> TokenData:
@@ -129,13 +129,13 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
             )
 
         # Check if the token is blacklisted
-        if token_type == "access":
+        if token_type == TokenTypes.ACCESS.value:
             if await redis.get(f"blacklist:access:{jti}") is not None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Access token has been revoked.",
                 )
-        elif token_type == "refresh":
+        elif token_type == TokenTypes.REFRESH.value:
             if await redis.get(f"blacklist:refresh:{jti}") is not None:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,

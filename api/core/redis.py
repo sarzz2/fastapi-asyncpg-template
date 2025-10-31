@@ -1,4 +1,5 @@
 import logging
+from typing import Awaitable, cast
 
 from redis.asyncio import Redis
 
@@ -8,16 +9,28 @@ log = logging.getLogger("fastapi")
 
 
 class RedisClient:
-    def __init__(self, host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True):
+    """Redis client wrapper for asynchronous operations."""
+
+    def __init__(
+        self,
+        host: str = settings.REDIS_HOST,
+        port: int = settings.REDIS_PORT,
+        decode_responses: bool = True,
+    ):
         self.client = Redis(host=host, port=port, decode_responses=decode_responses)
 
-    async def connect(self):
+    async def connect(self) -> None:
+        """Connect to the Redis server and verify the connection."""
         try:
-            await self.client.ping()
+            pong = await cast(Awaitable[bool], self.client.ping())
+            if not pong:
+                raise RuntimeError("Redis ping returned falsy response")
+
             log.info("Connected to Redis successfully.")
         except Exception as exc:
             log.critical(f"Failed to connect to Redis: {exc}")
             raise RuntimeError("Redis connection failed")
 
-    async def close(self):
+    async def close(self) -> None:
+        """Close the connection to the Redis server."""
         await self.client.aclose()

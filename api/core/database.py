@@ -10,39 +10,17 @@ from typing import (
     ClassVar,
     Dict,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
     Union,
+    cast,
+    overload,
 )
 
 from asyncpg import Connection, Pool, Record, create_pool
 from pydantic import BaseModel
-
-
-class DatabaseError(Exception):
-    """Base exception for database errors"""
-
-    pass
-
-
-class ConnectionError(DatabaseError):
-    """Error when connection cannot be established or is lost"""
-
-    pass
-
-
-class QueryError(DatabaseError):
-    """Error during query execution"""
-
-    pass
-
-
-class PoolExhaustedError(DatabaseError):
-    """Error when connection pool is exhausted"""
-
-    pass
-
 
 # from app.middlewares.region_middleware import CLIENT_REGION
 
@@ -50,16 +28,18 @@ BM = TypeVar("BM", bound="DataBase")
 log = logging.getLogger("fastapi")
 
 
+T = TypeVar("T", bound=BaseModel)
+
+
 class CustomRecord(Record):
     """A custom record class that extends asyncpg.Record to provide Pydantic-style model access.
-
     This class allows:
     1. Dictionary-style access (record['field'])
     2. Attribute-style access (record.field)
     3. Fast conversion to Pydantic models using model_construct
     """
 
-    def __getattr__(self, item: str):
+    def __getattr__(self, item: str) -> Any:
         """Attempt to get an attribute by first trying dictionary access, then falling back to normal attribute access.
 
         Args:
@@ -78,11 +58,11 @@ class CustomRecord(Record):
 
         return super().__getattr__(item)
 
-    def dict(self) -> dict:
+    def dict(self) -> Dict[str, Any]:
         """Convert record to a dictionary for Pydantic model construction.
-        
+
         Returns:
-            dict: Dictionary representation of the record
+            Dict[str, Any]: Dictionary representation of the record
         """
         return {key: value for key, value in self.items()}
 
@@ -143,14 +123,14 @@ class DataBase(BaseModel):
     async def create_pool(
         cls,
         write_uri: str,
-        read_uris: Dict[str, Union[str, List[str]]] = None,
+        read_uris: Optional[Dict[str, Union[str, List[str]]]] = None,
         *,
         min_con: int = 1,
         max_con: int = 10,
-        loop: asyncio.AbstractEventLoop = None,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
         health_check_interval: Optional[int] = None,
         region_priority: Optional[List[str]] = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Initialize database connection pools for both write and read operations.
 
@@ -180,7 +160,7 @@ class DataBase(BaseModel):
             - If no read pools are created, the write pool is used for all operations
         """
 
-        async def init_connection(connection):
+        async def init_connection(connection: Connection) -> None:
             await connection.set_type_codec("json", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
             await connection.set_type_codec("jsonb", encoder=json.dumps, decoder=json.loads, schema="pg_catalog")
 
@@ -201,25 +181,26 @@ class DataBase(BaseModel):
 
         # create pools per region
         cls.read_pools_by_region = {}
-        for region, uris in read_uris.items():
-            cls.read_pools_by_region.setdefault(region, [])
-            cls._region_rr_index.setdefault(region, 0)
-            cls._region_locks.setdefault(region, asyncio.Lock())
-            for uri in uris:
-                try:
-                    pool = await create_pool(
-                        uri,
-                        min_size=min_con,
-                        max_size=max_con,
-                        loop=loop,
-                        record_class=CustomRecord,
-                        init=init_connection,
-                        **kwargs,
-                    )
-                    cls.read_pools_by_region[region].append(PoolMeta(uri=uri, pool=pool, region=region))
-                    log.info(f"Established Read DB pool for region={region}")
-                except Exception:
-                    log.exception(f"Failed to create read pool for {uri} (region={region}); skipping.")
+        if read_uris:
+            for region, uris in read_uris.items():
+                cls.read_pools_by_region.setdefault(region, [])
+                cls._region_rr_index.setdefault(region, 0)
+                cls._region_locks.setdefault(region, asyncio.Lock())
+                for uri in uris:
+                    try:
+                        pool = await create_pool(
+                            uri,
+                            min_size=min_con,
+                            max_size=max_con,
+                            loop=loop,
+                            record_class=CustomRecord,
+                            init=init_connection,
+                            **kwargs,
+                        )
+                        cls.read_pools_by_region[region].append(PoolMeta(uri=uri, pool=pool, region=region))
+                        log.info(f"Established Read DB pool for region={region}")
+                    except Exception:
+                        log.exception(f"Failed to create read pool for {uri} (region={region}); skipping.")
 
         # fallback: if no read pools at all, use write pool under "global"
         if not cls.read_pools_by_region:
@@ -237,7 +218,7 @@ class DataBase(BaseModel):
             cls._health_task = asyncio.create_task(cls._health_check_loop(interval=health_check_interval))
 
     @classmethod
-    async def _health_check_loop(cls, interval: int):
+    async def _health_check_loop(cls, interval: int) -> None:
         """Continuously monitor the health of all database connection pools.
 
         This internal method runs an infinite loop that periodically checks each pool's
@@ -294,15 +275,16 @@ class DataBase(BaseModel):
         """
         # exact match
         if client_region:
-            metas = cls.read_pools_by_region.get(client_region)
-            if metas:
-                if any(m.healthy for m in metas):
+            if client_region in cls.read_pools_by_region:
+                if any(m.healthy for m in cls.read_pools_by_region[client_region]):
+                    log.debug(f"Region choice: client region match '{client_region}'")
                     return client_region
 
         # region_priority fallback
         for r in cls._region_priority:
             metas = cls.read_pools_by_region.get(r)
             if metas and any(m.healthy for m in metas):
+                log.debug(f"Region choice: priority list fallback '{r}'")
                 return r
 
         # pick by lowest avg latency
@@ -312,16 +294,18 @@ class DataBase(BaseModel):
             healthy = [m for m in metas if m.healthy and m.last_latency is not None]
             if not healthy:
                 continue
-            avg = sum(m.last_latency for m in healthy) / len(healthy)
+            avg = sum(cast(float, m.last_latency) for m in healthy) / len(healthy)
             if best_latency is None or avg < best_latency:
                 best_latency = avg
                 best_region = r
         if best_region:
+            log.debug(f"Region choice: lowest latency fallback '{best_region}'")
             return best_region
 
         # last resort: any region with at least one pool
         for r, metas in cls.read_pools_by_region.items():
             if metas:
+                log.debug(f"Region choice: last resort, first available '{r}'")
                 return r
         return None
 
@@ -349,7 +333,7 @@ class DataBase(BaseModel):
         return None
 
     @classmethod
-    async def _select_read_pool(cls, client_region: Optional[str] = None):
+    async def _select_read_pool(cls, client_region: Optional[str] = None) -> tuple[Pool, str]:
         """Select an appropriate read pool based on client region and pool health status.
 
         This internal method implements the read pool selection strategy, considering:
@@ -402,7 +386,7 @@ class DataBase(BaseModel):
             return metas[idx].pool, region
 
     @classmethod
-    async def get_pool(cls, use_primary: bool = False):
+    async def get_pool(cls, use_primary: bool = False) -> tuple[Pool, str]:
         """Get an appropriate database connection pool based on the operation type.
 
         This method selects either the primary write pool or an appropriate read pool
@@ -454,65 +438,137 @@ class DataBase(BaseModel):
         """
         return re.sub(r"\s+", " ", query.strip())
 
+    @overload
     @classmethod
-    async def fetch(cls: Type[BM], query: str, fetch_row: bool = False, *args, **kwargs) -> List[Union[Record, BM]]:
+    async def fetch(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: Type[T],
+        fetch_row: Literal[True],
+    ) -> Optional[T]:
+        ...
+
+    @overload
+    @classmethod
+    async def fetch(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: Type[T],
+        fetch_row: Literal[False],
+    ) -> List[T]:
+        ...
+
+    @overload
+    @classmethod
+    async def fetch(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: None = None,
+        fetch_row: Literal[True] = ...,
+    ) -> Optional[Record]:
+        ...
+
+    @overload
+    @classmethod
+    async def fetch(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: None = None,
+        fetch_row: Literal[False] = ...,
+    ) -> List[Record]:
+        ...
+
+    @classmethod
+    async def fetch(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: Optional[Type[T]] = None,
+        fetch_row: bool = False,
+    ) -> Union[Optional[T], List[T], Optional[Record], List[Record]]:
         """Execute a read query using read replicas.
 
         Args:
             query: The SQL query to execute
             *args: Query parameters to bind
-            **kwargs: Additional options including 'convert' for model conversion
+            model: The Pydantic model to convert the result(s) to.
+            fetch_row: If True, fetch single row
 
         Returns:
-            List[Union[Record, BM]]: List of records or model instances
+            Model instance(s) or Record(s) based on parameters.
         """
         pool, region = await cls.get_pool(use_primary=False)
         start_time = time.perf_counter()
-        try:
-            if fetch_row:
-                records = await pool.fetchrow(query, *args)
-            else:
-                records = await pool.fetch(query, *args)
-
+        if fetch_row:
+            record = await pool.fetchrow(query, *args)
             duration = time.perf_counter() - start_time
             log.debug(f"Read query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
-            return cls.model_construct(**records.dict()) if kwargs.get("convert", True) and cls is not DataBase else records
-        except Exception as e:
-            raise QueryError(f"Read query failed: {str(e)}") from e
+            return model.model_construct(**record.dict()) if model and record else record
+        else:
+            records = await pool.fetch(query, *args)
+            duration = time.perf_counter() - start_time
+            log.debug(f"Read query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
+            return [model.model_construct(**r.dict()) for r in records] if model else records
+
+    @overload
+    @classmethod
+    async def write(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: Type[T],
+    ) -> T:
+        ...
+
+    @overload
+    @classmethod
+    async def write(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: None = None,
+    ) -> Record:
+        ...
 
     @classmethod
-    async def write(cls: Type[BM], query: str, *args, **kwargs) -> Union[Record, BM]:
+    async def write(
+        cls: Type[BM],
+        query: str,
+        *args: Any,
+        model: Optional[Type[T]] = None,
+    ) -> Union[T, Record]:
         """Execute a write query using primary pool with results.
 
         Args:
             query: The SQL query to execute
-            *args: Query parameters to bind
-            **kwargs: Additional options including 'convert' for model conversion
+            args: Query parameters to bind
+            model: The Pydantic model to convert the result to.
 
         Returns:
-            Union[Record, BM]: Record or model instances
+            Model instance or Record if successful, None if no results.
         """
         pool, _ = await cls.get_pool(use_primary=True)
         start_time = time.perf_counter()
-        try:
-            record = await pool.fetchrow(query, *args)
-            duration = time.perf_counter() - start_time
-            log.debug(f"Write query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
-            if not record:
-                return None
-            return cls.model_construct(**record.dict()) if kwargs.get("convert", True) and cls is not DataBase else record
-        except Exception as e:
-            raise QueryError(f"Write query failed: {str(e)}") from e
+        record = await pool.fetchrow(query, *args)
+        duration = time.perf_counter() - start_time
+        log.debug(f"Write query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
+        if record:
+            return model.model_construct(**record.dict()) if model else record
+        return None
 
     @classmethod
     async def fetchval(
         cls,
-        query,
-        *args,
-        con: Union[Connection, Pool] = None,
+        query: str,
+        *args: Any,
+        con: Optional[Union[Connection, Pool]] = None,
         column: int = 0,
         use_primary: bool = False,
-    ):
+    ) -> Any:
         """Execute a query and return a single value.
 
         This method executes a SQL query and returns a single value from the first row.
@@ -546,7 +602,7 @@ class DataBase(BaseModel):
         return value
 
     @classmethod
-    async def execute(cls, query: str, *args, con: Union[Connection, Pool] = None) -> str:
+    async def execute(cls, query: str, *args: Any, con: Optional[Union[Connection, Pool]] = None) -> str:
         """Execute a query that modifies the database.
 
         This method executes a SQL query that modifies the database (INSERT, UPDATE,
@@ -554,12 +610,14 @@ class DataBase(BaseModel):
 
         Args:
             query (str): The SQL query to execute
-            *args: Query parameters to bind
-            con (Union[Connection, Pool], optional): Specific connection or pool to use.
-                If None, the primary write pool will be used.
+            args: Query parameters to bind
+            con: Specific connection or pool to use. If None, the primary write pool will be used.
 
         Returns:
             str: The command completion tag (e.g., "INSERT 0 1")
+
+        Raises:
+            RuntimeError: If no write pool is available
 
         Note:
             - Always uses the write pool if no specific connection is provided
@@ -568,13 +626,15 @@ class DataBase(BaseModel):
             - Returns a string indicating the operation result
         """
         if con is None:
-            # writes always to primary
+            if cls.write_pool is None:
+                raise RuntimeError("No write pool available")
             con = cls.write_pool
+
         start_time = time.perf_counter()
         result = await con.execute(query, *args)
         duration = time.perf_counter() - start_time
         log.debug(f"Running query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
-        return result
+        return str(result)
 
     @classmethod
     async def close_pool(cls) -> None:
@@ -642,8 +702,13 @@ class DataBase(BaseModel):
         Get current statistics for all pools.
         Returns:
             Dict[str, Any]: A dictionary containing statistics for write and read pools.
+        Raises:
+            RuntimeError: If database is not initialized
         """
-        stats = {
+        if not cls.write_pool:
+            raise RuntimeError("Database not initialized")
+
+        stats: Dict[str, Any] = {
             "write_pool": {
                 "size": cls.write_pool.get_size(),
                 "free_size": cls.write_pool.get_free_size(),
@@ -666,10 +731,10 @@ class DataBase(BaseModel):
         return stats
 
 
-async def get_db() -> AsyncGenerator[DataBase, None]:
-    """FastAPI dependency for database access"""
-    try:
-        yield DataBase
-    except Exception as e:
-        log.error(f"Database error in request: {str(e)}")
-        raise
+async def get_db() -> AsyncGenerator[Type[DataBase], None]:
+    """FastAPI dependency for database access.
+
+    Returns:
+        AsyncGenerator[Type[DataBase], None]: The DataBase class for dependency injection
+    """
+    yield DataBase

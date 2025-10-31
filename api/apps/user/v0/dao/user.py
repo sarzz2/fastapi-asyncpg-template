@@ -1,6 +1,5 @@
 from typing import Optional
 
-from asyncpg import UniqueViolationError
 from fastapi import Depends
 
 from api.apps.user.schemas.user import UserCreate, UserInDB
@@ -25,9 +24,8 @@ class UserDAO:
         query = """
               SELECT * FROM users WHERE username = $1
         """
-        # Get raw database result
-        return await self.db.fetch(query, True, username, convert=True)
-        
+        # Use database layer's built-in model conversion
+        return await self.db.fetch(query, username, model=UserInDB, fetch_row=True)
 
     async def create_user(
         self,
@@ -57,10 +55,5 @@ class UserDAO:
             user_data.full_name,
             user_data.is_active,
         )
-        try:
-            # First get the raw database result
-            return await self.db.write(query, *params)            
-        except UniqueViolationError as e:
-            raise e
-        except Exception as e:
-            raise e
+        # Use database layer's built-in model conversion
+        return await self.db.write(query, *params, model=UserInDB)
