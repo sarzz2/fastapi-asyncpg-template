@@ -15,7 +15,7 @@ if not os.path.exists(LOG_DIR):
     os.makedirs(LOG_DIR)
 
 # Set the log file name to "fastapi.log".
-log_file_name = f"{LOG_DIR}/fastapi.log"
+LOG_FILE_NAME = f"{LOG_DIR}/fastapi.log"
 
 
 def configure_logging() -> logging.Logger:
@@ -48,7 +48,7 @@ def configure_logging() -> logging.Logger:
     console_handler.setFormatter(console_formatter)
 
     # Create a file handler that rotates at midnight.
-    file_handler = TimedRotatingFileHandler(log_file_name, when="midnight", interval=1, backupCount=365)
+    file_handler = TimedRotatingFileHandler(LOG_FILE_NAME, when="midnight", interval=1, backupCount=365)
     file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
     file_handler.setFormatter(file_formatter)
 

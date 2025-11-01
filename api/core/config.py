@@ -4,6 +4,8 @@ from api.constants import Environments
 
 
 class Settings(BaseSettings):
+    """Application Settings Constants"""
+
     PROJECT_NAME: str = "Influmatch"
     PROJECT_VERSION: str = "0.1.0"
     API_V0_STR: str = "/api/v0"
@@ -20,6 +22,8 @@ class Settings(BaseSettings):
     PRIMARY_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
     REPLICA_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
     TEST_DATABASE_URL: str = "postgresql://user:password@localhost/test_influmatch"
+    HEALTH_CHECK_INTERVAL: int = 30  # in seconds
+    REGION_PRIORITY: list[str] = []
 
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
@@ -33,6 +37,8 @@ class Settings(BaseSettings):
     AWS_BUCKET_NAME: str = "my-bucket"
 
     class Config:
+        """Pydantic Config class for Settings"""
+
         env_file = ".env"
 
 

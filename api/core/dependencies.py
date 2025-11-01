@@ -107,4 +107,5 @@ redis_client = RedisClient()
 #
 #
 async def get_redis() -> Redis:
+    """Dependency to get the Redis client."""
     return redis_client.client

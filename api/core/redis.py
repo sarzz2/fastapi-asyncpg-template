@@ -28,8 +28,8 @@ class RedisClient:
 
             log.info("Connected to Redis successfully.")
         except Exception as exc:
-            log.critical(f"Failed to connect to Redis: {exc}")
-            raise RuntimeError("Redis connection failed")
+            log.critical("Failed to connect to Redis: %s", exc)
+            raise RuntimeError("Redis connection failed") from exc
 
     async def close(self) -> None:
         """Close the connection to the Redis server."""

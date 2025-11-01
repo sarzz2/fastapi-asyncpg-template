@@ -19,10 +19,12 @@ from typing import (
     overload,
 )
 
+import asyncpg
 from asyncpg import Connection, Pool, Record, create_pool
 from pydantic import BaseModel
 
-# from app.middlewares.region_middleware import CLIENT_REGION
+from api.core.config import settings
+from api.middlewares.region_middleware import CLIENT_REGION
 
 BM = TypeVar("BM", bound="DataBase")
 log = logging.getLogger("fastapi")
@@ -64,7 +66,7 @@ class CustomRecord(Record):
         Returns:
             Dict[str, Any]: Dictionary representation of the record
         """
-        return {key: value for key, value in self.items()}
+        return dict(self.items())
 
 
 @dataclass
@@ -120,17 +122,13 @@ class DataBase(BaseModel):
     _region_priority: ClassVar[List[str]] = []
 
     @classmethod
-    async def create_pool(
+    async def create_pool(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         cls,
         write_uri: str,
         read_uris: Optional[Dict[str, Union[str, List[str]]]] = None,
-        *,
         min_con: int = 1,
         max_con: int = 10,
         loop: Optional[asyncio.AbstractEventLoop] = None,
-        health_check_interval: Optional[int] = None,
-        region_priority: Optional[List[str]] = None,
-        **kwargs: Any,
     ) -> None:
         """Initialize database connection pools for both write and read operations.
 
@@ -145,12 +143,7 @@ class DataBase(BaseModel):
             min_con (int, optional): Minimum number of connections per pool. Defaults to 1.
             max_con (int, optional): Maximum number of connections per pool. Defaults to 10.
             loop (asyncio.AbstractEventLoop, optional): Event loop to use for async operations.
-            health_check_interval (int, optional): Interval in seconds between health checks.
                 If None or 0, health checks are disabled.
-            region_priority (List[str], optional): Ordered list of regions for failover priority.
-                Used when client_region is not available or all replicas in a region are down.
-            **kwargs: Additional arguments passed to asyncpg.create_pool()
-
         Raises:
             RuntimeError: If pool creation fails critically
 
@@ -172,9 +165,8 @@ class DataBase(BaseModel):
             loop=loop,
             record_class=CustomRecord,
             init=init_connection,
-            **kwargs,
         )
-        log.info(f"Established Write DB pool with {min_con} - {max_con} connections")
+        log.info("Established Write DB pool with %s - %s connections", min_con, max_con)
 
         if cls._global_lock is None:
             cls._global_lock = asyncio.Lock()
@@ -195,12 +187,11 @@ class DataBase(BaseModel):
                             loop=loop,
                             record_class=CustomRecord,
                             init=init_connection,
-                            **kwargs,
                         )
                         cls.read_pools_by_region[region].append(PoolMeta(uri=uri, pool=pool, region=region))
-                        log.info(f"Established Read DB pool for region={region}")
-                    except Exception:
-                        log.exception(f"Failed to create read pool for {uri} (region={region}); skipping.")
+                        log.info("Established Read DB pool for region=%s", region)
+                    except (asyncpg.PostgresError, OSError) as e:
+                        log.error("Failed to create read pool for %s (region=%s): %s; skipping.", uri, region, e)
 
         # fallback: if no read pools at all, use write pool under "global"
         if not cls.read_pools_by_region:
@@ -210,12 +201,12 @@ class DataBase(BaseModel):
             log.info("No read replicas configured — using write pool for reads (global).")
 
         # save region_priority on class so selection can use it
-        cls._region_priority = list(region_priority or list(cls.read_pools_by_region.keys()))
+        cls._region_priority = list(settings.REGION_PRIORITY or list(cls.read_pools_by_region.keys()))
 
-        if health_check_interval and health_check_interval > 0:
+        if settings.HEALTH_CHECK_INTERVAL > 0:
             if cls._health_task and not cls._health_task.done():
                 cls._health_task.cancel()
-            cls._health_task = asyncio.create_task(cls._health_check_loop(interval=health_check_interval))
+            cls._health_task = asyncio.create_task(cls._health_check_loop(interval=settings.HEALTH_CHECK_INTERVAL))
 
     @classmethod
     async def _health_check_loop(cls, interval: int) -> None:
@@ -236,7 +227,7 @@ class DataBase(BaseModel):
         """
         while True:
             await asyncio.sleep(interval)
-            for region, metas in list(cls.read_pools_by_region.items()):
+            for region, metas in list(cls.read_pools_by_region.items()):  # pylint: disable=unused-variable
                 for meta in metas:
                     try:
                         t0 = time.perf_counter()
@@ -245,9 +236,12 @@ class DataBase(BaseModel):
                         latency = time.perf_counter() - t0
                         meta.healthy = True
                         meta.last_latency = latency
-                    except Exception:
+                    except (asyncpg.PostgresError, OSError) as e:
                         meta.healthy = False
-                        log.exception(f"Health check failed for {meta.uri}")
+                        log.warning("Health check failed for %s: %s", meta.uri, e)
+                    except asyncio.CancelledError:
+                        log.info("Health check loop cancelled.")
+                        raise
 
     @classmethod
     async def _choose_region(cls, client_region: Optional[str] = None) -> Optional[str]:
@@ -277,14 +271,14 @@ class DataBase(BaseModel):
         if client_region:
             if client_region in cls.read_pools_by_region:
                 if any(m.healthy for m in cls.read_pools_by_region[client_region]):
-                    log.debug(f"Region choice: client region match '{client_region}'")
+                    log.debug("Region choice: client region match '%s'", client_region)
                     return client_region
 
         # region_priority fallback
         for r in cls._region_priority:
             metas = cls.read_pools_by_region.get(r)
             if metas and any(m.healthy for m in metas):
-                log.debug(f"Region choice: priority list fallback '{r}'")
+                log.debug("Region choice: priority list fallback '%s'", r)
                 return r
 
         # pick by lowest avg latency
@@ -299,13 +293,13 @@ class DataBase(BaseModel):
                 best_latency = avg
                 best_region = r
         if best_region:
-            log.debug(f"Region choice: lowest latency fallback '{best_region}'")
+            log.debug("Region choice: lowest latency fallback '%s'", best_region)
             return best_region
 
         # last resort: any region with at least one pool
         for r, metas in cls.read_pools_by_region.items():
             if metas:
-                log.debug(f"Region choice: last resort, first available '{r}'")
+                log.debug("Region choice: last resort, first available '%s'", r)
                 return r
         return None
 
@@ -414,8 +408,7 @@ class DataBase(BaseModel):
             # Try to find the region name if the write pool is also configured as a read replica
             region_name = cls._get_region_for_pool(cls.write_pool) or "primary"
             return cls.write_pool, region_name
-        # client_region = CLIENT_REGION.get()
-        client_region = "us-east-1"
+        client_region = CLIENT_REGION.get()
         return await cls._select_read_pool(client_region=client_region)
 
     @staticmethod
@@ -506,13 +499,12 @@ class DataBase(BaseModel):
         if fetch_row:
             record = await pool.fetchrow(query, *args)
             duration = time.perf_counter() - start_time
-            log.debug(f"Read query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
+            log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
             return model.model_construct(**record.dict()) if model and record else record
-        else:
-            records = await pool.fetch(query, *args)
-            duration = time.perf_counter() - start_time
-            log.debug(f"Read query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
-            return [model.model_construct(**r.dict()) for r in records] if model else records
+        records = await pool.fetch(query, *args)
+        duration = time.perf_counter() - start_time
+        log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+        return [model.model_construct(**r.dict()) for r in records] if model else records
 
     @overload
     @classmethod
@@ -555,7 +547,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         record = await pool.fetchrow(query, *args)
         duration = time.perf_counter() - start_time
-        log.debug(f"Write query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
+        log.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
         if record:
             return model.model_construct(**record.dict()) if model else record
         return None
@@ -598,7 +590,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         value = await con.fetchval(query, *args, column=column)
         duration = time.perf_counter() - start_time
-        log.debug(f"Running query: {cls.clean_query(query)} args={args} dur={duration:.6f}s, region={region}")
+        log.debug("Running query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
         return value
 
     @classmethod
@@ -633,7 +625,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         result = await con.execute(query, *args)
         duration = time.perf_counter() - start_time
-        log.debug(f"Running query: {cls.clean_query(query)} args={args} dur={duration:.6f}s")
+        log.debug("Running query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
         return str(result)
 
     @classmethod
@@ -662,14 +654,14 @@ class DataBase(BaseModel):
             for m in metas:
                 try:
                     if m.pool and not getattr(m.pool, "_closed", False):
-                        await m.pool.close()
-                except Exception:
-                    log.exception("Error closing read pool")
+                        await asyncio.wait_for(m.pool.close(), timeout=5.0)
+                except (asyncpg.PostgresError, asyncio.TimeoutError) as e:
+                    log.error("Error closing read pool for %s: %s", m.uri, e)
         if cls.write_pool and not getattr(cls.write_pool, "_closed", False):
             try:
-                await cls.write_pool.close()
-            except Exception:
-                log.exception("Error closing write pool")
+                await asyncio.wait_for(cls.write_pool.close(), timeout=5.0)
+            except (asyncpg.PostgresError, asyncio.TimeoutError) as e:
+                log.error("Error closing write pool: %s", e)
         cls.read_pools_by_region = {}
         cls.write_pool = None
         log.info("Closed DB connection pools")

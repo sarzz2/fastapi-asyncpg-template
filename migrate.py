@@ -67,7 +67,7 @@ async def run_migration(pool: asyncpg.pool.Pool, filename: str, direction: str) 
         filename: The path to the migration script.
         direction: The direction of the migration ('up' or 'down').
     """
-    with open(filename, "r") as f:
+    with open(filename, "r", encoding="utf-8") as f:
         sql = f.read()
 
     # Split the file into 'up' and 'down' sections

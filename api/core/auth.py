@@ -21,6 +21,8 @@ redis_client = RedisClient()
 
 
 class TokenData(BaseModel):
+    """Schema for data contained in JWT tokens."""
+
     username: str
     id: str
     exp: int
@@ -142,8 +144,8 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
                     detail="Refresh token has been revoked.",
                 )
         return TokenData(username=username, id=user_id, exp=exp, type=jwt_token_type, role=role)
-    except jwt.PyJWTError:
+    except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
-        )
+        ) from exc

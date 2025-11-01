@@ -16,6 +16,7 @@ from api.core.database import DataBase
 from api.core.dependencies import redis_client
 from api.core.exception_handlers import register_exception_handlers
 from api.core.logging_config import configure_logging
+from api.middlewares.region_middleware import RegionASGIMiddleware
 from migrate import check_all_migrations_applied
 
 logger = configure_logging()
@@ -23,13 +24,21 @@ logger = configure_logging()
 
 @asynccontextmanager
 async def lifespan(
-    app: FastAPI,  # pylint: disable=unused-argument
+    app: FastAPI,  # pylint: disable=unused-argument,redefined-outer-name
 ) -> AsyncGenerator[None, None]:
+    """
+    Lifespan context manager for FastAPI application.
+    Handles startup and shutdown events, including database and Redis connections,
+    and migration checks.
+    Args:
+        app (FastAPI): The FastAPI application instance.
+    Returns:
+        None
+    """
     database_instance = DataBase()
     await database_instance.create_pool(
         write_uri=settings.PRIMARY_DATABASE_URL,
         read_uris={"global": [settings.REPLICA_DATABASE_URL]},
-        health_check_interval=3600,
     )
     logger.info("Database connected successfully")
     await redis_client.connect()
@@ -55,20 +64,32 @@ register_exception_handlers(app)
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next: Callable) -> Response:
-    logger.info(f"\033[1;37m{request.method}\033[0m , {request.url} params: {dict(request.query_params)}")
+    """
+    Middleware to log incoming HTTP requests and their processing time.
+    Args:
+        request (Request): The incoming HTTP request.
+        call_next (Callable): The next middleware or route handler to call.
+    Returns:
+        Response: The HTTP response.
+    """
+    logger.info("\033[1;37m%s\033[0m , %s params: %s", request.method, request.url, dict(request.query_params))
 
     start_time = time.time()
     response: Response = await call_next(request)
     process_time = time.time() - start_time
     if response.status_code < 400:
         logger.info(
-            f"\033[1;37m Request completed with {response.status_code} \033[0m"
-            f" {HTTPStatus(response.status_code).phrase} in {process_time:.6f}s"
+            "\033[1;37m Request completed with %s \033[0m %s in %.6fs",
+            response.status_code,
+            HTTPStatus(response.status_code).phrase,
+            process_time,
         )
     else:
         logger.error(
-            f"Request failed with {response.status_code}"
-            f" {HTTPStatus(response.status_code).phrase} in {process_time:.6f}s"
+            "Request failed with %s %s in %.6fs",
+            response.status_code,
+            HTTPStatus(response.status_code).phrase,
+            process_time,
         )
     return response
 
@@ -85,7 +106,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
-# app.add_middleware(RegionASGIMiddleware)
+app.add_middleware(RegionASGIMiddleware)
 
 if settings.ENV in [Environments.PROD.value, Environments.STAGING.value]:
     app.add_middleware(HTTPSRedirectMiddleware)

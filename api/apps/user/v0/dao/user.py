@@ -7,6 +7,8 @@ from api.core.database import DataBase, get_db
 
 
 class UserDAO:
+    """Data Access Object for user-related database operations."""
+
     def __init__(self, db: DataBase = Depends(get_db)):
         self.db = db
 

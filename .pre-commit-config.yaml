@@ -23,6 +23,24 @@ repos:
 
   - repo: local
     hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: python
+        types: [python]
+        require_serial: true
+        additional_dependencies:
+          - pylint
+          - pydantic
+          - asyncpg
+          - fastapi
+          - bcrypt
+          - python-jose
+          - colorlog
+          - PyJWT
+          - redis
+          - boto3
+
       - id: mypy
         name: mypy
         entry: mypy
