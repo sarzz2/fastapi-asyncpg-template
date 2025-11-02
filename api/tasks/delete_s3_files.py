@@ -2,18 +2,23 @@ import logging
 from datetime import datetime, timedelta
 
 from botocore.exceptions import ClientError
+from celery import Task
 
 from api.core.aws_localstack import s3_client
+from api.core.celery_app import celery_app
 from api.core.config import settings
 
-log = logging.getLogger("apscheduler")
+log = logging.getLogger(__name__)
 
 
-async def delete_stagnant_temporary_files() -> None:
+@celery_app.task(bind=True)
+def delete_stagnant_temporary_files(_self: Task) -> None:
     """
     Deletes temporary files in the S3 bucket that have been stagnant for more than 15 minutes.
-    A file is considered temporary if it has the tag 'status' set to 'temporary'."""
+    A file is considered temporary if it has the tag 'status' set to 'temporary'.
+    """
     try:
+        log.info("Starting task: delete_stagnant_temporary_files")
         # List objects in the bucket
         response = s3_client.list_objects_v2(Bucket=settings.AWS_BUCKET_NAME)
         if "Contents" not in response:
@@ -33,6 +38,7 @@ async def delete_stagnant_temporary_files() -> None:
                 if datetime.now(last_modified.tzinfo) - last_modified > timedelta(minutes=15):
                     s3_client.delete_object(Bucket=settings.AWS_BUCKET_NAME, Key=key)
                     log.info("Deleted stagnant temporary file: %s", key)
+        log.info("Finished task: delete_stagnant_temporary_files")
     except ClientError as e:
         error_code = e.response.get("Error", {}).get("Code")
         log.error("An S3 client error occurred (%s) while deleting stagnant files: %s", error_code, e)

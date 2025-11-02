@@ -27,8 +27,7 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
-    ADMIN_EMAIL: str = "admin@admin.com"
-    ADMIN_PASSWORD: str = "admin"
+
     # default values for localstack
     S3_ENDPOINT_URL: str = "http://localhost:4566"
     S3_REGION_NAME: str = "us-east-1"

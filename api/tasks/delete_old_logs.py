@@ -1,13 +1,20 @@
 import logging
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+from celery import Task
 
-LOGS_DIR = "../../logs"
+from api.core.celery_app import celery_app
+
+log = logging.getLogger(__name__)
+
+# Define the logs directory relative to this file's location
+LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 
 
-def delete_old_logs() -> None:
+@celery_app.task(bind=True)
+def delete_old_logs(_self: Task) -> None:
     """
     Deletes rotated log files older than 30 days.
 
@@ -15,6 +22,11 @@ def delete_old_logs() -> None:
     The active log file (fastapi.log) is left untouched.
     """
     cutoff_date = datetime.now() - timedelta(days=30)
+    log.info("Starting task: delete_old_logs. Deleting files older than %s.", cutoff_date.date())
+
+    if not os.path.isdir(LOGS_DIR):
+        log.warning("Logs directory not found at: %s. Skipping task.", LOGS_DIR)
+        return
 
     for log_file in os.listdir(LOGS_DIR):
         # Skip the active log file
@@ -30,8 +42,9 @@ def delete_old_logs() -> None:
                 if log_date < cutoff_date:
                     full_path = os.path.join(LOGS_DIR, log_file)
                     os.remove(full_path)
-                    logging.info("Deleted old log file: %s", full_path)
+                    log.info("Deleted old log file: %s", full_path)
             except ValueError:
                 # If the date can't be parsed, skip this file.
-                logging.warning("Could not parse date from log file: %s", log_file)
+                log.warning("Could not parse date from log file: %s", log_file)
                 continue
+    log.info("Finished task: delete_old_logs.")

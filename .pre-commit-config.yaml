@@ -21,7 +21,7 @@ repos:
       - id: ruff-format
         name: ruff formatter
 
-  - repo: local
+  - repo: local # Grouping for locally-run hooks
     hooks:
       - id: pylint
         name: pylint
@@ -40,6 +40,7 @@ repos:
           - PyJWT
           - redis
           - boto3
+          - celery
 
       - id: mypy
         name: mypy
@@ -47,9 +48,6 @@ repos:
         language: python
         types: [python]
         require_serial: true
-        # Add project dependencies that are needed for type checking
-        # This tells pre-commit to install the project dependencies from pyproject.toml
-        # into mypy's isolated environment, ensuring it has full context.
         additional_dependencies:
           - mypy
           - pydantic
