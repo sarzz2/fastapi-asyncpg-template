@@ -73,4 +73,5 @@ class TokenData(BaseModel):
 
     username: str
     id: int
-    role: str
+    exp: int
+    type: str = "Bearer"

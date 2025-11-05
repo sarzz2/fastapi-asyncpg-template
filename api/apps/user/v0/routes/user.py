@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, status
 
 from api.apps.user.schemas.user import Token, UserCreate, UserLogin, UserResponse
-from api.apps.user.v0.service.user import UserService
+from api.apps.user.v0.service.user import UserService, get_user_service
+from api.core.dependencies import get_current_user
 
 router = APIRouter(tags=["users"])
 
@@ -16,8 +17,7 @@ async def register_user(
 
     Args:
         user_in: User registration data
-        db: Database dependency
-
+        svc: User service dependency
     Returns:
         UserResponse: Created user data
     """
@@ -27,16 +27,30 @@ async def register_user(
 @router.post("/login", response_model=Token)
 async def login(
     login_data: UserLogin,
-    svc: UserService = Depends(UserService),
+    svc: UserService = Depends(get_user_service),
 ) -> Token:
     """
     Authenticate user and return access token.
 
     Args:
         login_data: User login credentials
-        db: Database dependency
-
+        svc: User service dependency
     Returns:
         Token: Authentication token
     """
     return await svc.authenticate_user(login_data)
+
+
+@router.get("/me", response_model=UserResponse)
+async def current_user(
+    user: UserResponse = Depends(get_current_user),
+) -> UserResponse:
+    """
+    Get the currently authenticated user.
+
+    Args:
+        current_user: The currently authenticated user
+    Returns:
+        UserResponse: Current user data
+    """
+    return user

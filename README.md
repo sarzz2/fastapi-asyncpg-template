@@ -42,7 +42,7 @@ Create a `.env` file in the project root by copying the example file:
 cp .env.example .env
 ```
 
-Update the `.env` file with your local configuration. The default values are configured to work with the provided `docker-compose.yml`.
+Update the `.env` file with your local configuration.
 
 ### 2. Install Dependencies
 
@@ -63,13 +63,13 @@ python migrate.py
 
 ### 4. Setup pre-commit hooks
 
-Pre commit hooks makes sure the code alwyas meets the best practices before being pushed.
+Pre-commit hooks ensure the code meets the project's quality standards before being pushed.
 
 ```bash
 pre-commit install
 ```
 
-To run hooks before commiting
+To run hooks across the repo manually:
 
 ```bash
 pre-commit run --all-files
@@ -94,6 +94,8 @@ fastapi dev api/main.py
 ```
 
 The API will be available at `http://127.0.0.1:8000`.
+
+Note: the project uses a lifespan manager (see `api/main.py`) to initialize resources like the database and Redis on startup. See the "Database" section below for details about DB initialization.
 
 ---
 
@@ -144,6 +146,53 @@ python migrate.py up/down -s migration_name
 ```
 
 ---
+
+## Database (api/core/database.py)
+
+Location: `api/core/database.py`
+
+What it does:
+
+-   Manages async PostgreSQL connection pools using `asyncpg` for both write (primary) and read (replica) databases.
+-   Supports read-write splitting with per-region read pools, round-robin load balancing, health checks, and automatic failover.
+-   Provides convenient async helpers used throughout the codebase:
+    -   `DataBase.create_pool(write_uri, read_uris, ...)` — initialize pools
+    -   `DataBase.fetch(...)`, `DataBase.fetchrow(...)`, `DataBase.fetchval(...)`, `DataBase.write(...)`, `DataBase.execute(...)` — query helpers
+    -   `DataBase.get_pool_stats()` and `DataBase.health_check()` — runtime diagnostics
+    -   `DataBase.close_pool()` — graceful shutdown
+-   Exposes a FastAPI dependency `get_db()` (yields the `DataBase` class) for DI in route handlers and background tasks.
+
+How to configure:
+
+-   The project uses `api/core/config.py` (Pydantic settings). Important settings for DB behavior are:
+    -   `PRIMARY_DATABASE_URL` — connection URL for the primary (write) DB
+    -   `REPLICA_DATABASE_URL` — a replica/read URL (used in the example initialization)
+    -   `HEALTH_CHECK_INTERVAL` — seconds between automatic health checks (0 to disable)
+    -   `REGION_PRIORITY` — list of region names to prefer when routing reads
+
+Initialization (example):
+The app's lifespan in `api/main.py` already shows how the DB is initialized on startup. In short, call `DataBase.create_pool(...)` with your write and read URIs (for example, values from `settings.PRIMARY_DATABASE_URL` and `settings.REPLICA_DATABASE_URL`). On shutdown call `DataBase.close_pool()` to clean up connections.
+
+Example snippet (taken from `api/main.py`):
+
+```py
+from api.core.database import DataBase
+from api.core.config import settings
+
+database_instance = DataBase()
+await database_instance.create_pool(
+        write_uri=settings.PRIMARY_DATABASE_URL,
+        read_uris={"global": [settings.REPLICA_DATABASE_URL]},
+)
+# ...on shutdown
+await database_instance.close_pool()
+```
+
+Notes and tips:
+
+-   If you don't configure read replicas, the code will fall back to using the write pool for reads.
+-   The DB implementation uses a custom `CustomRecord` (wrapping `asyncpg.Record`) to make conversion to Pydantic models simple and fast.
+-   Health checks run in a background task (when `HEALTH_CHECK_INTERVAL > 0`) and update per-pool health/latency metrics that the routing logic uses to prefer healthy, low-latency pools.
 
 ### Running Celery Workers
 

@@ -9,7 +9,7 @@ from api.core.database import DataBase, get_db
 class UserDAO:
     """Data Access Object for user-related database operations."""
 
-    def __init__(self, db: DataBase = Depends(get_db)):
+    def __init__(self, db: DataBase):
         self.db = db
 
     async def get_by_username(self, username: str) -> Optional[UserInDB]:
@@ -59,3 +59,14 @@ class UserDAO:
         )
         # Use database layer's built-in model conversion
         return await self.db.write(query, *params, model=UserInDB)
+
+
+async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:
+    """
+    Dependency to get UserDAO instance.
+    Args:
+        db (DataBase): The database dependency.
+    Returns:
+        UserDAO: The User Data Access Object.
+    """
+    return UserDAO(db=db)

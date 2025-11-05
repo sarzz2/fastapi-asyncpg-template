@@ -5,8 +5,8 @@ from typing import Optional
 import bcrypt
 import jwt
 from fastapi import HTTPException, status
-from pydantic import BaseModel
 
+from api.apps.user.schemas.user import TokenData
 from api.constants import TokenTypes
 
 from .config import settings
@@ -18,16 +18,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 SUDO_TOKEN_EXPIRE_MINUTES = settings.SUDO_TOKEN_EXPIRE_MINUTES
 redis_client = RedisClient()
-
-
-class TokenData(BaseModel):
-    """Schema for data contained in JWT tokens."""
-
-    username: str
-    id: str
-    exp: int
-    role: str
-    type: str
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -122,7 +112,6 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
         user_id: str = payload.get("id")
         exp: int = payload.get("exp")
         jti: str = payload.get("jti")
-        role: str = payload.get("role")
         jwt_token_type: str = payload.get("type")
         if user_id is None or payload.get("type") != token_type:
             raise HTTPException(
@@ -143,7 +132,7 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Refresh token has been revoked.",
                 )
-        return TokenData(username=username, id=user_id, exp=exp, type=jwt_token_type, role=role)
+        return TokenData(username=username, id=user_id, exp=exp, type=jwt_token_type)
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
