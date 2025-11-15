@@ -30,7 +30,7 @@ This is a production-ready template for building very efficient asynchronous web
 
 -   Python 3.12+
 -   Poetry
--   PostgreSQL
+-   PostgreSQL17+
 -   Redis
 -   LocalStack (for local AWS setup if you've AWS creds then no need of localstack)
 
@@ -52,7 +52,15 @@ Use Poetry to install the project dependencies.
 poetry install
 ```
 
-### 3. Run Database Migrations
+### 3. Install DB extensions Run Database Migrations
+
+Using 2 extensions
+
+```bash
+brew install pgxnclient
+pgxn install pg_uuidv7 --pg_config /opt/homebrew/opt/postgresql@17/bin/pg_config
+brew services restart postgresql@17
+```
 
 Activate the virtual environment and run the migration script to set up your database schema.
 

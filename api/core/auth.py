@@ -1,6 +1,7 @@
 import datetime
 from datetime import timedelta
 from typing import Optional
+from uuid import uuid4
 
 import bcrypt
 import jwt
@@ -43,7 +44,7 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 
-def _create_token(data: dict, expire: datetime.datetime, token_type: str) -> str:
+def _create_token(data: dict, expire: datetime.datetime, token_type: str) -> dict:
     """
     Create a JWT token.
     Args:
@@ -51,20 +52,26 @@ def _create_token(data: dict, expire: datetime.datetime, token_type: str) -> str
         expire (datetime.datetime): The expiration time of the token.
         token_type (str): The type of the token (e.g., "access", "refresh", "sudo").
     Returns:
-        str: The encoded JWT token.
+        dict: A dictionary containing the encoded token and its metadata.
     """
     to_encode = data.copy()
-    to_encode.update({"exp": expire, "type": token_type})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    jti = str(uuid4())
+    to_encode.update({"exp": expire, "type": token_type, "jti": jti})
+    encoded_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return {
+        "token": encoded_token,
+        "expires_at": expire,
+        "jti": jti,
+    }
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict) -> dict:
     """
     Create an access JWT token.
     Args:
         data (dict): The data to include in the token payload.
     Returns:
-        str: The encoded access JWT token.
+        dict: A dictionary containing the encoded token and its metadata.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     return _create_token(data, expire, token_type=TokenTypes.ACCESS.value)
@@ -79,7 +86,8 @@ def create_refresh_token(data: dict) -> str:
         str: The encoded refresh JWT token.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    return _create_token(data, expire, token_type=TokenTypes.REFRESH.value)
+    token_details = _create_token(data, expire, token_type=TokenTypes.REFRESH.value)
+    return str(token_details["token"])
 
 
 def create_sudo_token(data: dict) -> str:
@@ -91,7 +99,8 @@ def create_sudo_token(data: dict) -> str:
         str: The encoded sudo JWT token.
     """
     expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=SUDO_TOKEN_EXPIRE_MINUTES)
-    return _create_token(data, expire, token_type=TokenTypes.SUDO.value)
+    token_details = _create_token(data, expire, token_type=TokenTypes.SUDO.value)
+    return str(token_details["token"])
 
 
 async def verify_token(token: str, token_type: Optional[str] = "access") -> TokenData:
@@ -132,7 +141,7 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Refresh token has been revoked.",
                 )
-        return TokenData(username=username, id=user_id, exp=exp, type=jwt_token_type)
+        return TokenData(username=username, id=user_id, exp=exp, jti=jti, type=jwt_token_type)
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

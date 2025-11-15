@@ -13,9 +13,9 @@ from api.apps.api import api_router
 from api.constants import Environments
 from api.core.config import settings
 from api.core.database import DataBase
-from api.core.dependencies import redis_client
 from api.core.exception_handlers import register_exception_handlers
 from api.core.logging_config import configure_logging
+from api.core.redis import redis_client
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from migrate import check_all_migrations_applied
 

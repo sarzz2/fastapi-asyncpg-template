@@ -34,3 +34,11 @@ class RedisClient:
     async def close(self) -> None:
         """Close the connection to the Redis server."""
         await self.client.aclose()
+
+
+redis_client = RedisClient()
+
+
+async def get_redis() -> Redis:
+    """Dependency to get the Redis client."""
+    return redis_client.client

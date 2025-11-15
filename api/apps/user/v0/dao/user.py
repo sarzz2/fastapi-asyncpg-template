@@ -1,8 +1,9 @@
 from typing import Optional
+from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
-from api.apps.user.schemas.user import UserCreate, UserInDB
+from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
 from api.core.database import DataBase, get_db
 
 
@@ -12,7 +13,7 @@ class UserDAO:
     def __init__(self, db: DataBase):
         self.db = db
 
-    async def get_by_username(self, username: str) -> Optional[UserInDB]:
+    async def get_by_username(self, username: str) -> Optional[UserData]:
         """
         Retrieve a user by username.
 
@@ -21,19 +22,19 @@ class UserDAO:
                 username: Username to search for
 
         Returns:
-                Optional[UserInDB]: User if found, None otherwise
+                Optional[UserData]: User if found, None otherwise
         """
         query = """
               SELECT * FROM users WHERE username = $1
         """
         # Use database layer's built-in model conversion
-        return await self.db.fetch(query, username, model=UserInDB, fetch_row=True)
+        return await self.db.fetch(query, username, model=UserData, fetch_row=True)
 
     async def create_user(
         self,
         user_data: UserCreate,
         hashed_password: str,
-    ) -> UserInDB:
+    ) -> UserData:
         """
         Create a new user in the database.
 
@@ -43,7 +44,7 @@ class UserDAO:
                 hashed_password: Pre-hashed password
 
         Returns:
-                UserInDB: Created user data
+                UserData: Created user data
         """
         query = """
 			INSERT INTO users (username, email, hashed_password, full_name, is_active)
@@ -58,7 +59,89 @@ class UserDAO:
             user_data.is_active,
         )
         # Use database layer's built-in model conversion
-        return await self.db.write(query, *params, model=UserInDB)
+        return await self.db.write(query, *params, model=UserData)
+
+    async def upsert_user_session(self, user_session_data: UserSessionCreate) -> None:
+        """
+        Create or update a user session in the database.
+
+        Args:
+                db: Database instance for executing queries
+                user_session_data: User session creation data
+
+        Returns:
+                None
+        """
+        query = """
+               INSERT INTO user_sessions (jti, user_id, issued_at, expires_at, ip_address, user_agent)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+               ON CONFLICT (user_id, user_agent) DO UPDATE
+                       SET jti = $1, user_id = $2, issued_at = $3, expires_at = $4, ip_address = $5, updated_at = NOW();
+            """
+        params = (
+            user_session_data.jti,
+            user_session_data.user_id,
+            user_session_data.issued_at,
+            user_session_data.expires_at,
+            user_session_data.ip_address,
+            user_session_data.user_agent,
+        )
+        await self.db.write(
+            query,
+            *params,
+            model=UserSessionData,
+        )
+
+    async def update_user(self, user_id: UUID, user_update: UserUpdate) -> UserData:
+        """
+        Update a user in the database.
+
+        Args:
+                db: Database instance for executing queries
+                user_id: User id to update
+                user_update: User update data
+
+        Returns:
+                UserData: Updated user data
+        """
+        query = """
+			UPDATE users SET
+                email = COALESCE($1, email),
+                username = COALESCE($2, username),
+                full_name = COALESCE($3, full_name),
+                updated_at = NOW()
+            WHERE id = $4
+            RETURNING *
+		"""
+        params = (
+            user_update.email,
+            user_update.username,
+            user_update.full_name,
+            user_id,
+        )
+        return await self.db.write(query, *params, model=UserData)
+
+    async def revoke_user_session(self, current_user_id: UUID, jti: str) -> int:
+        """
+        Revoke a user session by its JTI.
+
+        Args:
+                db: Database instance for executing queries
+                current_user_id: The currently authenticated user id
+                jti: The JTI of the session to revoke
+
+        Returns:
+                None
+        """
+        query = """
+            DELETE FROM user_sessions
+            WHERE jti = $1 AND user_id = $2
+            RETURNING (extract(epoch FROM expires_at) - extract(epoch FROM now()))::integer AS ttl;
+        """
+        row = await self.db.fetchval(query, jti, current_user_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Session not found")
+        return int(row)
 
 
 async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:
