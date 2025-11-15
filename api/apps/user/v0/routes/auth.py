@@ -6,8 +6,19 @@ from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 
 from api.apps.user.constants import GoogleAuthEndpoints
-from api.apps.user.schemas.auth import LoginResponse, RefreshTokenRequest, Token, UserLogin
+from api.apps.user.schemas.auth import (
+    LoginResponse,
+    OAuthSudoTokenRequest,
+    RefreshTokenRequest,
+    SudoTokenRequest,
+    SudoTokenResponse,
+    Token,
+    UserLogin,
+)
+from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
+from api.constants import TokenTypes
+from api.core.auth import verify_token
 from api.core.config import settings
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
@@ -149,3 +160,58 @@ async def refresh_access_token(
         Token: A new access token.
     """
     return await svc.refresh_token(token_request.refresh_token, request)
+
+
+@router.post("/sudo", response_model=SudoTokenResponse)
+async def create_sudo_token(
+    sudo_request: SudoTokenRequest,
+    svc: AuthService = Depends(get_auth_service),
+) -> SudoTokenResponse:
+    """
+    Create a sudo token for privileged operations using credentials.
+
+    Args:
+        request: The FastAPI request object.
+        sudo_request: The request body containing username and password.
+        svc: The auth service dependency.
+    Returns:
+        SudoTokenResponse: Sudo token with expiration time.
+    """
+    return await svc.create_sudo_token_user(sudo_request.username, sudo_request.password)
+
+
+@router.post("/auth/google/sudo", response_model=SudoTokenResponse)
+async def google_sudo_token(
+    sudo_request: OAuthSudoTokenRequest,
+    svc: AuthService = Depends(get_auth_service),
+) -> SudoTokenResponse:
+    """
+    Create a sudo token for OAuth (Google) user for privileged operations.
+
+    Args:
+        request: The FastAPI request object.
+        sudo_request: The request body containing the current access token.
+        svc: The auth service dependency.
+    Returns:
+        SudoTokenResponse: Sudo token with expiration time.
+    """
+    # For OAuth users, we verify the access token first
+    try:
+        token_data = await verify_token(sudo_request.access_token, token_type=TokenTypes.ACCESS.value)
+        # Create a temporary UserData object with minimal required fields
+        user_data = UserData(
+            username=token_data.username,
+            id=token_data.id,
+            is_active=True,
+            is_superuser=False,
+            hashed_password=None,
+            email="",
+            full_name=None,
+            created_at=None,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid access token",
+        ) from exc
+    return await svc.create_sudo_token_oauth(user_data)

@@ -141,6 +141,12 @@ async def verify_token(token: str, token_type: Optional[str] = "access") -> Toke
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Refresh token has been revoked.",
                 )
+        elif token_type == TokenTypes.SUDO.value:
+            if await redis.get(f"blacklist:sudo:{jti}") is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Sudo token has been revoked.",
+                )
         return TokenData(username=username, id=user_id, exp=exp, jti=jti, type=jwt_token_type)
     except jwt.PyJWTError as exc:
         raise HTTPException(

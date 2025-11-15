@@ -4,11 +4,12 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
-from api.apps.user.schemas.auth import LoginResponse, Token
+from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.constants import TokenTypes
-from api.core.auth import create_access_token, create_refresh_token, verify_password, verify_token
+from api.core.auth import create_access_token, create_refresh_token, create_sudo_token, verify_password, verify_token
+from api.core.config import settings
 from api.core.redis import get_redis
 from api.utils.date import get_utc_now
 
@@ -146,6 +147,46 @@ class AuthService:
 
         new_access_token = access_token_details["token"]
         return Token(access_token=new_access_token, refresh_token=new_refresh_token)
+
+    async def create_sudo_token_oauth(self, user: UserData) -> SudoTokenResponse:
+        """
+        Create a sudo token for OAuth user.
+
+        Args:
+            user (UserData): The user data.
+            request (Request): FastAPI request object.
+        Returns:
+            SudoTokenResponse: Sudo token with expiration time.
+        """
+        token_data = {"sub": user.username, "id": str(user.id)}
+        sudo_token = create_sudo_token(token_data)
+        # Sudo token expires in SUDO_TOKEN_EXPIRE_MINUTES
+        return SudoTokenResponse(sudo_token=sudo_token, expires_in=settings.SUDO_TOKEN_EXPIRE_MINUTES * 60)
+
+    async def create_sudo_token_user(self, username: str, password: str) -> SudoTokenResponse:
+        """
+        Create a sudo token for regular user after password verification.
+
+        Args:
+            username: User username
+            password: User password
+            request: FastAPI request object
+
+        Returns:
+            SudoTokenResponse: Sudo token with expiration time
+        """
+        user = await self._user_dao.get_by_username(username)
+        if not user or not verify_password(password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        token_data = {"sub": user.username, "id": str(user.id)}
+        sudo_token = create_sudo_token(token_data)
+        # Sudo token expires in SUDO_TOKEN_EXPIRE_MINUTES
+        return SudoTokenResponse(sudo_token=sudo_token, expires_in=settings.SUDO_TOKEN_EXPIRE_MINUTES * 60)
 
     async def revoke_session(self, user_id: UUID, jti: str) -> None:
         """
