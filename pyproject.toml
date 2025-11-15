@@ -20,6 +20,8 @@ pre-commit = "^4.3.0"
 boto3 = "^1.40.64"
 celery = "^5.5.3"
 asgiref = "^3.10.0"
+authlib = "^1.6.5"
+itsdangerous = "^2.2.0"
 
 
 [tool.poetry.group.dev.dependencies]

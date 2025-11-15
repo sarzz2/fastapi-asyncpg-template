@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 # Shared properties
@@ -18,7 +18,16 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for user creation request."""
 
-    password: str
+    password: Optional[str] = None
+    oauth_provider: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def password_required_if_not_oauth(cls, v: dict) -> dict:
+        """Ensure password is provided if not using OAuth."""
+        if not v.get("password") and not v.get("oauth_provider"):
+            raise ValueError("Password is required for non-OAuth users")
+        return v
 
 
 class UserUpdate(BaseModel):
@@ -42,38 +51,6 @@ class UserData(UserBase):
         """Configure Pydantic model."""
 
         from_attributes = True
-
-
-class UserLogin(BaseModel):
-    """Schema for login request."""
-
-    username: str
-    password: str
-
-
-class Token(BaseModel):
-    """Schema for authentication token response."""
-
-    access_token: str
-    refresh_token: Optional[str] = None
-    token_type: str = "bearer"
-
-
-class LoginResponse(BaseModel):
-    """Schema for login response containing token and user data."""
-
-    token: Token
-    user: UserData
-
-
-class TokenData(BaseModel):
-    """Schema for decoded token data."""
-
-    username: str
-    id: Optional[UUID] = None
-    exp: int
-    jti: str
-    type: str = "Bearer"
 
 
 class UserSessionBase(BaseModel):
@@ -107,9 +84,3 @@ class UserSessionData(UserSessionBase):
         """Configure Pydantic model."""
 
         from_attributes = True
-
-
-class RefreshTokenRequest(BaseModel):
-    """Schema for refresh token request."""
-
-    refresh_token: str

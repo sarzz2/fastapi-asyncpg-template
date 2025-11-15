@@ -41,6 +41,7 @@ repos:
           - redis
           - boto3
           - celery
+          - httpx
 
       - id: mypy
         name: mypy
@@ -58,6 +59,7 @@ repos:
           - colorlog
           - PyJWT
           - redis
+          - httpx
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.0

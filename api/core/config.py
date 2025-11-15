@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     PROJECT_VERSION: str = "0.1.0"
     API_V0_STR: str = "/api/v0"
     SECRET_KEY: str = "test_secret_key"
-    DOMAIN: str = "http://localhost:8000"
+    DOMAIN: str = "http://127.0.0.1:8000"
     FRONTEND_URL: str = "http://localhost:3OO0"
     ENV: str = Environments.DEV.value
 
@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     AWS_ACCESS_KEY: str = "test"
     AWS_SECRET_ACCESS_KEY: str = "test"
     AWS_BUCKET_NAME: str = "my-bucket"
+
+    # google oauth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
 
     class Config:
         """Pydantic Config class for Settings"""

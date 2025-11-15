@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import ORJSONResponse
+from starlette.middleware.sessions import SessionMiddleware
 
 from api.apps.api import api_router
 from api.constants import Environments
@@ -94,7 +95,6 @@ async def log_requests(request: Request, call_next: Callable) -> Response:
     return response
 
 
-app.include_router(api_router)
 origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"]
 
 # Add CORS middleware to the FastAPI application
@@ -108,5 +108,15 @@ app.add_middleware(
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
 app.add_middleware(RegionASGIMiddleware)
 
+# Explicit session cookie settings to make local OAuth flows more predictable.
+# - `same_site='lax'` allows top-level GET navigations to include the cookie.
+# - `https_only=False` is required for local HTTP development (localhost).
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=settings.SECRET_KEY,
+)
+
 if settings.ENV in [Environments.PROD.value, Environments.STAGING.value]:
     app.add_middleware(HTTPSRedirectMiddleware)
+
+app.include_router(api_router)

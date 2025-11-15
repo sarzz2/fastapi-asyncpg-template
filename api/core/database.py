@@ -4,20 +4,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import (
-    Any,
-    AsyncGenerator,
-    ClassVar,
-    Dict,
-    List,
-    Literal,
-    Optional,
-    Type,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
+from typing import Any, AsyncGenerator, ClassVar, Dict, List, Literal, Optional, Type, TypeVar, Union, cast, overload
 
 import asyncpg
 from asyncpg import Connection, Pool, Record, create_pool

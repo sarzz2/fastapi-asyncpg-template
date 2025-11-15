@@ -4,6 +4,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException
 
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
+from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
 
 
@@ -12,6 +13,48 @@ class UserDAO:
 
     def __init__(self, db: DataBase):
         self.db = db
+
+    async def get_by_google_sub(self, sub: str) -> Optional[UserData]:
+        """
+        Retrieve a user by Google OAuth subject (sub).
+
+        Args:
+            sub (str): Google subject identifier.
+        Returns:
+            Optional[UserData]: User if found, None otherwise.
+        """
+        query = """
+            SELECT u.* FROM users u
+             JOIN user_identities i ON u.id = i.user_id
+            WHERE i.provider = 'google' AND i.provider_user_id = $1
+        """
+        return await self.db.fetch(query, sub, model=UserData, fetch_row=True)
+
+    async def create_user_oauth(self, user_data: UserCreate, user_info: dict) -> UserData:
+        """
+        Create a new user and Google identity in the database.
+
+        Args:
+            user_data (UserCreate): User creation data.
+            user_info (dict): Google user info from OAuth callback.
+        Returns:
+            UserData: Created user data.
+        """
+        user = await self.create_user(user_data, hashed_password=None)
+        query = """
+            INSERT INTO user_identities (user_id, provider, provider_user_id, email, email_verified, profile)
+            VALUES ($1, $2, $3, $4, $5)
+        """
+        params = (
+            user.id,
+            OAuthProviders.GOOGLE.value,
+            user_info["sub"],
+            user_info.get("email"),
+            user_info.get("email_verified"),
+            user_info,
+        )
+        await self.db.execute(query, *params)
+        return user
 
     async def get_by_username(self, username: str) -> Optional[UserData]:
         """
@@ -33,7 +76,7 @@ class UserDAO:
     async def create_user(
         self,
         user_data: UserCreate,
-        hashed_password: str,
+        hashed_password: Optional[str] = None,
     ) -> UserData:
         """
         Create a new user in the database.

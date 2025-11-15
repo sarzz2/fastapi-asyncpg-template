@@ -7,7 +7,7 @@ import bcrypt
 import jwt
 from fastapi import HTTPException, status
 
-from api.apps.user.schemas.user import TokenData
+from api.apps.user.schemas.auth import TokenData
 from api.constants import TokenTypes
 
 from .config import settings

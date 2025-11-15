@@ -1,0 +1,151 @@
+from uuid import uuid4
+
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
+from redis.asyncio import Redis
+
+from api.apps.user.constants import GoogleAuthEndpoints
+from api.apps.user.schemas.auth import LoginResponse, RefreshTokenRequest, Token, UserLogin
+from api.apps.user.v0.service.auth import AuthService, get_auth_service
+from api.core.config import settings
+from api.core.redis import get_redis
+from api.shared.redis_keys import RedisKeys
+
+router = APIRouter(tags=["auth"])
+
+
+@router.get("/auth/google/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+async def google_login(request: Request, redis: Redis = Depends(get_redis)) -> RedirectResponse:
+    """
+    Initiate Google OAuth login flow.
+
+    Args:
+        request: FastAPI request object
+        redis: Redis client dependency
+    Returns:
+        RedirectResponse: Redirect to Google OAuth consent screen
+    """
+    # build redirect uri that Google will callback to
+    redirect_uri = str(request.url_for("google_callback"))
+
+    # generate state and store in redis
+    state = uuid4().hex
+    state_key = RedisKeys.OAUTH_STATE_GOOGLE.format(state=state)
+    await redis.set(state_key, "1", ex=300)
+
+    # build auth url
+    scope = "openid email profile"
+    params = {
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": scope,
+        "state": state,
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    auth_url = httpx.URL(GoogleAuthEndpoints.GOOGLE_AUTH_ENDPOINT).copy_with(params=params)
+    return RedirectResponse(url=str(auth_url), status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+
+
+@router.get("/auth/google/callback", response_model=LoginResponse)
+async def google_callback(
+    request: Request,
+    svc: AuthService = Depends(get_auth_service),
+    redis: Redis = Depends(get_redis),
+) -> LoginResponse:
+    """
+    Google OAuth callback endpoint. Upserts user and identity, returns tokens.
+
+    Args:
+        request: FastAPI request object
+        svc: Auth service dependency
+        redis: Redis client dependency
+    Returns:
+        LoginResponse: Access and refresh tokens, user data
+    """
+    # Validate state parameter against Redis
+    code = request.query_params.get("code")
+    state = request.query_params.get("state")
+    if not code or not state:
+        raise HTTPException(status_code=400, detail="Missing code or state in callback")
+
+    state_key = RedisKeys.OAUTH_STATE_GOOGLE.format(state=state)
+    stored = await redis.get(state_key)
+    if not stored:
+        raise HTTPException(status_code=400, detail="Invalid or expired state")
+    # delete state to prevent replay
+    await redis.delete(state_key)
+
+    # Exchange code for tokens
+    redirect_uri = str(request.url_for("google_callback"))
+
+    async with httpx.AsyncClient() as client:
+        token_resp = await client.post(
+            GoogleAuthEndpoints.GOOGLE_TOKEN_ENDPOINT,
+            data={
+                "code": code,
+                "client_id": settings.GOOGLE_CLIENT_ID,
+                "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            headers={"Accept": "application/json"},
+        )
+        if token_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail=f"Token exchange failed: {token_resp.text}")
+        token = token_resp.json()
+
+        access_token = token.get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=400, detail="No access token in token response")
+
+        # Fetch userinfo
+        userinfo_resp = await client.get(
+            GoogleAuthEndpoints.GOOGLE_USERINFO_ENDPOINT, headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if userinfo_resp.status_code != 200:
+            raise HTTPException(status_code=400, detail="Failed to fetch userinfo from provider")
+        user_info = userinfo_resp.json()
+
+    user = await svc.handle_google_oauth(user_info)
+    return await svc.authenticate_oauth_user(user, request)
+
+
+@router.post("/login", response_model=LoginResponse)
+async def login(
+    request: Request,
+    login_data: UserLogin,
+    svc: AuthService = Depends(get_auth_service),
+) -> LoginResponse:
+    """
+    Authenticate user and return access token.
+
+    Args:
+        request: FastAPI request object
+        login_data: User login credentials
+        svc: Auth service dependency
+    Returns:
+        LoginResponse: Authentication token and user data
+    """
+    return await svc.authenticate_user(login_data.username, login_data.password, request)
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(
+    request: Request,
+    token_request: RefreshTokenRequest,
+    svc: AuthService = Depends(get_auth_service),
+) -> Token:
+    """
+    Refresh access token using a refresh token.
+
+    Args:
+        request: The FastAPI request object.
+        token_request: The request body containing the refresh token.
+        svc: The auth service dependency.
+    Returns:
+        Token: A new access token.
+    """
+    return await svc.refresh_token(token_request.refresh_token, request)

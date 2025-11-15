@@ -15,3 +15,11 @@ class TokenTypes(Enum):
     ACCESS = "access"
     REFRESH = "refresh"
     SUDO = "sudo"
+
+
+class OAuthProviders(Enum):
+    """OAuth Providers Constants"""
+
+    GOOGLE = "google"
+    FACEBOOK = "facebook"
+    GITHUB = "github"
