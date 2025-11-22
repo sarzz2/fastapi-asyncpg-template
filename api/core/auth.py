@@ -6,6 +6,7 @@ from uuid import uuid4
 import bcrypt
 import jwt
 from fastapi import HTTPException, status
+from redis.asyncio import Redis
 
 from api.apps.user.schemas.auth import TokenData
 from api.constants import TokenTypes
@@ -21,7 +22,7 @@ SUDO_TOKEN_EXPIRE_MINUTES = settings.SUDO_TOKEN_EXPIRE_MINUTES
 redis_client = RedisClient()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
     """
     Verify a plain password against a hashed password.
     Args:
@@ -30,6 +31,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     Returns:
         bool: True if the passwords match, False otherwise.
     """
+    if hashed_password is None:
+        return False
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
@@ -103,18 +106,18 @@ def create_sudo_token(data: dict) -> str:
     return str(token_details["token"])
 
 
-async def verify_token(token: str, token_type: Optional[str] = "access") -> TokenData:
+async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "access") -> TokenData:
     """
     Verify a JWT token and return the token data.
     Args:
         token (str): The JWT token to verify.
+        redis (Redis): The Redis client.
         token_type (Optional[str]): The expected type of the token ("access", "refresh", "sudo").
     Returns:
         TokenData: The data contained in the token.
     Raises:
         HTTPException: If the token is invalid or has been revoked.
     """
-    redis = redis_client.client
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")

@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, status
+from typing import Optional
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, status
 
 from api.apps.user.schemas.user import (
     UserCreate,
     UserData,
+    UserSessionData,
     UserUpdate,
 )
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.dependencies import get_current_user
+from api.shared.pagination import CursorPage
 
 router = APIRouter(tags=["users"])
 
@@ -79,3 +84,25 @@ async def revoke_session(
         None
     """
     await svc.revoke_user_session(current_user.id, jti)
+
+
+@router.get("/sessions", response_model=CursorPage[UserSessionData])
+async def get_sessions(
+    limit: int = Query(10, ge=1, le=100),
+    cursor: Optional[UUID] = Query(None),
+    current_user: UserData = Depends(get_current_user),
+    svc: UserService = Depends(get_user_service),
+) -> CursorPage[UserSessionData]:
+    """
+    Get paginated user sessions.
+
+    Args:
+        limit: Number of items to return
+        cursor: The cursor (last session ID)
+        current_user: The currently authenticated user
+        svc: User service dependency
+
+    Returns:
+        CursorPage[UserSessionData]: Paginated sessions
+    """
+    return await svc.get_user_sessions(current_user.id, limit, cursor)

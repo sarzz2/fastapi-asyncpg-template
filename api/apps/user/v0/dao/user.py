@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
@@ -72,6 +72,56 @@ class UserDAO:
         """
         # Use database layer's built-in model conversion
         return await self.db.fetch(query, username, model=UserData, fetch_row=True)
+
+    async def get_by_id(self, user_id: UUID) -> Optional[UserData]:
+        """
+        Retrieve a user by id.
+
+        Args:
+            user_id: User id to search for
+
+        Returns:
+            Optional[UserData]: User if found, None otherwise
+        """
+        query = """
+              SELECT * FROM users WHERE id = $1
+        """
+        # Use database layer's built-in model conversion
+        return await self.db.fetch(query, user_id, model=UserData, fetch_row=True)
+
+    async def get_by_email(self, email: str) -> Optional[UserData]:
+        """
+        Retrieve a user by email.
+
+        Args:
+            email: Email to search for.
+        Returns:
+            Optional[UserData]: User if found, None otherwise.
+        """
+        query = "SELECT * FROM users WHERE email = $1"
+        return await self.db.fetch(query, email, model=UserData, fetch_row=True)
+
+    async def add_identity(self, user_id: UUID, user_info: dict) -> None:
+        """
+        Add a new identity (e.g. Google) to an existing user.
+
+        Args:
+            user_id: The ID of the user to link.
+            user_info: The identity provider info.
+        """
+        query = """
+            INSERT INTO user_identities (user_id, provider, provider_user_id, email, email_verified, profile)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        """
+        params = (
+            user_id,
+            OAuthProviders.GOOGLE.value,
+            user_info["sub"],
+            user_info.get("email"),
+            user_info.get("email_verified"),
+            user_info,
+        )
+        await self.db.execute(query, *params)
 
     async def create_user(
         self,
@@ -151,8 +201,7 @@ class UserDAO:
 			UPDATE users SET
                 email = COALESCE($1, email),
                 username = COALESCE($2, username),
-                full_name = COALESCE($3, full_name),
-                updated_at = NOW()
+                full_name = COALESCE($3, full_name)
             WHERE id = $4
             RETURNING *
 		"""
@@ -163,6 +212,17 @@ class UserDAO:
             user_id,
         )
         return await self.db.write(query, *params, model=UserData)
+
+    async def update_password(self, user_id: UUID, hashed_password: str) -> None:
+        """
+        Update user password.
+
+        Args:
+            user_id: User id to update
+            hashed_password: New hashed password
+        """
+        query = "UPDATE users SET hashed_password = $1 WHERE id = $2"
+        await self.db.execute(query, hashed_password, user_id)
 
     async def revoke_user_session(self, current_user_id: UUID, jti: str) -> int:
         """
@@ -185,6 +245,37 @@ class UserDAO:
         if not row:
             raise HTTPException(status_code=404, detail="Session not found")
         return int(row)
+
+    async def get_user_sessions(
+        self, user_id: UUID, limit: int, cursor: Optional[UUID] = None
+    ) -> List[UserSessionData]:
+        """
+        Retrieve paginated user sessions.
+
+        Args:
+            user_id: The user ID to fetch sessions for.
+            limit: The maximum number of sessions to return.
+            cursor: The cursor (last session ID) for pagination.
+
+        Returns:
+            List[UserSessionData]: List of user sessions.
+        """
+        if cursor:
+            query = """
+                SELECT * FROM user_sessions
+                WHERE user_id = $1 AND id < $2
+                ORDER BY id DESC LIMIT $3
+            """
+            result = await self.db.fetch(query, user_id, cursor, limit, model=UserSessionData, fetch_row=False)
+        else:
+            query = """
+                SELECT * FROM user_sessions
+                WHERE user_id = $1
+                ORDER BY id DESC LIMIT $2
+            """
+            result = await self.db.fetch(query, user_id, limit, model=UserSessionData, fetch_row=False)
+
+        return result if result is not None else []
 
 
 async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:

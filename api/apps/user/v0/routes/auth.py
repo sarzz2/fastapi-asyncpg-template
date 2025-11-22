@@ -9,10 +9,10 @@ from api.apps.user.constants import GoogleAuthEndpoints
 from api.apps.user.schemas.auth import (
     LoginResponse,
     OAuthSudoTokenRequest,
+    PasswordUpdateRequest,
     RefreshTokenRequest,
     SudoTokenRequest,
     SudoTokenResponse,
-    Token,
     UserLogin,
 )
 from api.apps.user.schemas.user import UserData
@@ -20,13 +20,14 @@ from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.constants import TokenTypes
 from api.core.auth import verify_token
 from api.core.config import settings
+from api.core.dependencies import get_sudo_user
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
 
 router = APIRouter(tags=["auth"])
 
 
-@router.get("/auth/google/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+@router.get("/google/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 async def google_login(request: Request, redis: Redis = Depends(get_redis)) -> RedirectResponse:
     """
     Initiate Google OAuth login flow.
@@ -60,7 +61,7 @@ async def google_login(request: Request, redis: Redis = Depends(get_redis)) -> R
     return RedirectResponse(url=str(auth_url), status_code=status.HTTP_307_TEMPORARY_REDIRECT)
 
 
-@router.get("/auth/google/callback", response_model=LoginResponse)
+@router.get("/google/callback", response_model=LoginResponse)
 async def google_callback(
     request: Request,
     svc: AuthService = Depends(get_auth_service),
@@ -143,12 +144,12 @@ async def login(
     return await svc.authenticate_user(login_data.username, login_data.password, request)
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=LoginResponse)
 async def refresh_access_token(
     request: Request,
     token_request: RefreshTokenRequest,
     svc: AuthService = Depends(get_auth_service),
-) -> Token:
+) -> LoginResponse:
     """
     Refresh access token using a refresh token.
 
@@ -157,7 +158,7 @@ async def refresh_access_token(
         token_request: The request body containing the refresh token.
         svc: The auth service dependency.
     Returns:
-        Token: A new access token.
+        LoginResponse: A new access token.
     """
     return await svc.refresh_token(token_request.refresh_token, request)
 
@@ -180,10 +181,11 @@ async def create_sudo_token(
     return await svc.create_sudo_token_user(sudo_request.username, sudo_request.password)
 
 
-@router.post("/auth/google/sudo", response_model=SudoTokenResponse)
+@router.post("/google/sudo", response_model=SudoTokenResponse)
 async def google_sudo_token(
     sudo_request: OAuthSudoTokenRequest,
     svc: AuthService = Depends(get_auth_service),
+    redis: Redis = Depends(get_redis),
 ) -> SudoTokenResponse:
     """
     Create a sudo token for OAuth (Google) user for privileged operations.
@@ -197,7 +199,7 @@ async def google_sudo_token(
     """
     # For OAuth users, we verify the access token first
     try:
-        token_data = await verify_token(sudo_request.access_token, token_type=TokenTypes.ACCESS.value)
+        token_data = await verify_token(sudo_request.access_token, redis, token_type=TokenTypes.ACCESS.value)
         # Create a temporary UserData object with minimal required fields
         user_data = UserData(
             username=token_data.username,
@@ -215,3 +217,20 @@ async def google_sudo_token(
             detail="Invalid access token",
         ) from exc
     return await svc.create_sudo_token_oauth(user_data)
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def update_password(
+    password_update: PasswordUpdateRequest,
+    current_user: UserData = Depends(get_sudo_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> None:
+    """
+    Update user password. Requires sudo token.
+
+    Args:
+        password_update: The new password.
+        current_user: The currently authenticated user (via sudo token).
+        svc: The auth service dependency.
+    """
+    await svc.update_password(current_user.id, password_update.password)

@@ -9,6 +9,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import ORJSONResponse
 from starlette.middleware.sessions import SessionMiddleware
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from api.apps.api import api_router
 from api.constants import Environments
@@ -63,6 +64,14 @@ app = FastAPI(
 register_exception_handlers(app)
 
 
+@app.get("/health", tags=["health"])
+async def health_check() -> dict[str, str]:
+    """
+    Health check endpoint.
+    """
+    return {"status": "ok"}
+
+
 @app.middleware("http")
 async def log_requests(request: Request, call_next: Callable) -> Response:
     """
@@ -95,18 +104,17 @@ async def log_requests(request: Request, call_next: Callable) -> Response:
     return response
 
 
-origins = ["http://localhost:3000", "http://localhost:3001", "http://localhost:5173"]
-
 # Add CORS middleware to the FastAPI application
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
 app.add_middleware(RegionASGIMiddleware)
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # Explicit session cookie settings to make local OAuth flows more predictable.
 # - `same_site='lax'` allows top-level GET navigations to include the cookie.

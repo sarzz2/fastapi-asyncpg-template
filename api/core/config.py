@@ -1,4 +1,4 @@
-from pydantic.v1 import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.constants import Environments
 
@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     API_V0_STR: str = "/api/v0"
     SECRET_KEY: str = "test_secret_key"
     DOMAIN: str = "http://127.0.0.1:8000"
-    FRONTEND_URL: str = "http://localhost:3OO0"
+    FRONTEND_URL: str = "http://localhost:3000"
     ENV: str = Environments.DEV.value
 
     ALGORITHM: str = "HS256"
@@ -39,10 +39,14 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
-    class Config:
-        """Pydantic Config class for Settings"""
+    # CORS
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:5173",
+    ]
 
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
 
 settings = Settings()

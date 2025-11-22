@@ -1,4 +1,7 @@
 import asyncio
+import re
+import secrets
+import string
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
@@ -8,7 +11,14 @@ from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.constants import TokenTypes
-from api.core.auth import create_access_token, create_refresh_token, create_sudo_token, verify_password, verify_token
+from api.core.auth import (
+    create_access_token,
+    create_refresh_token,
+    create_sudo_token,
+    get_password_hash,
+    verify_password,
+    verify_token,
+)
 from api.core.config import settings
 from api.core.redis import get_redis
 from api.utils.date import get_utc_now
@@ -24,6 +34,26 @@ class AuthService:
         self._user_dao = user_dao
         self._redis = redis
 
+    async def _generate_unique_username(self, base_name: str) -> str:
+        """
+        Generate a unique username from a base name.
+        """
+        # Simple slugify: lowercase, remove non-alphanumeric, replace spaces with -
+        username = re.sub(r"[^a-z0-9]+", "-", base_name.lower()).strip("-")
+        if not username:
+            username = "user"
+
+        # Check if exists
+        if not await self._user_dao.get_by_username(username):
+            return username
+
+        # Append random suffix until unique
+        while True:
+            suffix = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(4))
+            new_username = f"{username}-{suffix}"
+            if not await self._user_dao.get_by_username(new_username):
+                return new_username
+
     async def handle_google_oauth(self, user_info: dict) -> UserData:
         """
         Upsert user and identity for Google OAuth.
@@ -33,16 +63,35 @@ class AuthService:
         Returns:
             UserData: The upserted or existing user data.
         """
+        # 1. Try to find by Google ID
         user = await self._user_dao.get_by_google_sub(user_info["sub"])
-        if not user:
-            user_create = UserCreate(
-                username=user_info["email"],
-                email=user_info["email"],
-                password=None,
-                full_name=user_info.get("name"),
-                is_active=True,
-            )
-            user = await self._user_dao.create_user_oauth(user_create, user_info)
+        if user:
+            return user
+
+        # 2. Try to find by Email
+        email = user_info.get("email")
+        if email:
+            user = await self._user_dao.get_by_email(email)
+            if user:
+                # If user exists and Google email is verified, link the account
+                if user_info.get("email_verified"):
+                    await self._user_dao.add_identity(user.id, user_info)
+                    return user
+                # If email matches but not verified, we let it fall through to create_user_oauth which will fail
+                # with unique constraint error on email, which is safe.
+
+        # 3. Create new user
+        base_name = user_info.get("name") or user_info["email"].split("@")[0]
+        username = await self._generate_unique_username(base_name)
+
+        user_create = UserCreate(
+            username=username,
+            email=user_info["email"],
+            password=None,
+            full_name=user_info.get("name"),
+            is_active=True,
+        )
+        user = await self._user_dao.create_user_oauth(user_create, user_info)
         return user
 
     async def authenticate_oauth_user(self, user: UserData, request: Request) -> LoginResponse:
@@ -111,7 +160,7 @@ class AuthService:
             user=UserData.model_validate(user),
         )
 
-    async def refresh_token(self, refresh_token: str, request: Request) -> Token:
+    async def refresh_token(self, refresh_token: str, request: Request) -> LoginResponse:
         """
         Refresh the access token using a refresh token.
 
@@ -120,10 +169,15 @@ class AuthService:
             request: FastAPI request object.
 
         Returns:
-            Token: A new access token.
+            LoginResponse: A new access token.
         """
-        token_data = await verify_token(refresh_token, token_type=TokenTypes.REFRESH.value)
-        user = await self._user_dao.get_by_username(token_data.username)
+        token_data = await verify_token(refresh_token, self._redis, token_type=TokenTypes.REFRESH.value)
+        if token_data.id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token data",
+            )
+        user = await self._user_dao.get_by_id(token_data.id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -145,8 +199,10 @@ class AuthService:
             )
         )
 
-        new_access_token = access_token_details["token"]
-        return Token(access_token=new_access_token, refresh_token=new_refresh_token)
+        return LoginResponse(
+            token=Token(access_token=access_token_details["token"], refresh_token=new_refresh_token),
+            user=UserData.model_validate(user),
+        )
 
     async def create_sudo_token_oauth(self, user: UserData) -> SudoTokenResponse:
         """
@@ -204,6 +260,17 @@ class AuthService:
             self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
         )
+
+    async def update_password(self, user_id: UUID, password: str) -> None:
+        """
+        Update user password.
+
+        Args:
+            user_id: The user id
+            password: The new password
+        """
+        hashed_password = get_password_hash(password)
+        await self._user_dao.update_password(user_id, hashed_password)
 
 
 async def get_auth_service(user_dao: UserDAO = Depends(get_user_dao), redis: Redis = Depends(get_redis)) -> AuthService:

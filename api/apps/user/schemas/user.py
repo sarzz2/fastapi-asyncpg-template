@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Optional
+from ipaddress import IPv4Address, IPv6Address
+from typing import Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # Shared properties
@@ -19,15 +20,6 @@ class UserCreate(UserBase):
     """Schema for user creation request."""
 
     password: Optional[str] = None
-    oauth_provider: Optional[str] = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def password_required_if_not_oauth(cls, v: dict) -> dict:
-        """Ensure password is provided if not using OAuth."""
-        if not v.get("password") and not v.get("oauth_provider"):
-            raise ValueError("Password is required for non-OAuth users")
-        return v
 
 
 class UserUpdate(BaseModel):
@@ -36,7 +28,6 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[EmailStr] = None
     username: Optional[str] = None
-    password: Optional[str] = None
 
 
 class UserData(UserBase):
@@ -47,10 +38,7 @@ class UserData(UserBase):
     hashed_password: str = Field(exclude=True)
     created_at: datetime
 
-    class Config:
-        """Configure Pydantic model."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserSessionBase(BaseModel):
@@ -60,13 +48,10 @@ class UserSessionBase(BaseModel):
     user_id: UUID
     issued_at: datetime
     expires_at: datetime
-    ip_address: Optional[str] = None
+    ip_address: Optional[Union[str, IPv4Address, IPv6Address]] = None
     user_agent: Optional[str] = None
 
-    class Config:
-        """Configure Pydantic model."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class UserSessionCreate(UserSessionBase):
@@ -80,7 +65,4 @@ class UserSessionData(UserSessionBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        """Configure Pydantic model."""
-
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

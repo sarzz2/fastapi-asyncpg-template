@@ -1,4 +1,5 @@
 import asyncio
+from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -7,11 +8,13 @@ from redis.asyncio import Redis
 from api.apps.user.schemas.user import (
     UserCreate,
     UserData,
+    UserSessionData,
     UserUpdate,
 )
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.core.auth import get_password_hash
 from api.core.redis import get_redis
+from api.shared.pagination import CursorPage
 
 
 class UserService:
@@ -59,6 +62,24 @@ class UserService:
             )
         return UserData.model_validate(user_db)
 
+    async def get_user_by_id(self, user_id: UUID) -> UserData:
+        """
+        Retrieve a user by id.
+
+        Args:
+            user_id: User id to search for
+
+        Returns:
+            UserResponse: User data
+        """
+        user_db = await self._user_dao.get_by_id(user_id)
+        if not user_db:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found",
+            )
+        return UserData.model_validate(user_db)
+
     async def update_user(self, user_id: UUID, user_update: UserUpdate) -> UserData:
         """
         Update a user by id.
@@ -88,6 +109,34 @@ class UserService:
         await asyncio.gather(
             self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
+        )
+
+    async def get_user_sessions(
+        self, user_id: UUID, limit: int = 10, cursor: Optional[UUID] = None
+    ) -> CursorPage[UserSessionData]:
+        """
+        Get paginated user sessions.
+
+        Args:
+            user_id: The user ID
+            limit: Number of items to return
+            cursor: The cursor (last session ID)
+
+        Returns:
+            CursorPage[UserSessionData]: Paginated sessions
+        """
+        # Fetch one more than limit to check if there is a next page
+        sessions = await self._user_dao.get_user_sessions(user_id, limit + 1, cursor)
+
+        next_cursor = None
+
+        if len(sessions) > limit:
+            sessions = sessions[:limit]
+            next_cursor = str(sessions[-1].id)
+
+        return CursorPage(
+            items=sessions,
+            next_cursor=next_cursor,
         )
 
 

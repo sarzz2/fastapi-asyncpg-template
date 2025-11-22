@@ -62,3 +62,9 @@ class OAuthSudoTokenRequest(BaseModel):
     """Schema for OAuth sudo token request."""
 
     access_token: str
+
+
+class PasswordUpdateRequest(BaseModel):
+    """Schema for password update request."""
+
+    password: str
