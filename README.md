@@ -24,6 +24,20 @@ This is a production-ready template for building very efficient asynchronous web
 
 ---
 
+## Table of Contents
+
+-   [Features](#features)
+-   [Tech Stack](#tech-stack)
+-   [Getting Started](#getting-started)
+-   [Development](#development)
+-   [Database Migrations](#database-migrations)
+-   [Database Core](#database-apicoredatabasepy)
+-   [User Management & Authentication](#user-management--authentication)
+-   [AWS S3 Integration](#aws-s3-integration)
+-   [Code Quality](#code-quality)
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -248,6 +262,114 @@ def list_all_users(self) -> List[dict[str, Any]]:
     records = self.loop.run_until_complete(user_dao.get_all_users())
     log.info("Fetched %d users from the database.", len(records))
     return [user.model_dump() for user in records]
+```
+
+## User Management & Authentication
+
+The project comes with a comprehensive user management system located in `api/apps/user`.
+
+### Features
+
+-   **Authentication**:
+    -   **JWT Auth**: Secure access and refresh token rotation.
+    -   **OAuth2**: Google Login integration.
+-   **Session Management**:
+    -   Track active sessions.
+    -   Revoke specific sessions (logout from specific devices).
+-   **Security**:
+    -   **Sudo Mode**: Require re-authentication (or "sudo token") for sensitive actions like changing passwords.
+    -   **Password Hashing**: Uses `bcrypt` for secure password storage.
+-   **Profile**:
+    -   Update user details.
+    -   Profile picture support (integrated with S3).
+
+## AWS S3 Integration
+
+The project includes a robust AWS S3 integration for handling file uploads and deletions, designed with security and performance in mind.
+
+### Configuration
+
+Ensure the following environment variables are set in your `.env` file:
+
+-   `AWS_ACCESS_KEY`: Your AWS access key ID.
+-   `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
+-   `AWS_BUCKET_NAME`: The name of your S3 bucket.
+-   `S3_REGION_NAME`: The AWS region (e.g., `us-east-1`).
+-   `S3_ENDPOINT_URL`: The S3 endpoint URL (use `http://localhost:4566` for LocalStack).
+
+### Features
+
+1.  **Secure Direct Uploads (Presigned POST)**:
+
+    -   The backend generates a **Presigned POST URL** and a set of fields.
+    -   The frontend uses these to upload files directly to S3, bypassing the backend server for better performance.
+    -   **Security Policies**:
+        -   **Max File Size**: 5MB (enforced by S3).
+        -   **File Type**: Must be an image (`image/*`) (enforced by S3).
+        -   **Tagging**: Files are automatically tagged with `status=temporary`.
+
+2.  **Authenticated Deletion**:
+
+    -   Deleting files requires authentication (`DELETE /api/v0/s3/file`).
+
+3.  **Smart URL Generation**:
+
+    -   `GET /api/v0/s3/file/{key}` returns a URL that forces the browser to display the file inline (instead of downloading) by setting the correct `Content-Type` and `Content-Disposition`.
+
+4.  **Automatic Cleanup**:
+    -   A Celery task (`api/tasks/delete_s3_files.py`) runs periodically to delete "temporary" files that haven't been saved (referenced by the backend) within 15 minutes.
+    -   **Flow**:
+        1.  User uploads file -> Tagged `status=temporary`.
+        2.  User saves profile -> Backend should update tag to `status=saved` (implementation dependent) or simply reference the key.
+        3.  If not saved, the cleanup task deletes it after 15 mins.
+
+### Usage Example
+
+**1. Get Upload URL (Frontend):**
+
+```http
+POST /api/v0/s3/upload-url
+Content-Type: application/json
+
+{
+  "filename": "avatar.png",
+  "content_type": "image/png"
+}
+```
+
+**Response:**
+
+```json
+{
+    "upload_url": "https://s3.amazonaws.com/...",
+    "fields": {
+        "key": "uuid/avatar.png",
+        "AWSAccessKeyId": "...",
+        "policy": "...",
+        "signature": "...",
+        "Content-Type": "image/png",
+        "x-amz-tagging": "status=temporary"
+    },
+    "key": "uuid/avatar.png",
+    "expires_in": 3600
+}
+```
+
+**2. Upload to S3 (Frontend):**
+
+Use the `upload_url` and `fields` to make a `POST` request. The file must be the **last** field.
+
+```javascript
+const formData = new FormData();
+Object.entries(response.fields).forEach(([key, value]) => {
+    formData.append(key, value);
+});
+formData.append("file", fileObject);
+
+await fetch(response.upload_url, {
+    method: "POST",
+    body: formData,
+});
 ```
 
 ## Code Quality
