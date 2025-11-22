@@ -205,7 +205,6 @@ async def google_sudo_token(
             username=token_data.username,
             id=token_data.id,
             is_active=True,
-            is_superuser=False,
             hashed_password=None,
             email="",
             full_name=None,

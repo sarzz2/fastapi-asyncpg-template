@@ -3,7 +3,9 @@ from ipaddress import IPv4Address, IPv6Address
 from typing import Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from api.utils.pydantic_utils import generate_file_url
 
 
 # Shared properties
@@ -34,11 +36,17 @@ class UserData(UserBase):
     """Schema for user data in responses."""
 
     id: UUID
-    is_superuser: bool
     hashed_password: str = Field(exclude=True)
     created_at: datetime
+    profile_picture_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("profile_picture_url", mode="before")
+    @classmethod
+    def generate_profile_picture_url(cls, v: Optional[str]) -> Optional[str]:
+        """Generate profile picture URL."""
+        return generate_file_url(v)
 
 
 class UserSessionBase(BaseModel):

@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS users (
     hashed_password VARCHAR(255), -- nullable to allow OAuth users
     full_name VARCHAR(255),
     is_active BOOLEAN DEFAULT TRUE,
-    is_superuser BOOLEAN DEFAULT FALSE,
+    profile_picture_url VARCHAR(255),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
