@@ -39,6 +39,8 @@ pytest-cov = "^7.0.0"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
+[tool.fastapi]
+entrypoint = "api.main:app"
 
 [tool.mypy]
 python_version = "3.12"

@@ -112,7 +112,7 @@ uvicorn api.main:app --reload
 or
 
 ```bash
-fastapi dev api/main.py
+fastapi dev
 ```
 
 The API will be available at `http://127.0.0.1:8000`.
