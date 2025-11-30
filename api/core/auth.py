@@ -125,6 +125,9 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
         exp: int = payload.get("exp")
         jti: str = payload.get("jti")
         jwt_token_type: str = payload.get("type")
+        scopes: list[str] = payload.get("scopes", [])
+        token_version: int = payload.get("token_version", 1)
+
         if user_id is None or payload.get("type") != token_type:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
@@ -150,7 +153,15 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Sudo token has been revoked.",
                 )
-        return TokenData(username=username, id=user_id, exp=exp, jti=jti, type=jwt_token_type)
+        return TokenData(
+            username=username,
+            id=user_id,
+            exp=exp,
+            jti=jti,
+            type=jwt_token_type,
+            scopes=scopes,
+            token_version=token_version,
+        )
     except jwt.PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

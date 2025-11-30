@@ -1,4 +1,5 @@
-from typing import List, Optional
+import asyncio
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException
@@ -14,6 +15,43 @@ class UserDAO:
     def __init__(self, db: DataBase):
         self.db = db
 
+    async def _get_user_with_roles(self, where_clause: str, *args: Any) -> Optional[UserData]:
+        query = f"""
+            SELECT
+                u.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', r.id,
+                            'name', r.name,
+                            'description', r.description,
+                            'created_at', r.created_at,
+                            'updated_at', r.updated_at,
+                            'permissions', (
+                                SELECT COALESCE(json_agg(
+                                    json_build_object(
+                                        'id', p.id,
+                                        'name', p.name,
+                                        'description', p.description,
+                                        'created_at', p.created_at
+                                    )
+                                ), '[]')
+                                FROM role_permissions rp
+                                JOIN permissions p ON rp.permission_id = p.id
+                                WHERE rp.role_id = r.id
+                            )
+                        )
+                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
+                ) as roles
+            FROM users u
+            LEFT JOIN user_roles ur ON u.id = ur.user_id
+            LEFT JOIN roles r ON ur.role_id = r.id
+            WHERE {where_clause}
+            GROUP BY u.id
+        """  # nosec
+        record = await self.db.fetch(query, *args, fetch_row=True)
+        return UserData.model_validate(dict(record)) if record else None
+
     async def get_by_google_sub(self, sub: str) -> Optional[UserData]:
         """
         Retrieve a user by Google OAuth subject (sub).
@@ -23,12 +61,43 @@ class UserDAO:
         Returns:
             Optional[UserData]: User if found, None otherwise.
         """
+        # For this one, we need to join user_identities as well
         query = """
-            SELECT u.* FROM users u
-             JOIN user_identities i ON u.id = i.user_id
+            SELECT
+                u.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', r.id,
+                            'name', r.name,
+                            'description', r.description,
+                            'created_at', r.created_at,
+                            'updated_at', r.updated_at,
+                            'permissions', (
+                                SELECT COALESCE(json_agg(
+                                    json_build_object(
+                                        'id', p.id,
+                                        'name', p.name,
+                                        'description', p.description,
+                                        'created_at', p.created_at
+                                    )
+                                ), '[]')
+                                FROM role_permissions rp
+                                JOIN permissions p ON rp.permission_id = p.id
+                                WHERE rp.role_id = r.id
+                            )
+                        )
+                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
+                ) as roles
+            FROM users u
+            JOIN user_identities i ON u.id = i.user_id
+            LEFT JOIN user_roles ur ON u.id = ur.user_id
+            LEFT JOIN roles r ON ur.role_id = r.id
             WHERE i.provider = 'google' AND i.provider_user_id = $1
+            GROUP BY u.id
         """
-        return await self.db.fetch(query, sub, model=UserData, fetch_row=True)
+        record = await self.db.fetch(query, sub, fetch_row=True)
+        return UserData.model_validate(dict(record)) if record else None
 
     async def create_user_oauth(self, user_data: UserCreate, user_info: dict) -> UserData:
         """
@@ -43,7 +112,7 @@ class UserDAO:
         user = await self.create_user(user_data, hashed_password=None)
         query = """
             INSERT INTO user_identities (user_id, provider, provider_user_id, email, email_verified, profile)
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5, $6)
         """
         params = (
             user.id,
@@ -67,11 +136,7 @@ class UserDAO:
         Returns:
                 Optional[UserData]: User if found, None otherwise
         """
-        query = """
-              SELECT * FROM users WHERE username = $1
-        """
-        # Use database layer's built-in model conversion
-        return await self.db.fetch(query, username, model=UserData, fetch_row=True)
+        return await self._get_user_with_roles("u.username = $1", username)
 
     async def get_by_id(self, user_id: UUID) -> Optional[UserData]:
         """
@@ -83,11 +148,7 @@ class UserDAO:
         Returns:
             Optional[UserData]: User if found, None otherwise
         """
-        query = """
-              SELECT * FROM users WHERE id = $1
-        """
-        # Use database layer's built-in model conversion
-        return await self.db.fetch(query, user_id, model=UserData, fetch_row=True)
+        return await self._get_user_with_roles("u.id = $1", user_id)
 
     async def get_by_email(self, email: str) -> Optional[UserData]:
         """
@@ -98,8 +159,7 @@ class UserDAO:
         Returns:
             Optional[UserData]: User if found, None otherwise.
         """
-        query = "SELECT * FROM users WHERE email = $1"
-        return await self.db.fetch(query, email, model=UserData, fetch_row=True)
+        return await self._get_user_with_roles("u.email = $1", email)
 
     async def add_identity(self, user_id: UUID, user_info: dict) -> None:
         """
@@ -151,7 +211,6 @@ class UserDAO:
             user_data.full_name,
             user_data.is_active,
         )
-        # Use database layer's built-in model conversion
         return await self.db.write(query, *params, model=UserData)
 
     async def upsert_user_session(self, user_session_data: UserSessionCreate) -> None:
@@ -185,7 +244,7 @@ class UserDAO:
             model=UserSessionData,
         )
 
-    async def update_user(self, user_id: UUID, user_update: UserUpdate) -> UserData:
+    async def update_user(self, user_id: UUID, user_update: UserUpdate) -> UserData | None:
         """
         Update a user in the database.
 
@@ -203,7 +262,6 @@ class UserDAO:
                 username = COALESCE($2, username),
                 full_name = COALESCE($3, full_name)
             WHERE id = $4
-            RETURNING *
 		"""
         params = (
             user_update.email,
@@ -211,7 +269,9 @@ class UserDAO:
             user_update.full_name,
             user_id,
         )
-        return await self.db.write(query, *params, model=UserData)
+        # For update, we re-fetch the user to get role.
+        await self.db.execute(query, *params)
+        return await self.get_by_id(user_id)
 
     async def update_password(self, user_id: UUID, hashed_password: str) -> None:
         """
@@ -221,7 +281,7 @@ class UserDAO:
             user_id: User id to update
             hashed_password: New hashed password
         """
-        query = "UPDATE users SET hashed_password = $1 WHERE id = $2"
+        query = "UPDATE users SET hashed_password = $1, token_version = token_version + 1 WHERE id = $2"
         await self.db.execute(query, hashed_password, user_id)
 
     async def revoke_user_session(self, current_user_id: UUID, jti: str) -> int:
@@ -276,6 +336,33 @@ class UserDAO:
             result = await self.db.fetch(query, user_id, limit, model=UserSessionData, fetch_row=False)
 
         return result if result is not None else []
+
+    async def assign_roles(self, user_id: UUID, role_ids: List[UUID]) -> None:
+        """
+        Assign roles to a user.
+        Args:
+            user_id: User ID.
+            role_ids: List of Role IDs.
+        """
+        if not role_ids:
+            return
+
+        values = [(user_id, role_id) for role_id in role_ids]
+        query = """
+        INSERT INTO user_roles (user_id, role_id)
+        SELECT * FROM UNNEST($1::uuid[], $2::uuid[])
+        ON CONFLICT DO NOTHING
+        """
+        update_query = "UPDATE users SET token_version = token_version + 1 WHERE id = $1"
+
+        await asyncio.gather(
+            self.db.execute(
+                query,
+                [v[0] for v in values],
+                [v[1] for v in values],
+            ),
+            self.db.execute(update_query, user_id),
+        )
 
 
 async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:

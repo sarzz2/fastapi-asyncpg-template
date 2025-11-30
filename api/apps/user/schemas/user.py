@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from api.apps.user.schemas.role import RoleData
 from api.utils.pydantic_utils import generate_file_url
 
 
@@ -39,6 +40,8 @@ class UserData(UserBase):
     hashed_password: str = Field(exclude=True)
     created_at: datetime
     profile_picture_url: Optional[str] = None
+    roles: list[RoleData] = []
+    token_version: int = 1
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -74,3 +77,9 @@ class UserSessionData(UserSessionBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserRoleAssignment(BaseModel):
+    """Schema for assigning roles to a user."""
+
+    role_ids: list[UUID]

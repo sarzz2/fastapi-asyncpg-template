@@ -3,6 +3,7 @@ from uuid import UUID, uuid4
 import pytest
 from httpx import AsyncClient
 
+from api.apps.user.v0.dao.role import RoleDAO
 from api.apps.user.v0.dao.user import UserDAO
 from api.apps.user.v0.service.auth import AuthService
 from api.core.database import DataBase
@@ -39,8 +40,9 @@ async def test_auth_service_linking(client: AsyncClient) -> None:
 
     db = DataBase()
     user_dao = UserDAO(db)
+    role_dao = RoleDAO(db)
     redis = RedisClient()
-    auth_service = AuthService(user_dao, redis.client)
+    auth_service = AuthService(user_dao, role_dao, redis.client)
 
     user_info = {"sub": f"google_{short_id}", "email": email, "email_verified": True, "name": "Google User"}
 

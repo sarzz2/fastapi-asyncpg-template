@@ -8,7 +8,9 @@ from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
 from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token
+from api.apps.user.schemas.role import RoleData
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate
+from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.constants import TokenTypes
 from api.core.auth import (
@@ -30,8 +32,9 @@ class AuthService:
     This class handles login, OAuth, token refresh, and session management.
     """
 
-    def __init__(self, user_dao: UserDAO, redis: Redis):
+    def __init__(self, user_dao: UserDAO, role_dao: RoleDAO, redis: Redis):
         self._user_dao = user_dao
+        self._role_dao = role_dao
         self._redis = redis
 
     async def _generate_unique_username(self, base_name: str) -> str:
@@ -94,6 +97,17 @@ class AuthService:
         user = await self._user_dao.create_user_oauth(user_create, user_info)
         return user
 
+    async def _get_user_scopes(self, roles: list[RoleData]) -> list[str]:
+        if not roles:
+            return []
+
+        scopes = set()
+        for role in roles:
+            for permission in role.permissions:
+                scopes.add(permission.name)
+
+        return list(scopes)
+
     async def authenticate_oauth_user(self, user: UserData, request: Request) -> LoginResponse:
         """
         Issue access and refresh tokens for OAuth user.
@@ -104,7 +118,13 @@ class AuthService:
         Returns:
             LoginResponse: Access and refresh tokens, user data.
         """
-        token_data = {"sub": user.username, "id": str(user.id)}
+        scopes = await self._get_user_scopes(user.roles)
+        token_data = {
+            "sub": user.username,
+            "id": str(user.id),
+            "scopes": scopes,
+            "token_version": user.token_version,
+        }
         access_token_details = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)
         await self._user_dao.upsert_user_session(
@@ -142,7 +162,13 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        token_data = {"sub": user.username, "id": str(user.id)}
+        scopes = await self._get_user_scopes(user.roles)
+        token_data = {
+            "sub": user.username,
+            "id": str(user.id),
+            "scopes": scopes,
+            "token_version": user.token_version,
+        }
         access_token_details = create_access_token(token_data)
         refresh_token = create_refresh_token(token_data)
         await self._user_dao.upsert_user_session(
@@ -184,7 +210,20 @@ class AuthService:
                 detail="Invalid user from refresh token",
             )
 
-        new_token_data = {"sub": user.username, "id": str(user.id)}
+        # Check token version on refresh too?
+        if user.token_version != token_data.token_version:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token version mismatch (revoked)",
+            )
+
+        scopes = await self._get_user_scopes(user.roles)
+        new_token_data = {
+            "sub": user.username,
+            "id": str(user.id),
+            "scopes": scopes,
+            "token_version": user.token_version,
+        }
         access_token_details = create_access_token(new_token_data)
         new_refresh_token = create_refresh_token(new_token_data)
 
@@ -226,7 +265,7 @@ class AuthService:
         Args:
             username: User username
             password: User password
-            request: FastAPI request object
+            request (Request): FastAPI request object
 
         Returns:
             SudoTokenResponse: Sudo token with expiration time
@@ -273,15 +312,20 @@ class AuthService:
         await self._user_dao.update_password(user_id, hashed_password)
 
 
-async def get_auth_service(user_dao: UserDAO = Depends(get_user_dao), redis: Redis = Depends(get_redis)) -> AuthService:
+async def get_auth_service(
+    user_dao: UserDAO = Depends(get_user_dao),
+    role_dao: RoleDAO = Depends(get_role_dao),
+    redis: Redis = Depends(get_redis),
+) -> AuthService:
     """
     Dependency to get AuthService instance.
 
     Args:
         user_dao (UserDAO): The User Data Access Object.
+        role_dao (RoleDAO): The Role Data Access Object.
         redis (Redis): The Redis client.
 
     Returns:
         AuthService: The Auth Service.
     """
-    return AuthService(user_dao=user_dao, redis=redis)
+    return AuthService(user_dao=user_dao, role_dao=role_dao, redis=redis)

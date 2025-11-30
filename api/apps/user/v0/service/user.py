@@ -139,6 +139,15 @@ class UserService:
             next_cursor=next_cursor,
         )
 
+    async def assign_roles_to_user(self, user_id: UUID, role_ids: list[UUID]) -> None:
+        """
+        Assign roles to a user.
+        Args:
+            user_id: User ID.
+            role_ids: List of Role IDs.
+        """
+        await self._user_dao.assign_roles(user_id, role_ids)
+
 
 async def get_user_service(user_dao: UserDAO = Depends(get_user_dao), redis: Redis = Depends(get_redis)) -> UserService:
     """

@@ -36,6 +36,8 @@ class TokenData(BaseModel):
     exp: int
     jti: str
     type: str = "Bearer"
+    scopes: list[str] = []
+    token_version: int = 1
 
 
 class RefreshTokenRequest(BaseModel):

@@ -1,11 +1,9 @@
 from fastapi import Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordBearer, SecurityScopes
 from jose import JWTError
 from redis.asyncio import Redis
 from starlette import status
 
-#
-# from app.core.auth import verify_token
 from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.auth import verify_token
@@ -22,6 +20,7 @@ credentials_exception = HTTPException(
 
 
 async def get_current_user(
+    security_scopes: SecurityScopes,
     token: str = Depends(oauth2_scheme),
     user_service: UserService = Depends(get_user_service),
     redis: Redis = Depends(get_redis),
@@ -29,6 +28,7 @@ async def get_current_user(
     """
     Dependency to get the currently authenticated user.
     Args:
+        security_scopes (SecurityScopes): The scopes required for the endpoint.
         token (str): The JWT token from the request header.
         dao (UserDAO): The User Data Access Object.
     Returns:
@@ -37,8 +37,19 @@ async def get_current_user(
     token_data = await verify_token(token, redis)
     if token_data.id is None:
         raise credentials_exception
+
+    for scope in security_scopes.scopes:
+        if scope not in token_data.scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+                headers={"WWW-Authenticate": f'Bearer scope="{security_scopes.scope_str}"'},
+            )
+
     user = await user_service.get_user_by_id(token_data.id)
     if user is None:
+        raise credentials_exception
+    if user.token_version != token_data.token_version:
         raise credentials_exception
     return user
 

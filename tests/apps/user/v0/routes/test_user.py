@@ -3,6 +3,11 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
+from api.apps.user.schemas.role import RoleCreate, RoleUpdate
+from api.apps.user.v0.dao.role import RoleDAO
+from api.apps.user.v0.dao.user import UserDAO
+from api.core.database import DataBase
+
 
 @pytest.mark.asyncio
 async def test_list_sessions(client: AsyncClient) -> None:
@@ -412,3 +417,193 @@ async def test_revoke_invalid_jti_format(client: AsyncClient) -> None:
     for invalid_jti in invalid_jtis:
         response = await client.delete(f"/api/v0/users/sessions/{invalid_jti}", headers=headers)
         assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_assign_role(client: AsyncClient) -> None:
+    """Test assigning a role to a user.
+
+    Verifies that a user with 'users:update' permission can assign a role to another user.
+
+    Args:
+        client: AsyncClient fixture for making HTTP requests to the API.
+
+    Test Flow:
+        1. Create an admin user and a target user.
+        2. Create a role with 'users:update' permission and assign to admin user.
+        3. Create a target role.
+        4. Login as admin user.
+        5. Call assign role endpoint.
+        6. Verify target user has the role.
+    """
+    # pylint: disable=too-many-locals
+    db = DataBase()
+    role_dao = RoleDAO(db)
+    user_dao = UserDAO(db)
+
+    short_id = uuid4().hex[:8]
+
+    # 1. Create Admin User
+    admin_email = f"admin_{short_id}@test.com"
+    admin_password = "password123"
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": admin_email, "email": admin_email, "password": admin_password, "full_name": "Admin User"},
+    )
+    admin_user = await user_dao.get_by_email(admin_email)
+    assert admin_user is not None
+
+    # 2. Create Target User
+    target_email = f"target_{short_id}@test.com"
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": target_email, "email": target_email, "password": "password123", "full_name": "Target User"},
+    )
+    target_user = await user_dao.get_by_email(target_email)
+    assert target_user is not None
+
+    # 3. Create 'users:update' permission if not exists
+    # We assume it might exist or we insert it.
+    await db.execute(
+        "INSERT INTO permissions (name, description) VALUES ('users:update', 'Update users') ON CONFLICT DO NOTHING"
+    )
+    perms = await db.fetch("SELECT * FROM permissions WHERE name = 'users:update'", fetch_row=True)
+    assert perms is not None
+    perm_id = perms["id"]
+
+    # 4. Create Admin Role with permission
+    admin_role = await role_dao.create_role(
+        RoleCreate(name=f"Admin_{short_id}", description="Admin Role", permission_ids=[perm_id])
+    )
+
+    # 5. Assign Admin Role to Admin User
+    await user_dao.assign_roles(admin_user.id, [admin_role.id])
+
+    # 6. Create Target Role
+    target_role = await role_dao.create_role(RoleCreate(name=f"Target_{short_id}", description="Target Role"))
+
+    # 7. Login as Admin
+    login_response = await client.post("/api/v0/auth/login", json={"username": admin_email, "password": admin_password})
+    assert login_response.status_code == 200
+    token = login_response.json()["token"]["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # 8. Call Assign Role Endpoint
+    response = await client.post(
+        f"/api/v0/users/{target_user.id}/roles", json={"role_ids": [str(target_role.id)]}, headers=headers
+    )
+    assert response.status_code == 204
+
+    # 9. Verify
+    updated_target_user = await user_dao.get_by_id(target_user.id)
+    assert updated_target_user is not None
+    role_ids = [r.id for r in updated_target_user.roles]
+    assert target_role.id in role_ids
+
+
+@pytest.mark.asyncio
+async def test_token_version_increment(client: AsyncClient) -> None:
+    """Test that token_version increments on critical updates.
+
+    Verifies that token_version is incremented when:
+    1. Password is updated.
+    2. Roles are assigned.
+
+    Args:
+        client: AsyncClient fixture.
+    """
+    db = DataBase()
+    user_dao = UserDAO(db)
+    role_dao = RoleDAO(db)
+
+    short_id = uuid4().hex[:8]
+    email = f"token_ver_{short_id}@test.com"
+    password = "password123"
+
+    # 1. Create User
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": email, "email": email, "password": password, "full_name": "Token Version User"},
+    )
+    user = await user_dao.get_by_email(email)
+    assert user is not None
+    initial_version = user.token_version
+
+    # 2. Update Password (via DAO for simplicity, or endpoint if we had one ready/accessible)
+    # We'll use DAO to test the logic directly first, or we can use the endpoint if available.
+    # The user didn't explicitly ask for a password update endpoint test, but the logic should be in DAO.
+    # Let's check if we have a password update endpoint. We do have one from a previous task, but it requires sudo.
+    # To avoid complexity of sudo token, let's test the DAO method directly if possible,
+    # BUT wait, the user asked "when is the token version being updated?".
+    # So I should ensure the DAO methods update it.
+
+    # Test DAO update_password
+    new_hash = "newhash123"
+    await user_dao.update_password(user.id, new_hash)
+
+    user_after_pw = await user_dao.get_by_id(user.id)
+    assert user_after_pw is not None
+    assert user_after_pw.token_version > initial_version
+    pw_version = user_after_pw.token_version
+
+    # 3. Assign Role
+    role = await role_dao.create_role(RoleCreate(name=f"Role_{short_id}", description="Test Role"))
+    await user_dao.assign_roles(user.id, [role.id])
+
+    user_after_role = await user_dao.get_by_id(user.id)
+    assert user_after_role is not None
+    assert user_after_role.token_version > pw_version
+
+
+@pytest.mark.asyncio
+async def test_token_version_increment_on_role_update(client: AsyncClient) -> None:
+    """Test that token_version increments when an assigned role is updated.
+
+    Verifies that if a role's permissions are modified, all users with that role
+    have their token_version incremented.
+
+    Args:
+        client: AsyncClient fixture.
+    """
+    db = DataBase()
+    user_dao = UserDAO(db)
+    role_dao = RoleDAO(db)
+
+    short_id = uuid4().hex[:8]
+    email = f"role_update_{short_id}@test.com"
+    password = "password123"
+
+    # 1. Create User
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": email, "email": email, "password": password, "full_name": "Role Update User"},
+    )
+    user = await user_dao.get_by_email(email)
+    assert user is not None
+    initial_version = user.token_version
+
+    # 2. Create Role and Assign to User
+    role = await role_dao.create_role(RoleCreate(name=f"Role_{short_id}", description="Test Role"))
+    await user_dao.assign_roles(user.id, [role.id])
+
+    # Get version after assignment (it should have incremented)
+    user_after_assign = await user_dao.get_by_id(user.id)
+    assert user_after_assign is not None
+    assign_version = user_after_assign.token_version
+    assert assign_version > initial_version
+
+    # 3. Update Role (add permission)
+    # First ensure a permission exists
+    await db.execute(
+        "INSERT INTO permissions (name, description) VALUES ('test:perm', 'Test Perm') ON CONFLICT DO NOTHING"
+    )
+    perms = await db.fetch("SELECT * FROM permissions WHERE name = 'test:perm'", fetch_row=True)
+    assert perms is not None
+    perm_id = perms["id"]
+
+    await role_dao.update_role(role.id, RoleUpdate(permission_ids=[perm_id]))
+
+    # 4. Verify User Token Version Incremented
+    user_after_role_update = await user_dao.get_by_id(user.id)
+    assert user_after_role_update is not None
+    assert user_after_role_update.token_version > assign_version

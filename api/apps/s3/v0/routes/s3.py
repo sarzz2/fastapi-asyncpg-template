@@ -12,7 +12,7 @@ router = APIRouter()
 async def generate_upload_url(
     request: S3UploadUrlRequest,
     s3_service: S3Service = Depends(get_s3_service),
-    current_user: UserData = Depends(get_current_user),  # pylint: disable=unused-argument
+    _current_user: UserData = Depends(get_current_user),
 ) -> S3UploadUrlResponse:
     """
     Generate a presigned URL for uploading a file to S3.
@@ -30,7 +30,7 @@ async def generate_upload_url(
 async def delete_file(
     key: str,
     s3_service: S3Service = Depends(get_s3_service),
-    current_user: UserData = Depends(get_current_user),  # pylint: disable=unused-argument
+    _current_user: UserData = Depends(get_current_user),
 ) -> None:
     """
     Delete a file from S3.

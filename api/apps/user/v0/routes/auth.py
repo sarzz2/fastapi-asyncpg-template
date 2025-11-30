@@ -24,7 +24,7 @@ from api.core.dependencies import get_sudo_user
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
 
-router = APIRouter(tags=["auth"])
+router = APIRouter()
 
 
 @router.get("/google/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)

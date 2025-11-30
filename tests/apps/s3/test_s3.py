@@ -138,7 +138,7 @@ async def test_route_generate_upload_url() -> None:
     }
 
     request = S3UploadUrlRequest(filename="test.jpg", content_type="image/jpeg")
-    response = await generate_upload_url(request, s3_service=mock_service, current_user=MagicMock())
+    response = await generate_upload_url(request, s3_service=mock_service, _current_user=MagicMock())
 
     assert response.upload_url == "http://url"
     mock_service.generate_presigned_url.assert_called_once()
@@ -155,7 +155,7 @@ async def test_route_generate_upload_url_error() -> None:
     request = S3UploadUrlRequest(filename="test.jpg", content_type="image/jpeg")
 
     with pytest.raises(HTTPException) as exc:
-        await generate_upload_url(request, s3_service=mock_service, current_user=MagicMock())
+        await generate_upload_url(request, s3_service=mock_service, _current_user=MagicMock())
 
     assert exc.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 
@@ -167,7 +167,7 @@ async def test_route_delete_file() -> None:
     """
     mock_service = MagicMock()
 
-    await delete_file(key="test_key", s3_service=mock_service, current_user=MagicMock())
+    await delete_file(key="test_key", s3_service=mock_service, _current_user=MagicMock())
 
     mock_service.delete_file.assert_called_once_with("test_key")
 
@@ -181,7 +181,7 @@ async def test_route_delete_file_error() -> None:
     mock_service.delete_file.side_effect = Exception("Error")
 
     with pytest.raises(HTTPException) as exc:
-        await delete_file(key="test_key", s3_service=mock_service, current_user=MagicMock())
+        await delete_file(key="test_key", s3_service=mock_service, _current_user=MagicMock())
 
     assert exc.value.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
 

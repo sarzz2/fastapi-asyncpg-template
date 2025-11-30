@@ -1,11 +1,12 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Security, status
 
 from api.apps.user.schemas.user import (
     UserCreate,
     UserData,
+    UserRoleAssignment,
     UserSessionData,
     UserUpdate,
 )
@@ -13,7 +14,7 @@ from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.dependencies import get_current_user
 from api.shared.pagination import CursorPage
 
-router = APIRouter(tags=["users"])
+router = APIRouter()
 
 
 @router.post("/register", response_model=UserData, status_code=status.HTTP_201_CREATED)
@@ -106,3 +107,17 @@ async def get_sessions(
         CursorPage[UserSessionData]: Paginated sessions
     """
     return await svc.get_user_sessions(current_user.id, limit, cursor)
+
+
+@router.post("/{user_id}/roles", status_code=status.HTTP_204_NO_CONTENT)
+async def assign_roles(
+    user_id: UUID,
+    role_assignment: UserRoleAssignment,
+    svc: UserService = Depends(get_user_service),
+    _current_user: UserData = Security(get_current_user, scopes=["users:update"]),
+) -> None:
+    """
+    Assign roles to a user.
+    Requires 'users:update' scope.
+    """
+    await svc.assign_roles_to_user(user_id, role_assignment.role_ids)
