@@ -2,10 +2,17 @@ import functools
 import inspect
 import json
 import logging
+import time
 from typing import Any, Awaitable, Callable, List, Optional, ParamSpec, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
+from api.core.metrics import (
+    CACHE_HIT_MISS_TOTAL,
+    CACHE_OPERATION_DURATION_SECONDS,
+    CACHE_REQUESTS_TOTAL,
+    REDIS_ERRORS_TOTAL,
+)
 from api.core.redis import redis_client
 
 log = logging.getLogger("fastapi")
@@ -28,13 +35,20 @@ def _generate_key(pattern: str, func: Callable, args: tuple, kwargs: dict) -> st
 
 async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Type[BaseModel]]) -> Optional[Any]:
     """Helper to retrieve and deserialize data from Redis."""
+
+    start = time.perf_counter()
     try:
+        CACHE_REQUESTS_TOTAL.labels(operation="get").inc()
         if hash_key:
             cached_value = await redis_client.client.hget(hash_key, key)  # type: ignore
         else:
             cached_value = await redis_client.client.get(key)
 
+        duration = time.perf_counter() - start
+        CACHE_OPERATION_DURATION_SECONDS.labels(operation="get").observe(duration)
+
         if cached_value:
+            CACHE_HIT_MISS_TOTAL.labels(result="hit").inc()
             log.debug("Cache hit for key: %s", key)
             data = json.loads(cached_value)
             if model:
@@ -42,14 +56,19 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
                     return [model.model_validate(item) for item in data]
                 return model.model_validate(data)
             return data
+
+        CACHE_HIT_MISS_TOTAL.labels(result="miss").inc()
     except Exception as e:  # pylint: disable=broad-except
+        REDIS_ERRORS_TOTAL.labels(operation="get").inc()
         log.warning("Error reading from cache for key %s: %s", key, e)
     return None
 
 
 async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: int) -> None:
     """Helper to serialize and save data to Redis."""
+    start = time.perf_counter()
     try:
+        CACHE_REQUESTS_TOTAL.labels(operation="set").inc()
         if value is not None:
             if isinstance(value, list):
                 serialized_data = json.dumps(
@@ -67,7 +86,11 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
                 await redis_client.client.set(key, serialized_data, ex=expire)
 
             log.debug("Cached result for key: %s", key)
+
+            duration = time.perf_counter() - start
+            CACHE_OPERATION_DURATION_SECONDS.labels(operation="set").observe(duration)
     except Exception as e:  # pylint: disable=broad-except
+        REDIS_ERRORS_TOTAL.labels(operation="set").inc()
         log.warning("Error writing to cache for key %s: %s", key, e)
 
 

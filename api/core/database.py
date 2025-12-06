@@ -11,6 +11,12 @@ from asyncpg import Connection, Pool, Record, create_pool
 from pydantic import BaseModel
 
 from api.core.config import settings
+from api.core.metrics import (
+    DB_POOL_CONNECTIONS_IN_USE,
+    DB_QUERY_DURATION_SECONDS,
+    DB_QUERY_TOTAL,
+    DB_SLOW_QUERIES_TOTAL,
+)
 from api.middlewares.region_middleware import CLIENT_REGION
 
 BM = TypeVar("BM", bound="DataBase")
@@ -214,7 +220,20 @@ class DataBase(BaseModel):
         """
         while True:
             await asyncio.sleep(interval)
+
+            # Update connection pool gauges
+            if cls.write_pool:
+                DB_POOL_CONNECTIONS_IN_USE.labels(pool_type="write", region="global").set(
+                    cls.write_pool.get_size() - cls.write_pool.get_free_size()
+                )
+
             for region, metas in list(cls.read_pools_by_region.items()):  # pylint: disable=unused-variable
+                total_in_use = 0
+                for meta in metas:
+                    if meta.pool:
+                        total_in_use += meta.pool.get_size() - meta.pool.get_free_size()
+                DB_POOL_CONNECTIONS_IN_USE.labels(pool_type="read", region=region).set(total_in_use)
+
                 for meta in metas:
                     try:
                         t0 = time.perf_counter()
@@ -426,8 +445,7 @@ class DataBase(BaseModel):
         *args: Any,
         model: Type[T],
         fetch_row: Literal[True],
-    ) -> Optional[T]:
-        ...
+    ) -> Optional[T]: ...
 
     @overload
     @classmethod
@@ -437,8 +455,7 @@ class DataBase(BaseModel):
         *args: Any,
         model: Type[T],
         fetch_row: Literal[False],
-    ) -> List[T]:
-        ...
+    ) -> List[T]: ...
 
     @overload
     @classmethod
@@ -448,8 +465,7 @@ class DataBase(BaseModel):
         *args: Any,
         model: None = None,
         fetch_row: Literal[True] = ...,
-    ) -> Optional[Record]:
-        ...
+    ) -> Optional[Record]: ...
 
     @overload
     @classmethod
@@ -459,8 +475,7 @@ class DataBase(BaseModel):
         *args: Any,
         model: None = None,
         fetch_row: Literal[False] = ...,
-    ) -> List[Record]:
-        ...
+    ) -> List[Record]: ...
 
     @classmethod
     async def fetch(
@@ -487,10 +502,23 @@ class DataBase(BaseModel):
             record = await pool.fetchrow(query, *args)
             duration = time.perf_counter() - start_time
             log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+
+            DB_QUERY_TOTAL.labels(type="read").inc()
+            DB_QUERY_DURATION_SECONDS.labels(type="read").observe(duration)
+            if duration > 1.0:
+                DB_SLOW_QUERIES_TOTAL.labels(type="read").inc()
+
             return model.model_construct(**record.dict()) if model and record else record
+
         records = await pool.fetch(query, *args)
         duration = time.perf_counter() - start_time
         log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+
+        DB_QUERY_TOTAL.labels(type="read").inc()
+        DB_QUERY_DURATION_SECONDS.labels(type="read").observe(duration)
+        if duration > 1.0:
+            DB_SLOW_QUERIES_TOTAL.labels(type="read").inc()
+
         return [model.model_construct(**r.dict()) for r in records] if model else records
 
     @overload
@@ -500,8 +528,7 @@ class DataBase(BaseModel):
         query: str,
         *args: Any,
         model: Type[T],
-    ) -> T:
-        ...
+    ) -> T: ...
 
     @overload
     @classmethod
@@ -510,8 +537,7 @@ class DataBase(BaseModel):
         query: str,
         *args: Any,
         model: None = None,
-    ) -> Record:
-        ...
+    ) -> Record: ...
 
     @classmethod
     async def write(
@@ -535,6 +561,12 @@ class DataBase(BaseModel):
         record = await pool.fetchrow(query, *args)
         duration = time.perf_counter() - start_time
         log.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
+
+        DB_QUERY_TOTAL.labels(type="write").inc()
+        DB_QUERY_DURATION_SECONDS.labels(type="write").observe(duration)
+        if duration > 1.0:
+            DB_SLOW_QUERIES_TOTAL.labels(type="write").inc()
+
         if record:
             return model.model_construct(**record.dict()) if model else record
         return None

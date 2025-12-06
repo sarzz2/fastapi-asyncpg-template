@@ -455,6 +455,39 @@ await fetch(response.upload_url, {
 });
 ```
 
+## Monitoring
+
+The project includes a comprehensive monitoring stack using **Prometheus** and **Grafana** to provide deep visibility into application performance, database health, and background task processing.
+
+### Accessing the Dashboard
+
+When running with Docker, the monitoring services are available at:
+
+-   **Grafana**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Password: `admin`)
+-   **Prometheus**: [http://localhost:9090](http://localhost:9090)
+-   **Celery Flower**: [http://localhost:5555](http://localhost:5555)
+
+A pre-configured **FastAPI Dashboard** is automatically provisioned. It provides real-time insights into:
+
+1.  **Overview**: Top-level gauges for Total Requests, DB Queries, Failed Requests, and Cache status.
+2.  **Application Health**: Request rates, error rates (5xx/4xx), and detailed latency percentiles (P50, P95, P99).
+3.  **System Resources**: Container CPU and Memory usage.
+4.  **Database Metrics**:
+    -   Connection pool usage (Read/Write pools).
+    -   Query throughput and latency histograms.
+    -   Cache hit ratios and active transaction counts.
+5.  **Cache & Redis**: Redis operations throughput, cache hit/miss rates, and latency.
+6.  **Celery Tasks**: Queue lengths and task states (Success/Failure/Retry).
+
+### Key Metrics Instrumented
+
+-   **HTTP**: `http_requests_total`, `http_request_duration_seconds`, `http_request_size_bytes`
+-   **Database**: `db_query_total`, `db_query_duration_seconds`, `db_pool_connections_in_use`
+-   **Cache**: `cache_requests_total`, `cache_hit_miss_total`
+-   **Celery**: `celery_tasks_total`, `celery_queue_length`
+
+---
+
 ## Code Quality
 
 This project is configured with a suite of tools to ensure high code quality.

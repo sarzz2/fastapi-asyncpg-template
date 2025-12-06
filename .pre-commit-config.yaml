@@ -45,6 +45,8 @@ repos:
                 - pydantic-settings
                 - uvicorn
                 - pytest
+                - prometheus_client
+                - prometheus_fastapi_instrumentator
 
           - id: mypy
             name: mypy
@@ -65,6 +67,8 @@ repos:
                 - httpx
                 - pydantic-settings
                 - pytest
+                - prometheus_client
+                - prometheus_fastapi_instrumentator
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0

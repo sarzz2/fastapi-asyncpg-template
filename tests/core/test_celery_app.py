@@ -14,9 +14,11 @@ def test_autodiscover_tasks() -> None:
     """
     Test autodiscover_tasks function.
     """
-    with patch("os.listdir") as mock_listdir, patch("os.path.isdir") as mock_isdir, patch(
-        "os.path.exists"
-    ) as mock_exists:
+    with (
+        patch("os.listdir") as mock_listdir,
+        patch("os.path.isdir") as mock_isdir,
+        patch("os.path.exists") as mock_exists,
+    ):
         # Mock apps directory structure
         mock_isdir.side_effect = lambda p: True  # All are dirs
         mock_listdir.side_effect = lambda p: ["user"] if "apps" in p and "tasks" not in p else ["test_task.py"]
@@ -32,11 +34,13 @@ async def test_init_worker_process() -> None:
     """
     Test init_worker_process function.
     """
-    with patch("api.core.celery_app.celery_app") as mock_app, patch(
-        "api.core.celery_app.DataBase"
-    ) as mock_db_cls, patch("api.core.celery_app.RedisClient") as mock_redis_cls, patch(
-        "asyncio.new_event_loop"
-    ) as mock_new_loop, patch("asyncio.set_event_loop"):
+    with (
+        patch("api.core.celery_app.celery_app") as mock_app,
+        patch("api.core.celery_app.DataBase") as mock_db_cls,
+        patch("api.core.celery_app.RedisClient") as mock_redis_cls,
+        patch("asyncio.new_event_loop") as mock_new_loop,
+        patch("asyncio.set_event_loop"),
+    ):
         mock_loop = MagicMock()
         mock_new_loop.return_value = mock_loop
 

@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import ORJSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -63,6 +64,8 @@ app = FastAPI(
 )
 
 register_exception_handlers(app)
+
+Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health", tags=["health"], response_model=HealthResponse)
