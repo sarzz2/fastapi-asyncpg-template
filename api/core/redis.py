@@ -35,6 +35,13 @@ class RedisClient:
         """Close the connection to the Redis server."""
         await self.client.aclose()
 
+    async def health_check(self) -> bool:
+        """Check the health of the Redis connection."""
+        try:
+            return await cast(Awaitable[bool], self.client.ping())
+        except Exception:  # pylint: disable=broad-except
+            return False
+
 
 redis_client = RedisClient()
 

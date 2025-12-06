@@ -19,6 +19,7 @@ from api.core.exception_handlers import register_exception_handlers
 from api.core.logging_config import configure_logging
 from api.core.redis import redis_client
 from api.middlewares.region_middleware import RegionASGIMiddleware
+from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
 from migrate import check_all_migrations_applied
 
 logger = configure_logging()
@@ -64,12 +65,39 @@ app = FastAPI(
 register_exception_handlers(app)
 
 
-@app.get("/health", tags=["health"])
-async def health_check() -> dict[str, str]:
+@app.get("/health", tags=["health"], response_model=HealthResponse)
+async def health_check() -> HealthResponse:
     """
     Health check endpoint.
     """
-    return {"status": "ok"}
+    db_health = await DataBase.health_check()
+    redis_health = await redis_client.health_check()
+
+    # Calculate DB status
+    db_status_str = "up"
+    total_healthy = sum(r["healthy_pools"] for r in db_health.values())
+    total_pools = sum(r["total_pools"] for r in db_health.values())
+
+    if total_healthy == 0 and total_pools > 0:
+        db_status_str = "down"
+    elif total_healthy < total_pools:
+        db_status_str = "degraded"
+
+    # Construct DB response
+    db_regions = {
+        region: DBRegionStatus(
+            healthy_pools=stats["healthy_pools"],
+            total_pools=stats["total_pools"],
+            avg_latency=stats["avg_latency"],
+        )
+        for region, stats in db_health.items()
+    }
+
+    return HealthResponse(
+        status="ok",
+        database=DBStatus(status=db_status_str, regions=db_regions),
+        redis=RedisStatus(status="up" if redis_health else "down"),
+    )
 
 
 @app.middleware("http")

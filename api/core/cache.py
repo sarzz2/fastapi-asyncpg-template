@@ -2,7 +2,7 @@ import functools
 import inspect
 import json
 import logging
-from typing import Any, Callable, List, Optional, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, List, Optional, ParamSpec, Type, TypeVar, Union
 
 from pydantic import BaseModel
 
@@ -11,6 +11,8 @@ from api.core.redis import redis_client
 log = logging.getLogger("fastapi")
 
 T = TypeVar("T")
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
 def _generate_key(pattern: str, func: Callable, args: tuple, kwargs: dict) -> str:
@@ -74,7 +76,7 @@ def cache(
     hash_key: Optional[str] = None,
     expire: int = 3600,
     model: Optional[Type[BaseModel]] = None,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to cache the result of a function in Redis.
 
@@ -87,9 +89,9 @@ def cache(
         Callable: The decorated function.
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # 1. Construct the Redis key (or field)
             try:
                 key = _generate_key(key_pattern, func, args, kwargs)
@@ -100,7 +102,7 @@ def cache(
             # 2. Try to get from Redis
             cached_result = await _get_from_cache(key, hash_key, model)
             if cached_result is not None:
-                return cached_result
+                return cached_result  # type: ignore
 
             # 3. If not found, call the function
             result = await func(*args, **kwargs)
@@ -118,7 +120,7 @@ def cache(
 def cache_invalidate(
     key_pattern: Union[str, List[str]],
     hash_key: Optional[str] = None,
-) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to invalidate cache keys after function execution.
 
@@ -129,9 +131,9 @@ def cache_invalidate(
         Callable: The decorated function.
     """
 
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: Callable[P, Awaitable[R]]) -> Callable[P, Awaitable[R]]:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             # 1. Execute the function first
             result = await func(*args, **kwargs)
 
