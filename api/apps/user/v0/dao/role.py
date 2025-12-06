@@ -6,7 +6,9 @@ from uuid import UUID
 from fastapi import Depends
 
 from api.apps.user.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
+from api.core.cache import cache, cache_invalidate
 from api.core.database import DataBase, get_db
+from api.shared.redis_keys import RedisKeys
 
 
 class RoleDAO:
@@ -16,6 +18,7 @@ class RoleDAO:
         """Initialize the RoleDAO with a database connection."""
         self.db = db
 
+    @cache(key_pattern=RedisKeys.ROLE_FIELD_ALL, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
     async def get_all_roles(self) -> List[RoleData]:
         """
         Retrieve all roles with their permissions.
@@ -49,13 +52,9 @@ class RoleDAO:
             records = []
         return [RoleData.model_validate(dict(record)) for record in records]
 
-    async def get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
+    async def _get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
         """
-        Get a role by ID.
-        Args:
-            role_id: Role ID.
-        Returns:
-            Optional[RoleData]: Role data.
+        Get a role by ID (Internal, no cache).
         """
         query = """
             SELECT
@@ -78,6 +77,17 @@ class RoleDAO:
         """
         record = await self.db.fetch(query, role_id, model=RoleData, fetch_row=True)
         return record
+
+    @cache(key_pattern=RedisKeys.ROLE_FIELD_BY_ID, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
+    async def get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
+        """
+        Get a role by ID.
+        Args:
+            role_id: Role ID.
+        Returns:
+            Optional[RoleData]: Role data.
+        """
+        return await self._get_role_by_id(role_id)
 
     async def get_role_by_name(self, name: str) -> Optional[RoleData]:
         """
@@ -109,6 +119,7 @@ class RoleDAO:
         record = await self.db.fetch(query, name, model=RoleData, fetch_row=True)
         return record
 
+    @cache_invalidate(key_pattern=RedisKeys.ROLE_FIELD_ALL, hash_key=RedisKeys.ROLES_CACHE)
     async def create_role(self, role_create: RoleCreate) -> RoleData:
         """
         Create a new role.
@@ -138,11 +149,14 @@ class RoleDAO:
         # Return created role with permissions
         # We need to fetch it again to get the permissions structure
         # We know it exists, so we can cast or assert
-        role = await self.get_role_by_id(role_id)
+        role = await self._get_role_by_id(role_id)
         if not role:
-            raise RuntimeError("Failed to fetch created role")
+            raise ValueError("Failed to fetch created role")
         return role
 
+    @cache_invalidate(
+        key_pattern=[RedisKeys.ROLE_FIELD_ALL, RedisKeys.ROLE_FIELD_BY_ID], hash_key=RedisKeys.ROLES_CACHE
+    )
     async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> Optional[RoleData]:
         """
         Update a role.
@@ -192,8 +206,11 @@ class RoleDAO:
         )
 
         # Return updated role with permissions
-        return await self.get_role_by_id(role_id)
+        return await self._get_role_by_id(role_id)
 
+    @cache_invalidate(
+        key_pattern=[RedisKeys.ROLE_FIELD_ALL, RedisKeys.ROLE_FIELD_BY_ID], hash_key=RedisKeys.ROLES_CACHE
+    )
     async def delete_role(self, role_id: UUID) -> None:
         """
         Delete a role and its associated permissions.

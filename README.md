@@ -99,6 +99,43 @@ pre-commit run --all-files
 
 ---
 
+## Dockerization
+
+You can run the entire application stack (API, Postgres, Redis, Celery, LocalStack) using Docker Compose.
+
+### Prerequisites
+
+-   Docker
+-   Docker Compose
+
+### Running with Docker
+
+1.  **Build and Start Services:**
+
+    ```bash
+    docker-compose up --build
+    ```
+
+2.  **Access the Application:**
+
+    The API will be available at `http://localhost:8000`.
+
+3.  **Services:**
+
+    -   **api**: The FastAPI application.
+    -   **postgres**: PostgreSQL database (Primary).
+    -   **redis**: Redis for caching and Celery broker.
+    -   **celery_worker**: Background task worker.
+    -   **celery_beat**: Scheduled task scheduler.
+    -   **localstack**: AWS S3 emulation for local development.
+
+4.  **Persistent Data:**
+
+    -   Database data is persisted in the `postgres_data` volume.
+    -   LocalStack data (S3 buckets) is persisted in the `localstack_data` volume.
+
+---
+
 ## Development
 
 ### Running the FastAPI Application
@@ -215,6 +252,52 @@ Notes and tips:
 -   If you don't configure read replicas, the code will fall back to using the write pool for reads.
 -   The DB implementation uses a custom `CustomRecord` (wrapping `asyncpg.Record`) to make conversion to Pydantic models simple and fast.
 -   Health checks run in a background task (when `HEALTH_CHECK_INTERVAL > 0`) and update per-pool health/latency metrics that the routing logic uses to prefer healthy, low-latency pools.
+
+## Caching (api/core/cache.py)
+
+The project implements a flexible caching mechanism using Redis, designed to improve performance for read-heavy operations.
+
+### Features
+
+-   **Decorators**:
+    -   `@cache`: Caches the result of a function. Supports both simple keys (Redis Strings) and Hash fields (Redis Hashes).
+    -   `@cache_invalidate`: Automatically invalidates cache keys (or Hash fields) after a function executes (useful for create/update/delete operations).
+-   **Serialization**: Automatically handles Pydantic models and lists of models using `model_validate` and `model_dump`.
+-   **Centralized Keys**: All Redis key patterns are defined in `api/shared/redis_keys.py` to prevent key collisions and ensure consistency.
+
+### Usage Example
+
+**1. Define Keys:**
+
+```python
+# api/shared/redis_keys.py
+class RedisKeys:
+    ROLES_CACHE = "roles_cache" # Hash Key
+    ROLE_FIELD_BY_ID = "{role_id}" # Hash Field
+```
+
+**2. Cache a Method:**
+
+```python
+# api/apps/user/v0/dao/role.py
+from api.core.cache import cache
+from api.shared.redis_keys import RedisKeys
+
+@cache(key_pattern=RedisKeys.ROLE_FIELD_BY_ID, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
+async def get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
+    # ... fetch from DB ...
+```
+
+**3. Invalidate on Update:**
+
+```python
+# api/apps/user/v0/dao/role.py
+from api.core.cache import cache_invalidate
+
+@cache_invalidate(key_pattern=RedisKeys.ROLE_FIELD_BY_ID, hash_key=RedisKeys.ROLES_CACHE)
+async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> RoleData:
+    # ... update DB ...
+```
 
 ### Running Celery Workers
 
