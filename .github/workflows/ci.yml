@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  quality:
+    name: Code Quality & Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "poetry"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root
+
+      - name: Run Ruff (Lint)
+        run: poetry run ruff check .
+
+      - name: Run Ruff (Format)
+        run: poetry run ruff format --check .
+
+      - name: Run Isort
+        run: poetry run isort --check-only .
+
+      - name: Run MyPy
+        run: poetry run mypy .
+
+      - name: Run Pylint
+        run: poetry run pylint api
+
+      - name: Run Bandit
+        run: poetry run bandit -r api
+
+      - name: Run Pip-audit
+        run: poetry run pip-audit
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "poetry"
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Start Services
+        run: docker compose up -d --wait --build db redis
+
+      - name: Run Tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://user:password@localhost:5432/fastapi_template
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          SECRET_KEY: test_secret_key
+        run: poetry run pytest
