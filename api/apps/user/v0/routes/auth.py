@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import httpx
@@ -17,8 +18,6 @@ from api.apps.user.schemas.auth import (
 )
 from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
-from api.constants import TokenTypes
-from api.core.auth import verify_token
 from api.core.config import settings
 from api.core.dependencies import get_sudo_user
 from api.core.redis import get_redis
@@ -185,7 +184,6 @@ async def create_sudo_token(
 async def google_sudo_token(
     sudo_request: OAuthSudoTokenRequest,
     svc: AuthService = Depends(get_auth_service),
-    redis: Redis = Depends(get_redis),
 ) -> SudoTokenResponse:
     """
     Create a sudo token for OAuth (Google) user for privileged operations.
@@ -199,7 +197,7 @@ async def google_sudo_token(
     """
     # For OAuth users, we verify the access token first
     try:
-        token_data = await verify_token(sudo_request.access_token, redis, token_type=TokenTypes.ACCESS.value)
+        token_data = await svc.verify_access_token(sudo_request.access_token)
         # Create a temporary UserData object with minimal required fields
         user_data = UserData(
             username=token_data.username,
@@ -208,7 +206,7 @@ async def google_sudo_token(
             hashed_password=None,
             email="",
             full_name=None,
-            created_at=None,
+            created_at=datetime.now(timezone.utc),
         )
     except Exception as exc:
         raise HTTPException(

@@ -37,7 +37,7 @@ class UserData(UserBase):
     """Schema for user data in responses."""
 
     id: UUID
-    hashed_password: str = Field(exclude=True)
+    hashed_password: Optional[str] = Field(None, exclude=True)
     created_at: datetime
     profile_picture_url: Optional[str] = None
     roles: list[RoleData] = []

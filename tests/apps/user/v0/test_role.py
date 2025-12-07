@@ -13,9 +13,9 @@ from api.shared.redis_keys import RedisKeys
 
 
 @pytest.mark.asyncio
-async def test_role_caching_flow(client: AsyncClient) -> None:  # pylint: disable=too-many-locals,too-many-statements
+async def test_role_lifecycle(client: AsyncClient) -> None:  # pylint: disable=too-many-locals,too-many-statements
     """
-    Test the full caching flow for roles: creation, retrieval (miss/hit), update (invalidation), and deletion.
+    Test the full lifecycle for roles: creation, retrieval (miss/hit), update (invalidation), and deletion.
     """
     # Setup: Create Admin User with permissions
     db = DataBase()

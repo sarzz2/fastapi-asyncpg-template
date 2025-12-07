@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
-from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token
+from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token, TokenData
 from api.apps.user.schemas.role import RoleData
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
@@ -56,6 +56,20 @@ class AuthService:
             new_username = f"{username}-{suffix}"
             if not await self._user_dao.get_by_username(new_username):
                 return new_username
+
+            if not await self._user_dao.get_by_username(new_username):
+                return new_username
+
+    async def verify_access_token(self, token: str) -> TokenData:
+        """
+        Verify access token and return token data.
+
+        Args:
+            token: The access token string.
+        Returns:
+            TokenData: Validated token data.
+        """
+        return await verify_token(token, self._redis, token_type=TokenTypes.ACCESS.value)
 
     async def handle_google_oauth(self, user_info: dict) -> UserData:
         """
