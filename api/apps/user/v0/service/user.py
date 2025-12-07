@@ -5,12 +5,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from redis.asyncio import Redis
 
-from api.apps.user.schemas.user import (
-    UserCreate,
-    UserData,
-    UserSessionData,
-    UserUpdate,
-)
+from api.apps.user.schemas.user import UserCreate, UserData, UserSessionData, UserUpdate
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.core.auth import get_password_hash
 from api.core.redis import get_redis

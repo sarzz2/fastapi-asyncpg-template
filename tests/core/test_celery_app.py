@@ -2,12 +2,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from api.core.celery_app import (
-    AsyncBaseTask,
-    autodiscover_tasks,
-    init_worker_process,
-    shutdown_worker_process,
-)
+from api.core.celery_app import AsyncBaseTask, autodiscover_tasks, init_worker_process, shutdown_worker_process
 
 
 def test_autodiscover_tasks() -> None:

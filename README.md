@@ -2,6 +2,9 @@
 
 This is a production-ready template for building very efficient asynchronous web services with FastAPI. It includes a robust setup for database management with read-write splitting, background task processing with Celery, and a comprehensive suite of tools for code quality.
 
+This project also includes a performance profiler using `pyinstrument` to help you identify and optimize performance bottlenecks.
+To see the profiler in action, add the `profile=true` query parameter to any request. For example: `http://localhost:8000/health?profile=true`.
+
 ## Features
 
 -   **Asynchronous Core**: Built with FastAPI and `asyncpg` for high-performance, non-blocking I/O.

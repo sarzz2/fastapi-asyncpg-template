@@ -1,14 +1,15 @@
 import time
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import AsyncGenerator, Callable
+from typing import AsyncGenerator, Callable, cast
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import HTMLResponse, ORJSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from pyinstrument import Profiler
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -133,6 +134,22 @@ async def log_requests(request: Request, call_next: Callable) -> Response:
             process_time,
         )
     return response
+
+
+@app.middleware("http")
+async def profile_request(request: Request, call_next: Callable) -> Response:
+    """
+    Middleware to profile requests using pyinstrument.
+    Activated by the 'profile=true' query parameter.
+    """
+    if request.query_params.get("profile"):
+        profiler = Profiler(interval=0.001, async_mode="enabled")
+        profiler.start()
+        await call_next(request)
+        profiler.stop()
+        return HTMLResponse(profiler.output_html())
+
+    return cast(Response, await call_next(request))
 
 
 # Add CORS middleware to the FastAPI application
