@@ -5,6 +5,9 @@ This is a production-ready template for building very efficient asynchronous web
 This project also includes a performance profiler using `pyinstrument` to help you identify and optimize performance bottlenecks.
 To see the profiler in action, add the `profile=true` query parameter to any request. For example: `http://localhost:8000/health?profile=true`.
 
+For error monitoring sentry is used
+Add your sentry dsn in the .env file
+
 ## Features
 
 -   **Asynchronous Core**: Built with FastAPI and `asyncpg` for high-performance, non-blocking I/O.
