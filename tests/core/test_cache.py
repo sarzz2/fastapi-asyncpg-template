@@ -1,6 +1,6 @@
 # pylint: disable=redefined-outer-name, redefined-builtin
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -19,6 +19,18 @@ class Item(BaseModel):
 def mock_redis() -> Any:
     """Mock Redis client."""
     with patch("api.core.cache.redis_client.client") as mock:
+        # Setup pipeline mock
+        pipeline_mock = MagicMock()
+        pipeline_mock.execute = AsyncMock()
+
+        # pipeline() returns a synchronous object that acts as async context manager
+        pipeline_context_manager = MagicMock()
+        pipeline_context_manager.__aenter__ = AsyncMock(return_value=pipeline_mock)
+        pipeline_context_manager.__aexit__ = AsyncMock(return_value=None)
+
+        # mock.pipeline must be a synchronous callable
+        mock.pipeline = MagicMock(return_value=pipeline_context_manager)
+
         mock.get = AsyncMock()
         mock.set = AsyncMock()
         mock.hget = AsyncMock()
@@ -91,7 +103,14 @@ async def test_cache_hash(mock_redis: AsyncMock) -> None:
 
     await get_item(id=1)
     mock_redis.hget.assert_called_with("myhash", "field:1")
-    mock_redis.hset.assert_called()
+    mock_redis.hget.assert_called_with("myhash", "field:1")
+
+    # Verify pipeline was used
+    mock_redis.pipeline.assert_called()
+    pipe_mock = mock_redis.pipeline.return_value.__aenter__.return_value
+    pipe_mock.hset.assert_called()
+    pipe_mock.expire.assert_called()
+    pipe_mock.execute.assert_called()
 
 
 @pytest.mark.asyncio
