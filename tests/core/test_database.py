@@ -192,6 +192,9 @@ async def test_health_check_loop_logic() -> None:
     pool1 = MagicMock()
     # pool1.acquire() returns an async context manager.
     # We need to mock the context manager's __aenter__ to return the connection.
+    pool1.get_size.return_value = 10
+    pool1.get_free_size.return_value = 5
+
     mock_cm = MagicMock()
     mock_conn = AsyncMock()
     mock_cm.__aenter__ = AsyncMock(return_value=mock_conn)

@@ -20,6 +20,7 @@ from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.core.config import settings
 from api.core.dependencies import get_sudo_user
+from api.core.rate_limit import limiter
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
 
@@ -27,6 +28,7 @@ router = APIRouter()
 
 
 @router.get("/google/login", status_code=status.HTTP_307_TEMPORARY_REDIRECT)
+@limiter.limit("5/minute")
 async def google_login(request: Request, redis: Redis = Depends(get_redis)) -> RedirectResponse:
     """
     Initiate Google OAuth login flow.
@@ -125,6 +127,7 @@ async def google_callback(
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def login(
     request: Request,
     login_data: UserLogin,
@@ -144,6 +147,7 @@ async def login(
 
 
 @router.post("/refresh", response_model=LoginResponse)
+@limiter.limit("5/minute")
 async def refresh_access_token(
     request: Request,
     token_request: RefreshTokenRequest,

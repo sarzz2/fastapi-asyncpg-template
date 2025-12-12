@@ -10,6 +10,9 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pyinstrument import Profiler
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
@@ -19,6 +22,7 @@ from api.core.config import settings
 from api.core.database import DataBase
 from api.core.exception_handlers import register_exception_handlers
 from api.core.logging_config import configure_logging
+from api.core.rate_limit import limiter
 from api.core.redis import redis_client
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
@@ -64,12 +68,18 @@ app = FastAPI(
     default_response_class=ORJSONResponse,
 )
 
+# Initialize Rate Limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore
+app.add_middleware(SlowAPIMiddleware)
+
 register_exception_handlers(app)
 
 Instrumentator().instrument(app).expose(app)
 
 
 @app.get("/health", tags=["health"], response_model=HealthResponse)
+@limiter.exempt
 async def health_check() -> HealthResponse:
     """
     Health check endpoint.

@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import Any, AsyncGenerator
 
 import asyncpg
@@ -8,24 +9,44 @@ from redis.asyncio import Redis
 
 from api.core.config import settings
 from api.core.database import DataBase
+from api.core.rate_limit import limiter
 from api.core.redis import get_redis
 from api.main import app
 from migrate import apply_migrations, create_migrations_table
 
 
 def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
-    """Configure pytest and set up test database before any tests run.
+    """Configure pytest and set up test database before any tests run."""
+    settings.ENV = "test"
+    limiter.enabled = False
 
-    This hook runs once before the test session starts and:
-    1. Creates a connection to the test database
-    2. Drops and recreates the public schema for clean state
-    3. Runs all migrations
-
-    Args:
-        config: Pytest configuration object (unused but required by pytest).
-    """
+    worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+    if worker_id:
+        # Append worker_id to database name to isolate workers
+        settings.TEST_DATABASE_URL += f"_{worker_id}"
 
     async def setup_db() -> None:
+        if worker_id:
+            # Connect to default 'postgres' db to create the worker-specific test db
+            # Construct a system DB url (assuming 'postgres' is available)
+            base_url = settings.TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
+            db_name = settings.TEST_DATABASE_URL.rsplit("/", 1)[1]
+
+            try:
+                sys_conn = await asyncpg.connect(base_url)
+                try:
+                    # Drop if exists (from previous interrupted run)
+                    # Cannot drop current db, so we connect to postgres
+                    # Quote identifier for safety
+                    await sys_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+                    await sys_conn.execute(f'CREATE DATABASE "{db_name}"')
+                finally:
+                    await sys_conn.close()
+            except Exception as e:  # pylint: disable=broad-except
+                # If we can't create DB (e.g. AWS RDS restrictions), we might fallback or fail.
+                # For local dev, this should work.
+                print(f"Worker {worker_id} database init warning: {e}")
+
         # Create connection pool to test database
         pool = await asyncpg.create_pool(settings.TEST_DATABASE_URL, max_inactive_connection_lifetime=3)
 
@@ -40,7 +61,7 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
             await create_migrations_table(pool)
             await apply_migrations(pool, direction="up")
 
-            print("Test database setup complete")
+            print(f"Test database setup complete for {settings.TEST_DATABASE_URL}")
 
         finally:
             await pool.close()
@@ -50,22 +71,35 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
 
 
 def pytest_unconfigure(config: Any) -> None:  # pylint: disable=unused-argument
-    """Clean up test database after all tests complete.
-
-    This hook runs once after the test session ends and rolls back all
-    migrations to clean up the test database.
-
-    Args:
-        config: Pytest configuration object (unused but required by pytest).
-    """
+    """Clean up test database after all tests complete."""
 
     async def teardown_db() -> None:
+        worker_id = os.environ.get("PYTEST_XDIST_WORKER")
+
+        # If worker db, drop it? Or just leave it?
+        # Dropping involves connecting to system db again.
+        # It's cleaner to drop.
+
+        if worker_id:
+            base_url = settings.TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
+            db_name = settings.TEST_DATABASE_URL.rsplit("/", 1)[1]
+
+            try:
+                sys_conn = await asyncpg.connect(base_url)
+                try:
+                    await sys_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+                except Exception:  # pylint: disable=broad-except
+                    pass
+                finally:
+                    await sys_conn.close()
+            except Exception:  # pylint: disable=broad-except
+                pass
+            return
+
+        # For main non-xdist run, we just down migrate as before
         pool = await asyncpg.create_pool(settings.TEST_DATABASE_URL, max_inactive_connection_lifetime=3)
-
         try:
-            # Roll back all migrations to clean up
             await apply_migrations(pool, direction="down", steps=None)
-
         finally:
             await pool.close()
 

@@ -26,6 +26,8 @@ pydantic-settings = "^2.12.0"
 uvicorn = { extras = ["standard"], version = "^0.38.0" }
 pyinstrument = "^5.0.0"
 prometheus-fastapi-instrumentator = "^7.1.0"
+slowapi = "^0.1.9"
+python-json-logger = "^4.0.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -40,6 +42,7 @@ pytest-cov = "^7.0.0"
 isort = "^7.0.0"
 bandit = "^1.9.2"
 pip-audit = "^2.10.0"
+pytest-xdist = "^3.8.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -70,6 +73,8 @@ module = [
   "jose.*",
   "psutil.*",
   "uvicorn.*",
+  "slowapi.*",
+  "pythonjsonlogger.*",
 ]
 ignore_missing_imports = true
 
@@ -86,5 +91,6 @@ profile = "black"
 line_length = 120
 
 [tool.pytest.ini_options]
+addopts = "-n auto -v"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"

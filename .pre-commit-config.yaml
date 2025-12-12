@@ -55,6 +55,8 @@ repos:
                 - prometheus_client
                 - prometheus_fastapi_instrumentator
                 - pyinstrument
+                - slowapi
+                - python-json-logger
 
           - id: mypy
             name: mypy
@@ -78,6 +80,8 @@ repos:
                 - prometheus_client
                 - prometheus_fastapi_instrumentator
                 - pyinstrument
+                - slowapi
+                - python-json-logger
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0

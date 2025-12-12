@@ -6,6 +6,9 @@ from queue import Queue
 from threading import Thread
 
 import colorlog
+from pythonjsonlogger import json
+
+from api.core.config import settings
 
 # Define the directory and file for FastAPI logs.
 LOG_DIR = "logs"
@@ -35,22 +38,35 @@ def configure_logging() -> logging.Logger:
 
     # Create the console handler to output logs to stdout.
     console_handler = logging.StreamHandler(sys.stdout)
-    console_formatter = colorlog.ColoredFormatter(
-        "%(log_color)s%(levelname)s:     %(message)s",
-        log_colors={
-            "DEBUG": "bold_blue",
-            "INFO": "bold_green",
-            "WARNING": "bold_yellow",
-            "ERROR": "bold_red",
-            "CRITICAL": "bold_purple",
-        },
-    )
-    console_handler.setFormatter(console_formatter)
+
+    if settings.USE_JSON_LOGS:
+        formatter = json.JsonFormatter(
+            "%(asctime)s %(levelname)s %(message)s %(name)s %(module)s %(funcName)s %(lineno)d"
+        )
+        console_handler.setFormatter(formatter)
+    else:
+        console_formatter = colorlog.ColoredFormatter(
+            "%(log_color)s%(levelname)s:     %(message)s",
+            log_colors={
+                "DEBUG": "bold_blue",
+                "INFO": "bold_green",
+                "WARNING": "bold_yellow",
+                "ERROR": "bold_red",
+                "CRITICAL": "bold_purple",
+            },
+        )
+        console_handler.setFormatter(console_formatter)
 
     # Create a file handler that rotates at midnight.
     file_handler = TimedRotatingFileHandler(LOG_FILE_NAME, when="midnight", interval=1, backupCount=365)
-    file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    file_handler.setFormatter(file_formatter)
+
+    if settings.USE_JSON_LOGS:
+        # Re-use the json formatter for file logs if desired, or keep text
+        # Usually file logs are also JSON in a production env.
+        file_handler.setFormatter(formatter)
+    else:
+        file_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+        file_handler.setFormatter(file_formatter)
 
     # Use a queue handler to avoid blocking the main thread.
     log_queue_handler = logging.handlers.QueueHandler(log_queue)
