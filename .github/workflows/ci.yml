@@ -11,6 +11,29 @@ jobs:
   build:
     name: Build & Test
     runs-on: ubuntu-latest
+
+    # Use service containers for postgres + redis (faster than docker-compose)
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: fastapi_template
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d fastapi_template"
+          --health-interval 2s --health-timeout 2s --health-retries 15
+
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval 2s --health-timeout 2s --health-retries 10
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -59,14 +82,10 @@ jobs:
       - name: Run Bandit
         run: poetry run bandit -r api
 
-      - name: Run Pip-audit
+      - name: Run Pip-audit (fail on fixable vulns)
         run: |
-          # Run pip-audit and capture output in JSON format
           poetry run pip-audit --format json > pip-audit-report.json || true
-
-          # Check if there are any fixable vulnerabilities
           FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix_versions | length > 0) | .id' pip-audit-report.json)
-
           if [ ! -z "$FIXABLE_VULNS" ]; then
             echo "::error::Found fixable vulnerabilities: $FIXABLE_VULNS"
             cat pip-audit-report.json
@@ -75,8 +94,49 @@ jobs:
             echo "No fixable vulnerabilities found. Ignoring unfixed."
           fi
 
-      - name: Start Services
-        run: docker compose up -d --wait db redis
+      # Wait for Postgres service to be healthy (pg_isready)
+      - name: Wait for Postgres
+        run: |
+          for i in $(seq 1 30); do
+            docker ps --format '{{.Names}}\t{{.Image}}' | grep -E 'postgres:17' && break || sleep 1
+          done
+          # wait for pg_isready via docker exec on the container that runs postgres:17
+          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
+          if [ -z "$PG_CONTAINER" ]; then
+            echo "Postgres container not found"
+            docker ps -a
+            exit 1
+          fi
+          for i in $(seq 1 60); do
+            docker exec -u postgres "$PG_CONTAINER" pg_isready -U user -d fastapi_template && break
+            sleep 1
+          done
+          docker exec -u postgres "$PG_CONTAINER" pg_isready -U user -d fastapi_template
+
+      # Install build dependencies and compile pg_uuidv7 inside the running postgres container
+      - name: Install and build pg_uuidv7 in Postgres service container
+        run: |
+          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
+          if [ -z "$PG_CONTAINER" ]; then
+            echo "Postgres container not found"
+            docker ps -a
+            exit 1
+          fi
+
+          # Update apt & install build dependencies as root inside the container.
+          # Use -u root so apt works.
+          docker exec -u root "$PG_CONTAINER" bash -lc "apt-get update && apt-get install -y git make gcc postgresql-server-dev-17 && rm -rf /var/lib/apt/lists/*"
+
+          # Clone, build and install pg_uuidv7
+          docker exec -u root "$PG_CONTAINER" bash -lc "git clone https://github.com/fboulnois/pg_uuidv7.git /tmp/pg_uuidv7 && cd /tmp/pg_uuidv7 && make && make install && rm -rf /tmp/pg_uuidv7"
+
+          # Make sure extension is visible to postgres and create it in the DB (run as postgres user)
+          docker exec -u postgres "$PG_CONTAINER" bash -lc "psql -v ON_ERROR_STOP=1 -U user -d fastapi_template -c \"CREATE EXTENSION IF NOT EXISTS pg_uuidv7;\""
+
+      - name: Verify pg_uuidv7 is installed
+        run: |
+          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
+          docker exec -u postgres "$PG_CONTAINER" psql -U user -d fastapi_template -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_uuidv7';"
 
       - name: Run Tests
         env:
@@ -84,4 +144,4 @@ jobs:
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           SECRET_KEY: test_secret_key
-        run: poetry run pytest
+        run: poetry run pytest -q
