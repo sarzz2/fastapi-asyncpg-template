@@ -17,6 +17,16 @@ from api.core.redis import redis_client
 
 log = logging.getLogger("fastapi")
 
+# Pre-bind metrics for performance
+CACHE_GET_REQUESTS = CACHE_REQUESTS_TOTAL.labels(operation="get")
+CACHE_SET_REQUESTS = CACHE_REQUESTS_TOTAL.labels(operation="set")
+CACHE_GET_DURATION = CACHE_OPERATION_DURATION_SECONDS.labels(operation="get")
+CACHE_SET_DURATION = CACHE_OPERATION_DURATION_SECONDS.labels(operation="set")
+CACHE_HIT = CACHE_HIT_MISS_TOTAL.labels(result="hit")
+CACHE_MISS = CACHE_HIT_MISS_TOTAL.labels(result="miss")
+REDIS_GET_ERRORS = REDIS_ERRORS_TOTAL.labels(operation="get")
+REDIS_SET_ERRORS = REDIS_ERRORS_TOTAL.labels(operation="set")
+
 T = TypeVar("T")
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -38,18 +48,17 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
 
     start = time.perf_counter()
     try:
-        CACHE_REQUESTS_TOTAL.labels(operation="get").inc()
+        CACHE_GET_REQUESTS.inc()
         if hash_key:
             cached_value = await redis_client.client.hget(hash_key, key)  # type: ignore
         else:
             cached_value = await redis_client.client.get(key)
 
         duration = time.perf_counter() - start
-        CACHE_OPERATION_DURATION_SECONDS.labels(operation="get").observe(duration)
+        CACHE_GET_DURATION.observe(duration)
 
         if cached_value:
-            CACHE_HIT_MISS_TOTAL.labels(result="hit").inc()
-            log.debug("Cache hit for key: %s", key)
+            CACHE_HIT.inc()
             data = json.loads(cached_value)
             if model:
                 if isinstance(data, list):
@@ -57,9 +66,9 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
                 return model.model_validate(data)
             return data
 
-        CACHE_HIT_MISS_TOTAL.labels(result="miss").inc()
+        CACHE_MISS.inc()
     except Exception as e:  # pylint: disable=broad-except
-        REDIS_ERRORS_TOTAL.labels(operation="get").inc()
+        REDIS_GET_ERRORS.inc()
         log.warning("Error reading from cache for key %s: %s", key, e)
     return None
 
@@ -68,7 +77,7 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
     """Helper to serialize and save data to Redis."""
     start = time.perf_counter()
     try:
-        CACHE_REQUESTS_TOTAL.labels(operation="set").inc()
+        CACHE_SET_REQUESTS.inc()
         if value is not None:
             if isinstance(value, list):
                 serialized_data = json.dumps(
@@ -80,17 +89,17 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
                 serialized_data = json.dumps(value)
 
             if hash_key:
-                await redis_client.client.hset(hash_key, key, serialized_data)  # type: ignore
-                await redis_client.client.expire(hash_key, expire)
+                async with redis_client.client.pipeline() as pipe:
+                    pipe.hset(hash_key, key, serialized_data)
+                    pipe.expire(hash_key, expire)
+                    await pipe.execute()
             else:
                 await redis_client.client.set(key, serialized_data, ex=expire)
 
-            log.debug("Cached result for key: %s", key)
-
             duration = time.perf_counter() - start
-            CACHE_OPERATION_DURATION_SECONDS.labels(operation="set").observe(duration)
+            CACHE_SET_DURATION.observe(duration)
     except Exception as e:  # pylint: disable=broad-except
-        REDIS_ERRORS_TOTAL.labels(operation="set").inc()
+        REDIS_SET_ERRORS.inc()
         log.warning("Error writing to cache for key %s: %s", key, e)
 
 
