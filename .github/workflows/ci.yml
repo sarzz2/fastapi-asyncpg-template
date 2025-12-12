@@ -42,6 +42,14 @@ jobs:
       - name: Run Isort
         run: poetry run isort --check-only .
 
+      - name: Cache MyPy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+          restore-keys: |
+            mypy-${{ runner.os }}-
+
       - name: Run MyPy
         run: poetry run mypy .
 
@@ -66,18 +74,6 @@ jobs:
           else
             echo "No fixable vulnerabilities found. Ignoring unfixed."
           fi
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and Cache DB
-        uses: docker/build-push-action@v5
-        with:
-          context: ./db
-          load: true
-          tags: fastapi-template-db
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       - name: Start Services
         run: docker compose up -d --wait db redis
