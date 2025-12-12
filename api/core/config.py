@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     PRIMARY_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
     REPLICA_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
     TEST_DATABASE_URL: str = "postgresql://user:password@localhost/test_influmatch"
+    MIN_CONNECTION_COUNT: int = 1
+    MAX_CONNECTION_COUNT: int = 10
     HEALTH_CHECK_INTERVAL: int = 30  # in seconds
     REGION_PRIORITY: list[str] = []
 

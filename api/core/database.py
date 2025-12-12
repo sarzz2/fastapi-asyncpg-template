@@ -119,8 +119,8 @@ class DataBase(BaseModel):
         cls,
         write_uri: str,
         read_uris: Optional[Dict[str, Union[str, List[str]]]] = None,
-        min_con: int = 1,
-        max_con: int = 10,
+        min_con: int = settings.MIN_CONNECTION_COUNT,
+        max_con: int = settings.MAX_CONNECTION_COUNT,
         loop: Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         """Initialize database connection pools for both write and read operations.
