@@ -1,7 +1,12 @@
 import asyncio
 import os
+import sys
 from typing import Any, AsyncGenerator
 
+# Ensure the 'api' module can be imported
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# pylint: disable=wrong-import-position
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
