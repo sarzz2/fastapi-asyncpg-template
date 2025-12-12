@@ -1,7 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import AsyncGenerator, Callable, cast
+from typing import AsyncGenerator, Awaitable, Callable, cast
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +10,7 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pyinstrument import Profiler
+from secure import Secure
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -115,7 +116,7 @@ async def health_check() -> HealthResponse:
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next: Callable) -> Response:
+async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """
     Middleware to log incoming HTTP requests and their processing time.
     Args:
@@ -185,4 +186,30 @@ app.add_middleware(
 if settings.ENV in [Environments.PROD.value, Environments.STAGING.value]:
     app.add_middleware(HTTPSRedirectMiddleware)
 
+# Security Headers
+secure_headers = Secure.with_default_headers()
+
+
+@app.middleware("http")
+async def set_secure_headers(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    """
+    Middleware to set security headers.
+    """
+    response = await call_next(request)
+    await secure_headers.set_headers_async(response)  # type: ignore[arg-type]
+    return response
+
+
 app.include_router(api_router)
+
+
+# Initialize Sentry
+if settings.SENTRY_DSN:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENV,
+        traces_sample_rate=1.0,
+        profiles_sample_rate=1.0,
+    )

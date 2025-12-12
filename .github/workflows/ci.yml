@@ -8,8 +8,8 @@ on:
     types: [opened, synchronize, reopened]
 
 jobs:
-  quality:
-    name: Code Quality & Security
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -54,49 +54,33 @@ jobs:
       - name: Run Pip-audit
         run: |
           # Run pip-audit and capture output in JSON format
-          # We use || true to prevent the step from failing immediately
           poetry run pip-audit --format json > pip-audit-report.json || true
 
           # Check if there are any fixable vulnerabilities
-          # .dependencies[].vulns[] | select(.fix_versions | length > 0)
           FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix_versions | length > 0) | .id' pip-audit-report.json)
 
           if [ ! -z "$FIXABLE_VULNS" ]; then
             echo "::error::Found fixable vulnerabilities: $FIXABLE_VULNS"
-            # Print the report for context
             cat pip-audit-report.json
             exit 1
           else
             echo "No fixable vulnerabilities found. Ignoring unfixed."
-            exit 0
           fi
 
-  test:
-    name: Tests
-    runs-on: ubuntu-latest
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
+      - name: Build and Cache DB
+        uses: docker/build-push-action@v5
         with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          cache: "poetry"
-
-      - name: Install dependencies
-        run: poetry install --no-interaction
+          context: ./db
+          load: true
+          tags: fastapi-template-db
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Start Services
-        run: docker compose up -d --wait --build db redis
+        run: docker compose up -d --wait db redis
 
       - name: Run Tests
         env:

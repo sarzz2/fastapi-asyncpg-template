@@ -28,6 +28,8 @@ pyinstrument = "^5.0.0"
 prometheus-fastapi-instrumentator = "^7.1.0"
 slowapi = "^0.1.9"
 python-json-logger = "^4.0.0"
+sentry-sdk = "^2.47.0"
+secure = "^1.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -75,6 +77,8 @@ module = [
   "uvicorn.*",
   "slowapi.*",
   "pythonjsonlogger.*",
+  "secure.*",
+  "sentry_sdk.*",
 ]
 ignore_missing_imports = true
 

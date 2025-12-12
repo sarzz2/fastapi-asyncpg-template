@@ -3183,6 +3183,17 @@ botocore = ">=1.37.4,<2.0a.0"
 crt = ["botocore[crt] (>=1.37.4,<2.0a.0)"]
 
 [[package]]
+name = "secure"
+version = "1.0.1"
+description = "A lightweight package that adds security headers for Python web frameworks."
+optional = false
+python-versions = ">=3.10"
+files = [
+    {file = "secure-1.0.1-py3-none-any.whl", hash = "sha256:f0bb7bb12c684e8e30026a5480833170197146163fcb61a80d1af1710c0478da"},
+    {file = "secure-1.0.1.tar.gz", hash = "sha256:942c10b8cfbde9e3a7961cf17833c9139d6e14ee39d23428230e4b8c8bc2de26"},
+]
+
+[[package]]
 name = "sentry-sdk"
 version = "2.47.0"
 description = "Python client for Sentry (https://sentry.io)"
@@ -3934,4 +3945,4 @@ dev = ["pytest", "setuptools"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.12"
-content-hash = "32287101c83a1ea24035b2772d7841511de27a02fd22a6eb034b2a86aaaaec78"
+content-hash = "0734cfa0976673ba18aac12b9d8a12f3961d6e20dce44d465c237f62f677a104"

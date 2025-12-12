@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     ENV: str = Environments.DEV.value
     USE_JSON_LOGS: bool = False
+    SENTRY_DSN: str | None = None
 
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 336
