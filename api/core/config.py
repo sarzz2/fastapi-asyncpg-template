@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "test_secret_key"
     DOMAIN: str = "http://127.0.0.1:8000"
     FRONTEND_URL: str = "http://localhost:3000"
+    DEFAULT_LOCALE: str = "en"
     ENV: str = Environments.DEV.value
     USE_JSON_LOGS: bool = False
     SENTRY_DSN: str | None = None

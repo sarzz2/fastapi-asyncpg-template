@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, status
 
 from api.apps.user.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
+from api.core.i18n import trans
 
 
 class RoleService:
@@ -31,7 +32,7 @@ class RoleService:
         """
         role = await self.role_dao.get_role_by_id(role_id)
         if not role:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("role.not_found"))
         return role
 
     async def create_role(self, role_create: RoleCreate) -> RoleData:
@@ -46,7 +47,7 @@ class RoleService:
         """
         existing_role = await self.role_dao.get_role_by_name(role_create.name)
         if existing_role:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Role with this name already exists")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=trans("role.exists"))
         return await self.role_dao.create_role(role_create)
 
     async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> RoleData:
@@ -66,13 +67,11 @@ class RoleService:
         if role_update.name:
             existing_role = await self.role_dao.get_role_by_name(role_update.name)
             if existing_role and existing_role.id != role_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST, detail="Role with this name already exists"
-                )
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=trans("role.exists"))
 
         updated_role = await self.role_dao.update_role(role_id, role_update)
         if not updated_role:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Role not found")
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("Role not found"))
         return updated_role
 
     async def delete_role(self, role_id: UUID) -> None:

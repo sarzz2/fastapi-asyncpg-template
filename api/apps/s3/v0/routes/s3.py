@@ -4,6 +4,7 @@ from api.apps.s3.schemas.s3 import S3UploadUrlRequest, S3UploadUrlResponse
 from api.apps.s3.v0.services.s3 import S3Service, get_s3_service
 from api.apps.user.schemas.user import UserData
 from api.core.dependencies import get_current_user
+from api.core.i18n import trans
 
 router = APIRouter()
 
@@ -22,7 +23,8 @@ async def generate_upload_url(
         return S3UploadUrlResponse(**result)
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to generate upload URL: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=trans("s3.upload_url_failed").format(error=str(e)),
         ) from e
 
 
@@ -40,7 +42,7 @@ async def delete_file(
         return
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to delete file: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=trans("s3.delete_failed").format(error=str(e))
         ) from e
 
 
@@ -53,5 +55,5 @@ async def get_file(key: str, s3_service: S3Service = Depends(get_s3_service)) ->
         return s3_service.get_file_url(key)
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Failed to get file: {str(e)}"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=trans("s3.get_failed").format(error=str(e))
         ) from e
