@@ -509,6 +509,40 @@ Then register it in the service:
 notification_service.register_channel(EmailChannel())
 ```
 
+### Usage
+
+**1. Dependency Injection**
+
+Use `get_notification_service` to inject the service into your routes.
+
+```python
+from fastapi import APIRouter, Depends
+from api.apps.notification.v0.service import NotificationService, get_notification_service
+
+router = APIRouter()
+
+@router.post("/send")
+async def send_notification(
+    service: NotificationService = Depends(get_notification_service)
+):
+    await service.notify(user_id=..., message="Hello!")
+```
+
+**2. Background Tasks (Celery)**
+
+For better performance, run notifications in the background.
+
+```python
+from api.apps.notification.v0.tasks import send_notification_task
+
+# Fire and forget
+send_notification_task.delay(
+    user_id_str="user-uuid-string",
+    message="Your report is ready!",
+    notification_type="success"
+)
+```
+
 ## Monitoring
 
 The project includes a comprehensive monitoring stack using **Prometheus** and **Grafana** to provide deep visibility into application performance, database health, and background task processing.

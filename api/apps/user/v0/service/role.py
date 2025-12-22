@@ -71,7 +71,7 @@ class RoleService:
 
         updated_role = await self.role_dao.update_role(role_id, role_update)
         if not updated_role:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("Role not found"))
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("role.not_found"))
         return updated_role
 
     async def delete_role(self, role_id: UUID) -> None:

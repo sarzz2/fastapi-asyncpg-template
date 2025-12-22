@@ -21,6 +21,8 @@ class NotificationService:
 
     def register_channel(self, channel: BaseNotificationChannel) -> None:
         """Register a notification channel."""
+        if channel in self.channels:
+            return
         self.channels.append(channel)
 
     async def notify(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -45,7 +47,7 @@ class NotificationService:
             try:
                 await channel.send(user_id, notification)
             except Exception:  # pylint: disable=broad-except
-                log.error("Failed to send notification to channel %s", channel)
+                log.exception("Failed to send notification to channel %s", channel)
 
     async def broadcast_all(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
@@ -68,7 +70,14 @@ class NotificationService:
             try:
                 await channel.broadcast(notification)
             except Exception:  # pylint: disable=broad-except
-                log.error("Failed to broadcast notification to channel %s", channel)
+                log.exception("Failed to broadcast notification to channel %s", channel)
 
 
 notification_service = NotificationService()
+
+
+def get_notification_service() -> NotificationService:
+    """
+    Dependency to get the Notification Service.
+    """
+    return notification_service

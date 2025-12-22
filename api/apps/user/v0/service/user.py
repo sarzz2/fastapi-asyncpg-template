@@ -72,7 +72,7 @@ class UserService:
         if not user_db:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found",
+                detail=trans("user.not_found"),
             )
         return UserData.model_validate(user_db)
 

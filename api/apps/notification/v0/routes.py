@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect, status
 from redis.asyncio import Redis
 
@@ -7,6 +9,7 @@ from api.core.auth import verify_token
 from api.core.redis import get_redis
 
 router = APIRouter()
+log = logging.getLogger(__name__)
 
 
 @router.websocket("/ws")
@@ -43,8 +46,9 @@ async def websocket_endpoint(
                 # Keep connection alive, listen for messages (optional bi-directional)
                 await websocket.receive_text()
         except WebSocketDisconnect:
-            connection_manager.disconnect(websocket, user_id)
+            await connection_manager.disconnect(websocket, user_id)
 
     except Exception:  # pylint: disable=broad-except
         # If any auth fails
+        log.exception("WebSocket connection failed due to authentication or other error")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
