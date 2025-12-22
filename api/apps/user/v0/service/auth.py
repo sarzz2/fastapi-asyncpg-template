@@ -22,6 +22,7 @@ from api.core.auth import (
     verify_token,
 )
 from api.core.config import settings
+from api.core.i18n import trans
 from api.core.redis import get_redis
 from api.utils.date import get_utc_now
 
@@ -172,7 +173,7 @@ class AuthService:
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
+                detail=trans("auth.invalid_credentials"),
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
@@ -215,20 +216,20 @@ class AuthService:
         if token_data.id is None:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token data",
+                detail=trans("auth.invalid_token_data"),
             )
         user = await self._user_dao.get_by_id(token_data.id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid user from refresh token",
+                detail=trans("auth.invalid_refresh_user"),
             )
 
         # Check token version on refresh too?
         if user.token_version != token_data.token_version:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token version mismatch (revoked)",
+                detail=trans("auth.token_version_mismatch"),
             )
 
         scopes = await self._get_user_scopes(user.roles)
@@ -288,7 +289,7 @@ class AuthService:
         if not user or not verify_password(password, user.hashed_password):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
+                detail=trans("auth.invalid_credentials"),
                 headers={"WWW-Authenticate": "Bearer"},
             )
 

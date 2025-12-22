@@ -1,0 +1,27 @@
+{
+    "auth": {
+        "invalid_credentials": "Invalid credentials",
+        "invalid_token_data": "Invalid token data",
+        "invalid_refresh_user": "Invalid user from refresh token",
+        "token_version_mismatch": "Token version mismatch (revoked)",
+        "invalid_access_token": "Invalid access token",
+        "missing_callback_params": "Missing code or state in callback",
+        "invalid_state": "Invalid or expired state",
+        "token_exchange_failed": "Token exchange failed: {error}",
+        "no_access_token": "No access token in token response",
+        "userinfo_failed": "Failed to fetch userinfo from provider"
+    },
+    "user": {
+        "not_found": "User not found",
+        "session_not_found": "Session not found"
+    },
+    "role": {
+        "not_found": "Role not found",
+        "exists": "Role with this name already exists"
+    },
+    "s3": {
+        "upload_url_failed": "Failed to generate upload URL: {error}",
+        "delete_failed": "Failed to delete file: {error}",
+        "get_failed": "Failed to get file: {error}"
+    }
+}

@@ -461,6 +461,88 @@ await fetch(response.upload_url, {
 });
 ```
 
+## Notification System
+
+The project includes a robust, versioned Notification System designed for scalability and multi-channel support using the Strategy Pattern.
+
+### Architecture
+
+-   **Service**: `NotificationService` (Singleton) dispatches messages to registered channels.
+-   **Channels**:
+    -   **Base**: `BaseNotificationChannel` (Abstract strategy).
+    -   **WebSockets**: Real-time notifications to connected clients. Supports personal messages and broadcasting.
+    -   **Future (SMS/Email)**: Easily extensible by inheriting from `BaseNotificationChannel`.
+-   **Structure**: Located in `api/apps/notification/v0`. Schemas are shared in `api/apps/notification/schemas.py`.
+
+### WebSockets
+
+-   **Endpoint**: `/api/v0/notifications/ws`
+-   **Auth**: Query parameter `?token=<JWT_TOKEN>`.
+-   **Features**:
+    -   **Authentication**: Validates JWT and checks User status (must be active).
+    -   **Connections**: Supports multiple connections per user (e.g., Phone + Laptop).
+    -   **Broadcast**: `notification_service.broadcast_all("message")` sends to everyone.
+
+### Extending (Adding Email/SMS)
+
+To add a new channel (e.g., Email), simply create a new class inheriting from `BaseNotificationChannel`:
+
+```python
+# api/apps/notification/v0/channels/email.py
+from api.apps.notification.v0.channels.base import BaseNotificationChannel
+from api.apps.notification.schemas import NotificationSchema
+
+class EmailChannel(BaseNotificationChannel):
+    async def send(self, user_id: UUID, notification: NotificationSchema) -> None:
+        # User internal UserDAO to get email, then send using SMTP/SES
+        pass
+
+    async def broadcast(self, notification: NotificationSchema) -> None:
+        # Loop all users or use bulk API
+        pass
+```
+
+Then register it in the service:
+
+```python
+# api/apps/notification/v0/service.py
+notification_service.register_channel(EmailChannel())
+```
+
+### Usage
+
+**1. Dependency Injection**
+
+Use `get_notification_service` to inject the service into your routes.
+
+```python
+from fastapi import APIRouter, Depends
+from api.apps.notification.v0.service import NotificationService, get_notification_service
+
+router = APIRouter()
+
+@router.post("/send")
+async def send_notification(
+    service: NotificationService = Depends(get_notification_service)
+):
+    await service.notify(user_id=..., message="Hello!")
+```
+
+**2. Background Tasks (Celery)**
+
+For better performance, run notifications in the background.
+
+```python
+from api.apps.notification.v0.tasks import send_notification_task
+
+# Fire and forget
+send_notification_task.delay(
+    user_id_str="user-uuid-string",
+    message="Your report is ready!",
+    notification_type="success"
+)
+```
+
 ## Monitoring
 
 The project includes a comprehensive monitoring stack using **Prometheus** and **Grafana** to provide deep visibility into application performance, database health, and background task processing.

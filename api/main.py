@@ -22,6 +22,7 @@ from api.constants import Environments
 from api.core.config import settings
 from api.core.database import DataBase
 from api.core.exception_handlers import register_exception_handlers
+from api.core.i18n import I18nMiddleware
 from api.core.logging_config import configure_logging
 from api.core.rate_limit import limiter
 from api.core.redis import redis_client
@@ -173,6 +174,7 @@ app.add_middleware(
 )
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
 app.add_middleware(RegionASGIMiddleware)
+app.add_middleware(I18nMiddleware)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 
 # Explicit session cookie settings to make local OAuth flows more predictable.

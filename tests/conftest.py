@@ -1,7 +1,7 @@
 import asyncio
 import os
 import sys
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Generator
 
 # Ensure the 'api' module can be imported
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -9,6 +9,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # pylint: disable=wrong-import-position
 import asyncpg
 import pytest
+from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
@@ -31,26 +32,35 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
         settings.TEST_DATABASE_URL += f"_{worker_id}"
 
     async def setup_db() -> None:
-        if worker_id:
-            # Connect to default 'postgres' db to create the worker-specific test db
-            # Construct a system DB url (assuming 'postgres' is available)
-            base_url = settings.TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
-            db_name = settings.TEST_DATABASE_URL.rsplit("/", 1)[1]
+        # Create the test database if it doesn't exist
+        # Connect to default 'postgres' db to create the test db
+        base_url = settings.TEST_DATABASE_URL.rsplit("/", 1)[0] + "/postgres"
+        db_name = settings.TEST_DATABASE_URL.rsplit("/", 1)[1]
 
+        try:
+            sys_conn = await asyncpg.connect(base_url)
             try:
-                sys_conn = await asyncpg.connect(base_url)
-                try:
-                    # Drop if exists (from previous interrupted run)
-                    # Cannot drop current db, so we connect to postgres
-                    # Quote identifier for safety
-                    await sys_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+                # Check if DB exists
+                exists = await sys_conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
+                if not exists:
                     await sys_conn.execute(f'CREATE DATABASE "{db_name}"')
-                finally:
-                    await sys_conn.close()
-            except Exception as e:  # pylint: disable=broad-except
-                # If we can't create DB (e.g. AWS RDS restrictions), we might fallback or fail.
-                # For local dev, this should work.
-                print(f"Worker {worker_id} database init warning: {e}")
+                elif worker_id:
+                    # For workers, we might want to recreate it to ensure isolation
+                    # But current logic was dropping it.
+                    # Let's keep the drop logic for workers to ensure clean state
+                    pass
+
+                if worker_id:
+                    # Recreate for worker isolation
+                    await sys_conn.execute(f'DROP DATABASE IF EXISTS "{db_name}" WITH (FORCE)')
+                    await sys_conn.execute(f'CREATE DATABASE "{db_name}"')
+
+            finally:
+                await sys_conn.close()
+        except Exception as e:  # pylint: disable=broad-except
+            # If we can't create DB (e.g. AWS RDS restrictions), we might fallback or fail.
+            # For local dev, this should work.
+            print(f"Database init warning: {e}")
 
         # Create connection pool to test database
         pool = await asyncpg.create_pool(settings.TEST_DATABASE_URL, max_inactive_connection_lifetime=3)
@@ -161,5 +171,55 @@ async def client() -> AsyncGenerator[AsyncClient, None]:  # pylint: disable=rede
 
     finally:
         # Restore original settings
+        settings.PRIMARY_DATABASE_URL = original_primary_url
+        settings.REPLICA_DATABASE_URL = original_replica_url
+
+
+@pytest.fixture(scope="function")
+def sync_client() -> Generator[TestClient, None, None]:
+    """Fixture for synchronous TestClient for WebSockets."""
+
+    # We need to setup DB overrides similar to async client
+    # But since this is a synchronous fixture, we can't easily do async DB setup here
+    # if it wasn't done globally or by another fixture.
+    # The 'client' fixture does setup/teardown.
+    # Actually, we can make this fixture depend on the DB setup?
+    # conftest.py's pytest_configure sets up DB.
+    # But 'client' fixture overrides dependency settings.
+    # Let's duplicate the settings override logic.
+    original_primary_url = settings.PRIMARY_DATABASE_URL
+    original_replica_url = settings.REPLICA_DATABASE_URL
+    setattr(settings, "PRIMARY_DATABASE_URL", settings.TEST_DATABASE_URL)
+    setattr(settings, "REPLICA_DATABASE_URL", settings.TEST_DATABASE_URL)
+
+    # Override Redis?
+    # TestClient calls app, app calls dependencies.
+    # We need to override get_redis.
+    # But get_redis returns async redis. TestClient runs async app in thread/loop?
+    # Yes, TestClient handles async app.
+
+    try:
+        # We need an event loop for the app to run in TestClient?
+        # TestClient creates its own portal.
+
+        # Override Redis
+        # We need to provide a Redis that works.
+        # Since app connects to Redis, we can just let it connect to localhost Redis
+        # or mock it.
+        # The async client mock used "Redis" class.
+
+        # We'll skip complex redis mocking and rely on integration
+        # or use the same override if possible.
+
+        app.dependency_overrides[get_redis] = lambda: Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True
+        )
+
+        with TestClient(app) as test_c:
+            yield test_c
+
+        app.dependency_overrides.clear()
+
+    finally:
         settings.PRIMARY_DATABASE_URL = original_primary_url
         settings.REPLICA_DATABASE_URL = original_replica_url

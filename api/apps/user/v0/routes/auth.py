@@ -20,6 +20,7 @@ from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.core.config import settings
 from api.core.dependencies import get_sudo_user
+from api.core.i18n import trans
 from api.core.rate_limit import limiter
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
@@ -82,12 +83,12 @@ async def google_callback(
     code = request.query_params.get("code")
     state = request.query_params.get("state")
     if not code or not state:
-        raise HTTPException(status_code=400, detail="Missing code or state in callback")
+        raise HTTPException(status_code=400, detail=trans("auth.missing_callback_params"))
 
     state_key = RedisKeys.OAUTH_STATE_GOOGLE.format(state=state)
     stored = await redis.get(state_key)
     if not stored:
-        raise HTTPException(status_code=400, detail="Invalid or expired state")
+        raise HTTPException(status_code=400, detail=trans("auth.invalid_state"))
     # delete state to prevent replay
     await redis.delete(state_key)
 
@@ -107,19 +108,21 @@ async def google_callback(
             headers={"Accept": "application/json"},
         )
         if token_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail=f"Token exchange failed: {token_resp.text}")
+            raise HTTPException(
+                status_code=400, detail=trans("auth.token_exchange_failed").format(error=token_resp.text)
+            )
         token = token_resp.json()
 
         access_token = token.get("access_token")
         if not access_token:
-            raise HTTPException(status_code=400, detail="No access token in token response")
+            raise HTTPException(status_code=400, detail=trans("auth.no_access_token"))
 
         # Fetch userinfo
         userinfo_resp = await client.get(
             GoogleAuthEndpoints.GOOGLE_USERINFO_ENDPOINT, headers={"Authorization": f"Bearer {access_token}"}
         )
         if userinfo_resp.status_code != 200:
-            raise HTTPException(status_code=400, detail="Failed to fetch userinfo from provider")
+            raise HTTPException(status_code=400, detail=trans("auth.userinfo_failed"))
         user_info = userinfo_resp.json()
 
     user = await svc.handle_google_oauth(user_info)
@@ -215,7 +218,7 @@ async def google_sudo_token(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid access token",
+            detail=trans("auth.invalid_access_token"),
         ) from exc
     return await svc.create_sudo_token_oauth(user_data)
 

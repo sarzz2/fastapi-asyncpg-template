@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
 from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
+from api.core.i18n import trans
 
 
 class UserDAO:
@@ -303,7 +304,7 @@ class UserDAO:
         """
         row = await self.db.fetchval(query, jti, current_user_id)
         if not row:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise HTTPException(status_code=404, detail=trans("user.session_not_found"))
         return int(row)
 
     async def get_user_sessions(

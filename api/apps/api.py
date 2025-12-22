@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from api.apps.notification.v0.routes import router as notification_router
 from api.apps.s3.v0.routes.s3 import router as s3_v0_router
 from api.apps.user.v0.routes.auth import router as auth_v0_router
 from api.apps.user.v0.routes.role import router as role_v0_router
@@ -12,3 +13,4 @@ api_router.include_router(user_v0_router, prefix=f"{settings.API_V0_STR}/users",
 
 api_router.include_router(s3_v0_router, prefix=f"{settings.API_V0_STR}/s3", tags=["S3"])
 api_router.include_router(role_v0_router, prefix=f"{settings.API_V0_STR}/roles", tags=["Roles"])
+api_router.include_router(notification_router, prefix=f"{settings.API_V0_STR}/notifications", tags=["Notifications"])
