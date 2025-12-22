@@ -1,6 +1,6 @@
 
 # Builder stage
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -38,7 +38,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN poetry install --no-root --no-ansi
 
 # Runtime stage
-FROM python:3.12-slim AS runtime
+FROM python:3.14-slim AS runtime
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
