@@ -26,10 +26,6 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
     settings.ENV = "test"
     limiter.enabled = False
 
-    # Force correct local user if .env is wrong
-    if "user" in settings.TEST_DATABASE_URL:
-        settings.TEST_DATABASE_URL = settings.TEST_DATABASE_URL.replace("user", "sarzz")
-
     worker_id = os.environ.get("PYTEST_XDIST_WORKER")
     if worker_id:
         # Append worker_id to database name to isolate workers

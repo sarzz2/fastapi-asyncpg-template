@@ -6,7 +6,7 @@ from api.constants import Environments
 class Settings(BaseSettings):
     """Application Settings Constants"""
 
-    PROJECT_NAME: str = "Influmatch"
+    PROJECT_NAME: str = "FastAPI Template"
     PROJECT_VERSION: str = "0.1.0"
     API_V0_STR: str = "/api/v0"
     SECRET_KEY: str = "test_secret_key"
@@ -22,9 +22,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 21
     SUDO_TOKEN_EXPIRE_MINUTES: int = 60
 
-    PRIMARY_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
-    REPLICA_DATABASE_URL: str = "postgresql://user:password@localhost/influmatch"
-    TEST_DATABASE_URL: str = "postgresql://user:password@localhost/test_influmatch"
+    PRIMARY_DATABASE_URL: str = "postgresql://user:password@localhost/fastapi_template"
+    REPLICA_DATABASE_URL: str = "postgresql://user:password@localhost/fastapi_template"
+    TEST_DATABASE_URL: str = "postgresql://user:password@localhost/test_fastapi_template"
     MIN_CONNECTION_COUNT: int = 1
     MAX_CONNECTION_COUNT: int = 10
     HEALTH_CHECK_INTERVAL: int = 30  # in seconds
