@@ -11,7 +11,7 @@ from api.core.celery_app import celery_app
 log = logging.getLogger(__name__)
 
 
-@celery_app.task(name="api.apps.notification.v0.tasks.send_notification_task", bind=True)
+@celery_app.task(name="send_notification_task", bind=True)
 def send_notification_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     self: Task,
     user_id_str: str,
@@ -42,7 +42,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
         log.error("Error sending background notification to user %s: %s", user_id, e)
 
 
-@celery_app.task(name="api.apps.notification.v0.tasks.broadcast_notification_task", bind=True)
+@celery_app.task(name="broadcast_notification_task", bind=True)
 def broadcast_notification_task(
     self: Task,
     message: str,

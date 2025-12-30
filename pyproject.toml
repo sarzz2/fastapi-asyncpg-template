@@ -29,7 +29,6 @@ prometheus-fastapi-instrumentator = "^7.1.0"
 slowapi = "^0.1.9"
 python-json-logger = "^4.0.0"
 sentry-sdk = "^2.47.0"
-secure = "^1.0.1"
 babel = "^2.17.0"
 
 
