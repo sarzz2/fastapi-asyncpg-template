@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = "test"
     AWS_BUCKET_NAME: str = "my-bucket"
 
+    FLAGSMITH_ENVIRONMENT_KEY: str = ""
+
     # google oauth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""

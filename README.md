@@ -543,6 +543,46 @@ send_notification_task.delay(
 )
 ```
 
+## Feature Management (Flagsmith)
+
+The project integrates [Flagsmith](https://flagsmith.com/) for feature flag management, allowing you to toggle features, manage rollouts, and target specific user segments without code deploys.
+
+### Configuration
+
+Add your server-side environment key to `.env`:
+
+```bash
+FLAGSMITH_ENVIRONMENT_KEY=<your_key>
+```
+
+### Usage
+
+**1. Route Dependency**
+
+Protect endpoints using the `feature_enabled` dependency. You can optionally pass `identity` and `traits` for targeted rollouts.
+
+```python
+from fastapi import Depends
+from api.core.feature_flags import feature_enabled
+
+@router.get("/beta-feature")
+async def beta_endpoint(
+    enabled: bool = Depends(feature_enabled("beta_feature"))
+):
+    if not enabled:
+        return {"message": "Feature disabled"}
+    return {"message": "Welcome to Beta!"}
+```
+
+**2. Advanced Targeting (Identity & Traits)**
+
+To target specific users or segments (e.g., "Beta Users"), pass the identity and traits:
+
+```python
+# Check if feature is enabled for user_123 with specific traits
+Depends(feature_enabled("new_dashboard", identity="user_123", traits={"role": "beta"}))
+```
+
 ## Monitoring
 
 The project includes a comprehensive monitoring stack using **Prometheus** and **Grafana** to provide deep visibility into application performance, database health, and background task processing.

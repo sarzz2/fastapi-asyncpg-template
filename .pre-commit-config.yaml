@@ -59,6 +59,7 @@ repos:
                 - python-json-logger
                 - secure
                 - sentry-sdk
+                - flagsmith
 
           - id: mypy
             name: mypy
@@ -86,6 +87,7 @@ repos:
                 - python-json-logger
                 - secure
                 - sentry-sdk
+                - flagsmith
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0
