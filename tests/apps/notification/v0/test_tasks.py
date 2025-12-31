@@ -2,13 +2,13 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-@patch("api.apps.notification.v0.tasks.notification_service")
+@patch("api.apps.notification.tasks.notification_service")
 def test_send_notification_task(mock_service: Any) -> None:
     """Test the send_notification_task wrapper."""
     mock_service.notify = AsyncMock()
 
     # Mock self.loop.run_until_complete to just await the coro
-    with patch("api.apps.notification.v0.tasks.celery_app") as mock_app:
+    with patch("api.apps.notification.tasks.celery_app") as mock_app:
         mock_loop = MagicMock()
         mock_app.main_loop = mock_loop
 
