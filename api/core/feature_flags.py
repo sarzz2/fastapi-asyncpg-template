@@ -44,7 +44,7 @@ feature_flag_service = FeatureFlagService.get_instance()
 
 def feature_enabled(feature_name: str, identity: str = None, traits: dict = None) -> Callable[[], bool]:
     """
-    Dependency factor to check if a feature is enabled.
+    Dependency factory to check if a feature is enabled.
     Usage: Depends(feature_enabled("my_feature", identity="user_123", traits={"role": "beta"}))
     """
 
