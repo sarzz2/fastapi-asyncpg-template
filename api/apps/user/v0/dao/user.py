@@ -2,12 +2,11 @@ import asyncio
 from typing import Any, List, Optional
 from uuid import UUID
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
 from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
-from api.core.i18n import trans
 
 
 class UserDAO:
@@ -285,7 +284,7 @@ class UserDAO:
         query = "UPDATE users SET hashed_password = $1, token_version = token_version + 1 WHERE id = $2"
         await self.db.execute(query, hashed_password, user_id)
 
-    async def revoke_user_session(self, current_user_id: UUID, jti: str) -> int:
+    async def revoke_user_session(self, current_user_id: UUID, jti: str) -> Optional[int]:
         """
         Revoke a user session by its JTI.
 
@@ -304,7 +303,7 @@ class UserDAO:
         """
         row = await self.db.fetchval(query, jti, current_user_id)
         if not row:
-            raise HTTPException(status_code=404, detail=trans("user.session_not_found"))
+            return None
         return int(row)
 
     async def get_user_sessions(

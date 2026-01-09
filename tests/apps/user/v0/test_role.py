@@ -12,6 +12,45 @@ from api.core.redis import redis_client
 from api.shared.redis_keys import RedisKeys
 
 
+async def _setup_admin_with_perms(client: AsyncClient, db: DataBase, short_id: str, email: str, password: str) -> dict:
+    """Helper to setup admin user with permissions"""
+    user_dao = UserDAO(db)
+    role_dao = RoleDAO(db)
+
+    # Register
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": email, "email": email, "password": password, "full_name": "Admin User"},
+    )
+    admin_user = await user_dao.get_by_email(email)
+    assert admin_user is not None
+
+    # Create required permissions
+    perms = ["roles:read", "roles:create"]
+    perm_ids = []
+    for p in perms:
+        await db.execute(
+            "INSERT INTO permissions (name, description) VALUES ($1, 'Test Perm') "
+            "ON CONFLICT (name) DO UPDATE SET description = EXCLUDED.description RETURNING id",
+            p,
+        )
+        rec = await db.fetch("SELECT id FROM permissions WHERE name = $1", p, fetch_row=True)
+        assert rec is not None
+        perm_ids.append(rec["id"])
+
+    # Create admin role and assign
+    admin_role = await role_dao.create_role(
+        RoleCreate(name=f"Admin_{short_id}", description="Admin Role", permission_ids=perm_ids)
+    )
+    await user_dao.assign_roles(admin_user.id, [admin_role.id])
+
+    # Login
+    login_response = await client.post("/api/v0/auth/login", json={"username": email, "password": password})
+    token = login_response.json()["token"]["access_token"]
+
+    return {"token": token, "user": admin_user}
+
+
 @pytest.mark.asyncio
 async def test_role_lifecycle(client: AsyncClient) -> None:  # pylint: disable=too-many-locals,too-many-statements
     """
@@ -113,3 +152,53 @@ async def test_role_lifecycle(client: AsyncClient) -> None:  # pylint: disable=t
     # Check if key is deleted
     cached_val = await redis_client.client.hget(RedisKeys.ROLES_CACHE, field)  # type: ignore
     assert cached_val is None
+
+
+@pytest.mark.asyncio
+async def test_role_pagination(client: AsyncClient) -> None:
+    """
+    Test cursor-based pagination for roles and permissions.
+    """
+    # Setup: Create Admin User
+    db = DataBase()
+    role_dao = RoleDAO(db)
+
+    short_id = uuid4().hex[:8]
+    email = f"admin_pag_{short_id}@test.com"
+    password = "password123"
+
+    # Setup: Create Admin User and Role logic extracted
+    admin_setup = await _setup_admin_with_perms(client, db, short_id, email, password)
+    admin_token = admin_setup["token"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Create multiple roles for pagination testing
+    # Create 5 roles
+    for i in range(5):
+        await role_dao.create_role(
+            RoleCreate(name=f"PagRole_{i}_{short_id}", description=f"Pagination Role {i}", permission_ids=[])
+        )
+
+    # 2. Test List Roles Pagination
+
+    # Page 1: First 2 roles
+    resp = await client.get("/api/v0/roles?first=2", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 2
+    assert data["page_info"]["end_cursor"] is not None
+    cursor = data["page_info"]["end_cursor"]
+
+    # Page 2: Next 2 roles
+    resp = await client.get(f"/api/v0/roles?first=2&after={cursor}", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 2
+    assert data["page_info"]["end_cursor"] is not None
+
+    # 3. Test List Permissions Pagination (Assuming perms exist from setup)
+    resp = await client.get("/api/v0/roles/permissions?first=1", headers=headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data["items"]) == 1
+    assert data["page_info"]["end_cursor"] is not None

@@ -1,6 +1,6 @@
 # pylint: disable=duplicate-code
 import asyncio
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 from fastapi import Depends
@@ -19,13 +19,16 @@ class RoleDAO:
         self.db = db
 
     @cache(key_pattern=RedisKeys.ROLE_FIELD_ALL, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
-    async def get_all_roles(self) -> List[RoleData]:
+    async def get_all_roles(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[RoleData]:
         """
         Retrieve all roles with their permissions.
+        Args:
+            limit: Limit the number of roles.
+            cursor: Cursor for pagination (Role ID).
         Returns:
             List[RoleData]: List of roles.
         """
-        query = """
+        base_query = """
             SELECT
                 r.id,
                 r.name,
@@ -45,9 +48,17 @@ class RoleDAO:
             FROM roles r
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
-            GROUP BY r.id
         """
-        records = await self.db.fetch(query, fetch_row=False)
+        args: List[Any] = []
+        if cursor:
+            query = base_query + " WHERE r.id < $1 GROUP BY r.id ORDER BY r.id DESC LIMIT $2"
+            args.append(cursor)
+            args.append(limit)
+        else:
+            query = base_query + " GROUP BY r.id ORDER BY r.id DESC LIMIT $1"
+            args.append(limit)
+
+        records = await self.db.fetch(query, *args, fetch_row=False)
         if records is None:
             records = []
         return [RoleData.model_validate(dict(record)) for record in records]
@@ -224,14 +235,25 @@ class RoleDAO:
             self.db.execute("UPDATE users SET token_version = token_version + 1 WHERE id = $1", role_id),
         )
 
-    async def get_all_permissions(self) -> List[PermissionData]:
+    async def get_all_permissions(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[PermissionData]:
         """
         Retrieve all permissions.
+        Args:
+            limit: Limit the number of permissions.
+            cursor: Cursor for pagination (Permission ID).
         Returns:
             List[PermissionData]: List of permissions.
         """
-        query = "SELECT * FROM permissions"
-        return await self.db.fetch(query, model=PermissionData, fetch_row=False)
+        args: List[Any] = []
+        if cursor:
+            query = "SELECT * FROM permissions WHERE id < $1 ORDER BY id DESC LIMIT $2"
+            args.append(cursor)
+            args.append(limit)
+        else:
+            query = "SELECT * FROM permissions ORDER BY id DESC LIMIT $1"
+            args.append(limit)
+
+        return await self.db.fetch(query, *args, model=PermissionData, fetch_row=False)
 
 
 async def get_role_dao(db: DataBase = Depends(get_db)) -> RoleDAO:

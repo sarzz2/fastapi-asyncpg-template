@@ -67,6 +67,9 @@ app = FastAPI(
     version=settings.PROJECT_VERSION,
     lifespan=lifespan,
     default_response_class=ORJSONResponse,
+    docs_url=None if settings.ENV == Environments.PROD.value else "/docs",
+    redoc_url=None if settings.ENV == Environments.PROD.value else "/redoc",
+    openapi_url=None if settings.ENV == Environments.PROD.value else "/openapi.json",
 )
 
 # Initialize Rate Limiter

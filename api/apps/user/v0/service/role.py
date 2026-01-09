@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -14,11 +14,16 @@ class RoleService:
     def __init__(self, role_dao: RoleDAO):
         self.role_dao = role_dao
 
-    async def get_all_roles(self) -> List[RoleData]:
+    async def get_all_roles(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[RoleData]:
         """
         Get all roles.
+        Args:
+            limit: Limit the number of roles.
+            cursor: Cursor for pagination.
+        Returns:
+            List[RoleData]: List of roles.
         """
-        return await self.role_dao.get_all_roles()
+        return await self.role_dao.get_all_roles(limit=limit, cursor=cursor)
 
     async def get_role_by_id(self, role_id: UUID) -> RoleData:
         """
@@ -85,13 +90,16 @@ class RoleService:
         await self.get_role_by_id(role_id)
         await self.role_dao.delete_role(role_id)
 
-    async def get_all_permissions(self) -> List[PermissionData]:
+    async def get_all_permissions(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[PermissionData]:
         """
         Get all permissions.
+        Args:
+            limit: Limit the number of permissions.
+            cursor: Cursor for pagination.
         Returns:
             List[PermissionData]: List of all permissions.
         """
-        return await self.role_dao.get_all_permissions()
+        return await self.role_dao.get_all_permissions(limit=limit, cursor=cursor)
 
 
 async def get_role_service(role_dao: RoleDAO = Depends(get_role_dao)) -> RoleService:

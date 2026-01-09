@@ -310,6 +310,8 @@ class AuthService:
             None
         """
         ttl = await self._user_dao.revoke_user_session(user_id, jti)
+        if ttl is None:
+            raise HTTPException(status_code=404, detail=trans("user.session_not_found"))
         await asyncio.gather(
             self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),

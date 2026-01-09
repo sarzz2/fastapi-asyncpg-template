@@ -1,4 +1,3 @@
-from typing import List
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Security, status
@@ -7,32 +6,43 @@ from api.apps.user.schemas.role import PermissionData, RoleCreate, RoleData, Rol
 from api.apps.user.schemas.user import UserData
 from api.apps.user.v0.service.role import RoleService, get_role_service
 from api.core.dependencies import get_current_user
+from api.core.pagination import Page, PaginationParams, apply_cursor_pagination
 
 router = APIRouter()
 
 
-@router.get("/permissions", response_model=List[PermissionData])
+@router.get("/permissions", response_model=Page[PermissionData])
 async def get_permissions(
+    pagination: PaginationParams = Depends(),
     service: RoleService = Depends(get_role_service),
     _current_user: UserData = Security(get_current_user, scopes=["roles:read"]),
-) -> List[PermissionData]:
+) -> Page[PermissionData]:
     """
     Get all permissions.
     Requires 'roles:read' scope.
     """
-    return await service.get_all_permissions()
+    return await apply_cursor_pagination(
+        fetch_func=service.get_all_permissions,
+        params=pagination,
+        get_cursor_value=lambda x: str(x.id),
+    )
 
 
-@router.get("", response_model=List[RoleData])
+@router.get("", response_model=Page[RoleData])
 async def get_roles(
+    pagination: PaginationParams = Depends(),
     service: RoleService = Depends(get_role_service),
     _current_user: UserData = Security(get_current_user, scopes=["roles:read"]),
-) -> List[RoleData]:
+) -> Page[RoleData]:
     """
     Get all roles.
     Requires 'roles:read' scope.
     """
-    return await service.get_all_roles()
+    return await apply_cursor_pagination(
+        fetch_func=service.get_all_roles,
+        params=pagination,
+        get_cursor_value=lambda x: str(x.id),
+    )
 
 
 @router.get("/{role_id}", response_model=RoleData)
