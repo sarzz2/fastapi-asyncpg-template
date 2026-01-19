@@ -100,3 +100,31 @@ async def test_verify_token_blacklisted() -> None:
     with pytest.raises(HTTPException) as exc:
         await verify_token(token, mock_redis)
     assert "revoked" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_verify_refresh_token_blacklisted() -> None:
+    """Test refresh token verification with blacklisted token."""
+    data = {"sub": "user", "id": "1"}
+    token = create_refresh_token(data)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = "blacklisted"
+
+    with pytest.raises(HTTPException) as exc:
+        await verify_token(token, mock_redis, token_type=TokenTypes.REFRESH.value)
+    assert "revoked" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_verify_sudo_token_blacklisted() -> None:
+    """Test sudo token verification with blacklisted token."""
+    data = {"sub": "user", "id": "1"}
+    token = create_sudo_token(data)
+
+    mock_redis = AsyncMock()
+    mock_redis.get.return_value = "blacklisted"
+
+    with pytest.raises(HTTPException) as exc:
+        await verify_token(token, mock_redis, token_type=TokenTypes.SUDO.value)
+    assert "revoked" in exc.value.detail

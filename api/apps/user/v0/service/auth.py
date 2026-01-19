@@ -52,12 +52,14 @@ class AuthService:
             return username
 
         # Append random suffix until unique
+        attempts = 0
         while True:
+            attempts += 1
+            if attempts > 100:
+                raise ValueError("Could not generate a unique username after 100 attempts.")
+
             suffix = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(4))
             new_username = f"{username}-{suffix}"
-            if not await self._user_dao.get_by_username(new_username):
-                return new_username
-
             if not await self._user_dao.get_by_username(new_username):
                 return new_username
 

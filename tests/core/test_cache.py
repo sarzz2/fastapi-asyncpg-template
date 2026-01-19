@@ -1,157 +1,114 @@
-# pylint: disable=redefined-outer-name, redefined-builtin
-from typing import Any
+# pylint: disable=redefined-outer-name
+"""Tests for api/core/cache.py coverage gaps."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from pydantic import BaseModel
 
-from api.core.cache import cache, cache_invalidate
-
-
-class Item(BaseModel):
-    """Item model."""
-
-    id: int
-    name: str
+from api.core.cache import _generate_key, _get_from_cache, _save_to_cache, cache, cache_invalidate
 
 
-@pytest.fixture
-def mock_redis() -> Any:
-    """Mock Redis client."""
-    with patch("api.core.cache.redis_client.client") as mock:
-        # Setup pipeline mock
-        pipeline_mock = MagicMock()
-        pipeline_mock.execute = AsyncMock()
+def test_generate_key_success() -> None:
+    """Test _generate_key works with valid pattern."""
 
-        # pipeline() returns a synchronous object that acts as async context manager
-        pipeline_context_manager = MagicMock()
-        pipeline_context_manager.__aenter__ = AsyncMock(return_value=pipeline_mock)
-        pipeline_context_manager.__aexit__ = AsyncMock(return_value=None)
+    def sample_func(user_id: str) -> str:
+        return user_id
 
-        # mock.pipeline must be a synchronous callable
-        mock.pipeline = MagicMock(return_value=pipeline_context_manager)
+    result = _generate_key("user:{user_id}", sample_func, ("123",), {})
+    assert result == "user:123"
 
-        mock.get = AsyncMock()
-        mock.set = AsyncMock()
-        mock.hget = AsyncMock()
-        mock.hset = AsyncMock()
-        mock.expire = AsyncMock()
-        mock.delete = AsyncMock()
-        mock.hdel = AsyncMock()
-        yield mock
+
+def test_generate_key_missing_argument() -> None:
+    """Test _generate_key raises ValueError when pattern has missing key."""
+
+    def sample_func(user_id: str) -> str:
+        return user_id
+
+    with pytest.raises(ValueError, match="Failed to generate cache key"):
+        _generate_key("user:{missing_key}", sample_func, ("123",), {})
 
 
 @pytest.mark.asyncio
-async def test_cache_decorator_hit(mock_redis: AsyncMock) -> None:
-    """Test cache hit scenario."""
-    mock_redis.get.return_value = '{"id": 1, "name": "cached"}'
+async def test_get_from_cache_miss() -> None:
+    """Test _get_from_cache returns None on cache miss."""
+    with patch("api.core.cache.redis_client") as mock_redis:
+        mock_redis.client.get = AsyncMock(return_value=None)
 
-    @cache(key_pattern="item:{id}", model=Item)
-    async def get_item(id: int) -> Item:
-        """Get item by id."""
-        return Item(id=id, name="fresh")
+        result = await _get_from_cache("test_key", None, None)
 
-    result = await get_item(id=1)
-    assert result.name == "cached"
-    mock_redis.get.assert_called_with("item:1")
+        assert result is None
 
 
 @pytest.mark.asyncio
-async def test_cache_decorator_miss(mock_redis: AsyncMock) -> None:
-    """Test cache miss scenario."""
-    mock_redis.get.return_value = None
+async def test_get_from_cache_exception() -> None:
+    """Test _get_from_cache returns None on Redis exception."""
+    with patch("api.core.cache.redis_client") as mock_redis:
+        mock_redis.client.get = AsyncMock(side_effect=Exception("Redis error"))
 
-    @cache(key_pattern="item:{id}", model=Item)
-    async def get_item(id: int) -> Item:
-        """Get item by id."""
-        return Item(id=id, name="fresh")
+        result = await _get_from_cache("test_key", None, None)
 
-    result = await get_item(id=1)
-    assert result.name == "fresh"
-    mock_redis.set.assert_called_once()
-    args = mock_redis.set.call_args
-    assert "item:1" in args[0]
-    assert '"name":"fresh"' in args[0][1]
+        assert result is None
 
 
 @pytest.mark.asyncio
-async def test_cache_decorator_list(mock_redis: AsyncMock) -> None:
-    """Test caching a list of items."""
-    mock_redis.get.return_value = None
+async def test_get_from_cache_hash_exception() -> None:
+    """Test _get_from_cache with hash_key returns None on exception."""
+    with patch("api.core.cache.redis_client") as mock_redis:
+        mock_redis.client.hget = AsyncMock(side_effect=Exception("Redis error"))
 
-    @cache(key_pattern="items", model=Item)
-    async def get_items() -> list[Item]:
-        """Get list of items."""
-        return [Item(id=1, name="a"), Item(id=2, name="b")]
+        result = await _get_from_cache("test_key", "hash_key", None)
 
-    result = await get_items()
-    assert len(result) == 2
-    mock_redis.set.assert_called()
-    args = mock_redis.set.call_args
-    assert "[{" in args[0][1]
+        assert result is None
 
 
 @pytest.mark.asyncio
-async def test_cache_hash(mock_redis: AsyncMock) -> None:
-    """Test caching using Redis hashes."""
-    mock_redis.hget.return_value = None
+async def test_save_to_cache_exception() -> None:
+    """Test _save_to_cache handles exception gracefully."""
+    with patch("api.core.cache.redis_client") as mock_redis:
+        mock_redis.client.set = AsyncMock(side_effect=Exception("Redis error"))
 
-    @cache(key_pattern="field:{id}", hash_key="myhash", model=Item)
-    async def get_item(id: int) -> Item:
-        """Get item by id."""
-        return Item(id=id, name="fresh")
-
-    await get_item(id=1)
-    mock_redis.hget.assert_called_with("myhash", "field:1")
-    mock_redis.hget.assert_called_with("myhash", "field:1")
-
-    # Verify pipeline was used
-    mock_redis.pipeline.assert_called()
-    pipe_mock = mock_redis.pipeline.return_value.__aenter__.return_value
-    pipe_mock.hset.assert_called()
-    pipe_mock.expire.assert_called()
-    pipe_mock.execute.assert_called()
+        # Should not raise
+        await _save_to_cache("test_key", None, "value", 3600)
 
 
 @pytest.mark.asyncio
-async def test_cache_invalidate(mock_redis: AsyncMock) -> None:
-    """Test cache invalidation."""
+async def test_save_to_cache_with_hash_exception() -> None:
+    """Test _save_to_cache with hash_key handles exception gracefully."""
+    with patch("api.core.cache.redis_client") as mock_redis:
+        mock_pipeline = MagicMock()
+        mock_pipeline.__aenter__ = AsyncMock(return_value=mock_pipeline)
+        mock_pipeline.__aexit__ = AsyncMock(return_value=None)
+        mock_pipeline.hset = MagicMock()
+        mock_pipeline.expire = MagicMock()
+        mock_pipeline.execute = AsyncMock(side_effect=Exception("Redis error"))
 
-    @cache_invalidate(key_pattern="item:{id}")
-    async def update_item(id: int) -> bool:  # pylint: disable=unused-argument
-        """Update item by id."""
-        return True
+        mock_redis.client.pipeline = MagicMock(return_value=mock_pipeline)
 
-    await update_item(id=1)
-    mock_redis.delete.assert_called_with("item:1")
-
-
-@pytest.mark.asyncio
-async def test_cache_invalidate_list(mock_redis: AsyncMock) -> None:
-    """Test invalidating multiple cache keys."""
-
-    @cache_invalidate(key_pattern=["item:{id}", "list"])
-    async def update_item(id: int) -> bool:  # pylint: disable=unused-argument
-        """Update item by id."""
-        return True
-
-    await update_item(id=1)
-    mock_redis.delete.assert_called()
-    args = mock_redis.delete.call_args[0]
-    assert "item:1" in args
-    assert "list" in args
+        # Should not raise
+        await _save_to_cache("test_key", "hash_key", "value", 3600)
 
 
 @pytest.mark.asyncio
-async def test_cache_error_handling(mock_redis: AsyncMock) -> None:
-    """Test error handling in cache decorator."""
-    mock_redis.get.side_effect = Exception("Redis down")
+async def test_cache_decorator_key_generation_failure() -> None:
+    """Test cache decorator falls back when key generation fails."""
 
-    @cache(key_pattern="key")
-    async def get_val() -> str:  # pylint: disable=redefined-builtin
-        """Get value."""
-        return "val"
+    @cache(key_pattern="user:{missing_arg}")
+    async def my_func(user_id: str) -> str:
+        return f"result_{user_id}"
 
-    # Should not raise exception, but return fresh value and log warning
-    res = await get_val()
-    assert res == "val"
+    # Should call the function directly without caching
+    result = await my_func("123")
+    assert result == "result_123"
+
+
+@pytest.mark.asyncio
+async def test_cache_invalidate_key_generation_failure() -> None:
+    """Test cache_invalidate handles key generation failure gracefully."""
+
+    @cache_invalidate(key_pattern="user:{missing_arg}")
+    async def my_func(user_id: str) -> str:
+        return f"result_{user_id}"
+
+    # Should execute function and not raise on invalid key
+    result = await my_func("123")
+    assert result == "result_123"

@@ -60,6 +60,7 @@ repos:
                 - secure
                 - sentry-sdk
                 - flagsmith
+                - tenacity
 
           - id: mypy
             name: mypy
@@ -88,6 +89,7 @@ repos:
                 - secure
                 - sentry-sdk
                 - flagsmith
+                - tenacity
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0

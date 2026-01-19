@@ -1,14 +1,17 @@
+# pylint: disable=too-many-arguments
 import asyncio
 import json
 import logging
 import re
 import time
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, ClassVar, Dict, List, Literal, Optional, Type, TypeVar, Union, cast, overload
 
 import asyncpg
 from asyncpg import Connection, Pool, Record, create_pool
 from pydantic import BaseModel
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from api.core.config import settings
 from api.core.metrics import (
@@ -24,6 +27,16 @@ log = logging.getLogger("fastapi")
 
 
 T = TypeVar("T", bound=BaseModel)
+
+_clean_query_regex = re.compile(r"\s+")
+_db_retry_strategy = retry(
+    stop=stop_after_attempt(3),
+    wait=wait_fixed(0.5),
+    retry=retry_if_exception_type(
+        (asyncpg.InterfaceError, asyncpg.CannotConnectNowError, asyncpg.ConnectionDoesNotExistError, OSError)
+    ),
+    reraise=True,
+)
 
 
 class CustomRecord(Record):
@@ -417,25 +430,19 @@ class DataBase(BaseModel):
         client_region = CLIENT_REGION.get()
         return await cls._select_read_pool(client_region=client_region)
 
+    @classmethod
+    @asynccontextmanager
+    async def transaction(cls, use_primary: bool = True) -> AsyncGenerator[Connection, None]:
+        """Context manager for database transactions."""
+        pool, _ = await cls.get_pool(use_primary)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                yield conn
+
     @staticmethod
     def clean_query(query: str) -> str:
-        """Clean and normalize a SQL query string for logging purposes.
-
-        This method processes a SQL query string by:
-        - Removing leading and trailing whitespace
-        - Replacing multiple spaces and newlines with a single space
-
-        Args:
-            query (str): The SQL query string to clean
-
-        Returns:
-            str: The cleaned and normalized query string
-
-        Note:
-            This is primarily used for logging to make query logs more readable
-            and consistent.
-        """
-        return re.sub(r"\s+", " ", query.strip())
+        """Clean and normalize a SQL query string for logging purposes."""
+        return _clean_query_regex.sub(" ", query.strip())
 
     @overload
     @classmethod
@@ -445,6 +452,8 @@ class DataBase(BaseModel):
         *args: Any,
         model: Type[T],
         fetch_row: Literal[True],
+        timeout: float = settings.DB_TIMEOUT,
+        log_explain: bool = False,
     ) -> Optional[T]: ...
 
     @overload
@@ -455,6 +464,8 @@ class DataBase(BaseModel):
         *args: Any,
         model: Type[T],
         fetch_row: Literal[False],
+        timeout: float = settings.DB_TIMEOUT,
+        log_explain: bool = False,
     ) -> List[T]: ...
 
     @overload
@@ -465,6 +476,8 @@ class DataBase(BaseModel):
         *args: Any,
         model: None = None,
         fetch_row: Literal[True] = ...,
+        timeout: float = settings.DB_TIMEOUT,
+        log_explain: bool = False,
     ) -> Optional[Record]: ...
 
     @overload
@@ -475,15 +488,20 @@ class DataBase(BaseModel):
         *args: Any,
         model: None = None,
         fetch_row: Literal[False] = ...,
+        timeout: float = settings.DB_TIMEOUT,
+        log_explain: bool = False,
     ) -> List[Record]: ...
 
     @classmethod
+    @_db_retry_strategy
     async def fetch(
         cls: Type[BM],
         query: str,
         *args: Any,
         model: Optional[Type[T]] = None,
         fetch_row: bool = False,
+        timeout: float = settings.DB_TIMEOUT,
+        log_explain: bool = False,
     ) -> Union[Optional[T], List[T], Optional[Record], List[Record]]:
         """Execute a read query using read replicas.
 
@@ -492,14 +510,24 @@ class DataBase(BaseModel):
             *args: Query parameters to bind
             model: The Pydantic model to convert the result(s) to.
             fetch_row: If True, fetch single row
+            timeout: Query timeout in seconds
+            log_explain: If True, log EXPLAIN output
 
         Returns:
             Model instance(s) or Record(s) based on parameters.
         """
         pool, region = await cls.get_pool(use_primary=False)
+
+        if log_explain:
+            try:
+                explain_res = await pool.fetch(f"EXPLAIN {query}", *args, timeout=timeout)
+                log.info("EXPLAIN %s: %s", cls.clean_query(query), explain_res)
+            except Exception as e:  # pylint: disable=broad-except
+                log.warning("Failed to EXPLAIN query: %s", e)
+
         start_time = time.perf_counter()
         if fetch_row:
-            record = await pool.fetchrow(query, *args)
+            record = await pool.fetchrow(query, *args, timeout=timeout)
             duration = time.perf_counter() - start_time
             log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
 
@@ -510,7 +538,7 @@ class DataBase(BaseModel):
 
             return model.model_construct(**record.dict()) if model and record else record
 
-        records = await pool.fetch(query, *args)
+        records = await pool.fetch(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
         log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
 
@@ -528,6 +556,7 @@ class DataBase(BaseModel):
         query: str,
         *args: Any,
         model: Type[T],
+        timeout: float = settings.DB_TIMEOUT,
     ) -> T: ...
 
     @overload
@@ -537,14 +566,17 @@ class DataBase(BaseModel):
         query: str,
         *args: Any,
         model: None = None,
+        timeout: float = settings.DB_TIMEOUT,
     ) -> Record: ...
 
     @classmethod
+    @_db_retry_strategy
     async def write(
         cls: Type[BM],
         query: str,
         *args: Any,
         model: Optional[Type[T]] = None,
+        timeout: float = settings.DB_TIMEOUT,
     ) -> Union[T, Record]:
         """Execute a write query using primary pool with results.
 
@@ -552,13 +584,14 @@ class DataBase(BaseModel):
             query: The SQL query to execute
             args: Query parameters to bind
             model: The Pydantic model to convert the result to.
+            timeout: Query timeout in seconds
 
         Returns:
-            Model instance or Record if successful, None if no results.
+            Model instance or Record if successful, None if results.
         """
         pool, _ = await cls.get_pool(use_primary=True)
         start_time = time.perf_counter()
-        record = await pool.fetchrow(query, *args)
+        record = await pool.fetchrow(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
         log.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
 
@@ -572,6 +605,7 @@ class DataBase(BaseModel):
         return None
 
     @classmethod
+    @_db_retry_strategy
     async def fetchval(
         cls,
         query: str,
@@ -579,6 +613,7 @@ class DataBase(BaseModel):
         con: Optional[Union[Connection, Pool]] = None,
         column: int = 0,
         use_primary: bool = False,
+        timeout: float = settings.DB_TIMEOUT,
     ) -> Any:
         """Execute a query and return a single value.
 
@@ -592,6 +627,7 @@ class DataBase(BaseModel):
                 If None, an appropriate pool will be selected.
             column (int, default=0): Zero-based index of the column to return
             use_primary (bool, default=False): If True, forces use of write pool
+            timeout (float): Query timeout in seconds
 
         Returns:
             Any: The value from the specified column of the first row, or None if no rows
@@ -607,13 +643,20 @@ class DataBase(BaseModel):
             con, region = await cls.get_pool(use_primary=use_primary)
 
         start_time = time.perf_counter()
-        value = await con.fetchval(query, *args, column=column)
+        value = await con.fetchval(query, *args, column=column, timeout=timeout)
         duration = time.perf_counter() - start_time
         log.debug("Running query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
         return value
 
     @classmethod
-    async def execute(cls, query: str, *args: Any, con: Optional[Union[Connection, Pool]] = None) -> str:
+    @_db_retry_strategy
+    async def execute(
+        cls,
+        query: str,
+        *args: Any,
+        con: Optional[Union[Connection, Pool]] = None,
+        timeout: float = settings.DB_TIMEOUT,
+    ) -> str:
         """Execute a query that modifies the database.
 
         This method executes a SQL query that modifies the database (INSERT, UPDATE,
@@ -623,6 +666,7 @@ class DataBase(BaseModel):
             query (str): The SQL query to execute
             args: Query parameters to bind
             con: Specific connection or pool to use. If None, the primary write pool will be used.
+            timeout (float): Query timeout in seconds
 
         Returns:
             str: The command completion tag (e.g., "INSERT 0 1")
@@ -642,7 +686,7 @@ class DataBase(BaseModel):
             con = cls.write_pool
 
         start_time = time.perf_counter()
-        result = await con.execute(query, *args)
+        result = await con.execute(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
         log.debug("Running query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
         return str(result)

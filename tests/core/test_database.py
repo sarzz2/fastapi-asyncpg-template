@@ -213,3 +213,22 @@ async def test_health_check_loop_logic() -> None:
     # Check if healthy status was updated
     assert DataBase.read_pools_by_region["us-east"][0].healthy is True
     mock_conn.fetchval.assert_called_with("SELECT 1")
+
+
+@pytest.mark.asyncio
+async def test_database_error_handling() -> None:
+    """Test error handling in execute and fetch."""
+    mock_pool = MagicMock()
+    mock_pool.execute.side_effect = Exception("DB Error")
+    mock_pool.fetch.side_effect = Exception("Fetch Error")
+
+    DataBase.write_pool = mock_pool
+
+    with pytest.raises(Exception):
+        await DataBase.execute("SELECT 1")
+
+    # Test get_pool error when NO pools
+    DataBase.write_pool = None
+    DataBase.read_pools_by_region = {}
+    with pytest.raises(RuntimeError):
+        await DataBase.fetch("SELECT 1")

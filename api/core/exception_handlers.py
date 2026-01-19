@@ -60,8 +60,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         if fields and values:
             field_value_pairs = ", ".join(f"{f}='{v}'" for f, v in zip(fields, values))
             detail_msg = f"A record with {field_value_pairs} already exists."
-        elif fields:
-            detail_msg = f"A record with {', '.join(fields)} value already exists."
         else:
             detail_msg = "A record with the same value already exists."
         return ORJSONResponse(

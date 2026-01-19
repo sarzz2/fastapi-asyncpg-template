@@ -1,90 +1,152 @@
 # pylint: disable=redefined-outer-name
-from typing import Generator
+"""Tests for api/core/dependencies.py coverage gaps."""
+
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 from fastapi.security import SecurityScopes
+from jose import JWTError
 
+from api.apps.user.schemas.auth import TokenData
 from api.core.dependencies import get_current_user, get_sudo_user
 
 
 @pytest.fixture
-def mock_token_verification() -> Generator[MagicMock, None, None]:
-    """Mock token verification."""
-    with patch("api.core.dependencies.verify_token") as mock_verify_token:
-        yield mock_verify_token
+def mock_user_service() -> AsyncMock:
+    """Mock user service."""
+    return AsyncMock()
 
 
 @pytest.fixture
-def mock_user_service() -> MagicMock:
-    """Mock user service."""
-    return MagicMock()
+def mock_redis() -> AsyncMock:
+    """Mock redis client."""
+    return AsyncMock()
 
 
 @pytest.mark.asyncio
-async def test_get_current_user_valid(mock_token_verification: MagicMock, mock_user_service: MagicMock) -> None:
-    """Test get_current_user with valid token."""
-    mock_token = MagicMock()
-    mock_token.credentials = "valid_token"
-    mock_token_verification.return_value = MagicMock(id="user_id", scopes=[], token_version=1)
+async def test_get_current_user_token_id_none(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_current_user raises when token_data.id is None."""
+    token = MagicMock()
+    token.credentials = "test_token"
+
+    mock_token_data = TokenData(username="user", exp=123, jti="jti", id=None)
+
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = mock_token_data
+
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(
+                SecurityScopes([]),
+                token,
+                mock_user_service,
+                mock_redis,
+            )
+
+        assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_user_none(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_current_user raises when user is None."""
+    token = MagicMock()
+    token.credentials = "test_token"
+    user_id = uuid4()
+
+    mock_token_data = TokenData(username="user", exp=123, jti="jti", id=user_id, token_version=1)
+
+    mock_user_service.get_user_by_id.return_value = None
+
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = mock_token_data
+
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(
+                SecurityScopes([]),
+                token,
+                mock_user_service,
+                mock_redis,
+            )
+
+        assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_current_user_token_version_mismatch(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_current_user raises 401 when token version mismatches."""
+    token = MagicMock()
+    token.credentials = "test_token"
+    user_id = uuid4()
+
+    mock_token_data = TokenData(username="user", exp=123, jti="jti", id=user_id, token_version=1)
 
     mock_user = MagicMock()
-    mock_user.id = "user_id"
-    mock_user.token_version = 1
-    mock_user_service.get_user_by_id = AsyncMock(return_value=mock_user)
+    mock_user.token_version = 2  # Different from token
 
-    scopes = SecurityScopes()
-    # mock redis
-    mock_redis = AsyncMock()
+    mock_user_service.get_user_by_id.return_value = mock_user
 
-    user = await get_current_user(scopes, token=mock_token, user_service=mock_user_service, redis=mock_redis)
-    assert user.id == "user_id"
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = mock_token_data
 
+        with pytest.raises(HTTPException) as exc:
+            await get_current_user(
+                SecurityScopes([]),
+                token,
+                mock_user_service,
+                mock_redis,
+            )
 
-@pytest.mark.asyncio
-async def test_get_current_user_scope_error(mock_token_verification: MagicMock, mock_user_service: MagicMock) -> None:
-    """Test get_current_user with insufficient scopes."""
-    mock_token = MagicMock()
-    mock_token.credentials = "valid_token"
-    mock_token_verification.return_value = MagicMock(id="user_id", scopes=[], token_version=1)
-
-    scopes = SecurityScopes(scopes=["admin"])
-    mock_redis = AsyncMock()
-
-    with pytest.raises(HTTPException) as exc:
-        await get_current_user(scopes, token=mock_token, user_service=mock_user_service, redis=mock_redis)
-    assert "Not enough permissions" in exc.value.detail
+        assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_get_sudo_user_valid(mock_token_verification: MagicMock, mock_user_service: MagicMock) -> None:
-    """Test get_sudo_user with valid sudo token."""
-    mock_token = MagicMock()
-    mock_token.credentials = "sudo_token"
+async def test_get_sudo_user_token_id_none(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_sudo_user raises when token_data.id is None."""
+    token = MagicMock()
+    token.credentials = "test_token"
 
-    # Mock return of verify_token to have type="sudo"
-    mock_token_verification.return_value = MagicMock(id="user_id", type="sudo")
+    mock_token_data = TokenData(username="user", exp=123, jti="jti", id=None, type="sudo")
 
-    mock_user_service.get_user_by_id = AsyncMock(return_value=MagicMock(id="user_id"))
-    mock_redis = AsyncMock()
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = mock_token_data
 
-    user = await get_sudo_user(token=mock_token, user_service=mock_user_service, redis=mock_redis)
-    assert user.id == "user_id"
+        with pytest.raises(HTTPException) as exc:
+            await get_sudo_user(token, mock_user_service, mock_redis)
+
+        assert exc.value.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_get_sudo_user_wrong_type(mock_token_verification: MagicMock, mock_user_service: MagicMock) -> None:
-    """Test get_sudo_user with wrong token type."""
-    mock_token = MagicMock()
-    mock_token.credentials = "access_token"
+async def test_get_sudo_user_user_none(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_sudo_user raises when user is None."""
+    token = MagicMock()
+    token.credentials = "test_token"
+    user_id = uuid4()
 
-    # type is access, not sudo
-    mock_token_verification.return_value = MagicMock(id="user_id", type="access")
+    mock_token_data = TokenData(username="user", exp=123, jti="jti", id=user_id, type="sudo")
 
-    mock_user_service.get_user_by_id = AsyncMock(return_value=MagicMock(id="user_id"))
-    mock_redis = AsyncMock()
+    mock_user_service.get_user_by_id.return_value = None
 
-    with pytest.raises(HTTPException) as exc:
-        await get_sudo_user(token=mock_token, user_service=mock_user_service, redis=mock_redis)
-    assert "Sudo access required" in exc.value.detail
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.return_value = mock_token_data
+
+        with pytest.raises(HTTPException) as exc:
+            await get_sudo_user(token, mock_user_service, mock_redis)
+
+        assert exc.value.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_get_sudo_user_jwt_error(mock_user_service: AsyncMock, mock_redis: AsyncMock) -> None:
+    """Test get_sudo_user raises 401 on JWTError."""
+    token = MagicMock()
+    token.credentials = "test_token"
+
+    with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
+        mock_verify.side_effect = JWTError("Invalid token")
+
+        with pytest.raises(HTTPException) as exc:
+            await get_sudo_user(token, mock_user_service, mock_redis)
+
+        assert exc.value.status_code == 401

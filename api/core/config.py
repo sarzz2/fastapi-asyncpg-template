@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     MIN_CONNECTION_COUNT: int = 1
     MAX_CONNECTION_COUNT: int = 10
     HEALTH_CHECK_INTERVAL: int = 30  # in seconds
+    DB_TIMEOUT: float = 30.0
     REGION_PRIORITY: list[str] = []
 
     REDIS_HOST: str = "localhost"
