@@ -120,15 +120,15 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
     """
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        user_id: str = payload.get("id")
-        exp: int = payload.get("exp")
-        jti: str = payload.get("jti")
-        jwt_token_type: str = payload.get("type")
+        username: Optional[str] = payload.get("sub")
+        user_id: Optional[str] = payload.get("id")
+        exp: Optional[int] = payload.get("exp")
+        jti: Optional[str] = payload.get("jti")
+        jwt_token_type: Optional[str] = payload.get("type")
         scopes: list[str] = payload.get("scopes", [])
         token_version: int = payload.get("token_version", 1)
 
-        if user_id is None or payload.get("type") != token_type:
+        if any(v is None for v in [username, user_id, exp, jti, jwt_token_type]) or jwt_token_type != token_type:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication credentials",

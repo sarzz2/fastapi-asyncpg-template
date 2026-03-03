@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
-from fastapi.responses import HTMLResponse, ORJSONResponse
+from fastapi.responses import HTMLResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pyinstrument import Profiler
 from slowapi import _rate_limit_exceeded_handler
@@ -66,7 +66,6 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.PROJECT_VERSION,
     lifespan=lifespan,
-    default_response_class=ORJSONResponse,
     docs_url=None if settings.ENV == Environments.PROD.value else "/docs",
     redoc_url=None if settings.ENV == Environments.PROD.value else "/redoc",
     openapi_url=None if settings.ENV == Environments.PROD.value else "/openapi.json",

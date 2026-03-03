@@ -6,7 +6,7 @@ from typing import Any
 import asyncpg
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exception_handlers import RequestValidationError
-from fastapi.responses import ORJSONResponse
+from fastapi.responses import JSONResponse
 from starlette.status import HTTP_422_UNPROCESSABLE_CONTENT, HTTP_500_INTERNAL_SERVER_ERROR
 
 # Get the configured logger
@@ -39,15 +39,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> ORJSONResponse:
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         logger.error("Validation error: %s", exc.errors())
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
             content={"detail": format_detail(exc.errors())},
         )
 
     @app.exception_handler(asyncpg.UniqueViolationError)
-    async def unique_violation_handler(request: Request, exc: asyncpg.UniqueViolationError) -> ORJSONResponse:
+    async def unique_violation_handler(request: Request, exc: asyncpg.UniqueViolationError) -> JSONResponse:
         logger.error("Unique violation error: %s", exc)
         # extract the key(s) and value(s) from exc.detail
         fields = None
@@ -62,7 +62,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             detail_msg = f"A record with {field_value_pairs} already exists."
         else:
             detail_msg = "A record with the same value already exists."
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=400,
             content={
                 "detail": detail_msg,
@@ -70,57 +70,57 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException) -> ORJSONResponse:
+    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
         logger.error("HTTP exception: %s - %s", exc.status_code, exc.detail)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=exc.status_code,
             content={"detail": format_detail(exc.detail)},
         )
 
     @app.exception_handler(ValueError)
-    async def value_error_handler(request: Request, exc: ValueError) -> ORJSONResponse:
+    async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
         logger.error("Value error: %s", exc)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=400,
             content={"detail": str(exc) or "Invalid value provided."},
         )
 
     @app.exception_handler(KeyError)
-    async def key_error_handler(request: Request, exc: KeyError) -> ORJSONResponse:
+    async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:
         logger.error("Key error: %s", exc)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=400,
             content={"detail": f"Missing key: {exc.args[0]}" if exc.args else "Missing key."},
         )
 
     @app.exception_handler(PermissionError)
-    async def permission_error_handler(request: Request, exc: PermissionError) -> ORJSONResponse:
+    async def permission_error_handler(request: Request, exc: PermissionError) -> JSONResponse:
         logger.error("Permission error: %s", exc)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=403,
             content={"detail": str(exc) or "Permission denied."},
         )
 
     @app.exception_handler(NotImplementedError)
-    async def not_implemented_error_handler(request: Request, exc: NotImplementedError) -> ORJSONResponse:
+    async def not_implemented_error_handler(request: Request, exc: NotImplementedError) -> JSONResponse:
         logger.error("Not implemented error: %s", exc)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=501,
             content={"detail": str(exc) or "Not implemented."},
         )
 
     @app.exception_handler(TypeError)
-    async def type_error_handler(request: Request, exc: TypeError) -> ORJSONResponse:
+    async def type_error_handler(request: Request, exc: TypeError) -> JSONResponse:
         logger.error("Type error: %s", exc, exc_info=True)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=400,
             content={"detail": str(exc) or "Type error."},
         )
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception) -> ORJSONResponse:
+    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         logger.error("Unhandled exception: %s", exc, exc_info=True)
-        return ORJSONResponse(
+        return JSONResponse(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             content={"detail": "Internal server error"},
         )
