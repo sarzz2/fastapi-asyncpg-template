@@ -184,6 +184,7 @@ app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.SECRET_KEY,
+    https_only=settings.ENV in [Environments.PROD.value, Environments.STAGING.value],
 )
 
 if settings.ENV in [Environments.PROD.value, Environments.STAGING.value]:

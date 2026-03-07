@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel
 
 from api.apps.user.schemas.user import UserData
+from api.utils.pydantic_utils import StrongPassword
 
 
 class UserLogin(BaseModel):
@@ -69,4 +70,4 @@ class OAuthSudoTokenRequest(BaseModel):
 class PasswordUpdateRequest(BaseModel):
     """Schema for password update request."""
 
-    password: str
+    password: StrongPassword

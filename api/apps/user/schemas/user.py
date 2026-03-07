@@ -6,7 +6,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from api.apps.user.schemas.role import RoleData
-from api.utils.pydantic_utils import generate_file_url
+from api.utils.pydantic_utils import StrongPassword, generate_file_url
 
 
 # Shared properties
@@ -22,7 +22,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for user creation request."""
 
-    password: Optional[str] = None
+    password: Optional[StrongPassword] = None
 
 
 class UserUpdate(BaseModel):

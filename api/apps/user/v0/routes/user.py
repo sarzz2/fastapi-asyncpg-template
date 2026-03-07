@@ -81,6 +81,23 @@ async def revoke_session(
     await svc.revoke_user_session(current_user.id, jti)
 
 
+@router.delete("/sessions", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_all_sessions(
+    current_user: UserData = Depends(get_current_user),
+    svc: UserService = Depends(get_user_service),
+) -> None:
+    """
+    Revoke all sessions for the current user.
+
+    Args:
+        current_user: The currently authenticated user
+        svc: User service dependency
+    Returns:
+        None
+    """
+    await svc.revoke_all_user_sessions(current_user.id)
+
+
 @router.get("/sessions", response_model=CursorPage[UserSessionData])
 async def get_sessions(
     limit: int = Query(10, ge=1, le=100),

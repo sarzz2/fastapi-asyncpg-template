@@ -112,6 +112,35 @@ class UserService:
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
         )
 
+    async def revoke_all_user_sessions(self, current_user_id: UUID) -> None:
+        """
+        Revoke all user sessions.
+
+        Args:
+            current_user_id: The currently authenticated user id
+
+        Returns:
+            None
+        """
+        revoked_sessions = await self._user_dao.revoke_all_user_sessions(current_user_id)
+        if not revoked_sessions:
+            return
+
+        redis_tasks = []
+        for session in revoked_sessions:
+            jti = session["jti"]
+            ttl = session["ttl"]
+            if ttl is not None and ttl > 0:
+                redis_tasks.extend(
+                    [
+                        self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
+                        self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
+                    ]
+                )
+
+        if redis_tasks:
+            await asyncio.gather(*redis_tasks)
+
     async def get_user_sessions(
         self, user_id: UUID, limit: int = 10, cursor: Optional[UUID] = None
     ) -> CursorPage[UserSessionData]:

@@ -306,6 +306,24 @@ class UserDAO:
             return None
         return int(row)
 
+    async def revoke_all_user_sessions(self, current_user_id: UUID) -> List[dict]:
+        """
+        Revoke all sessions for a user.
+
+        Args:
+                current_user_id: The currently authenticated user id
+
+        Returns:
+                List[dict]: List of dictionaries containing 'jti' and 'ttl' for each revoked session.
+        """
+        query = """
+            DELETE FROM user_sessions
+            WHERE user_id = $1
+            RETURNING jti, (extract(epoch FROM expires_at) - extract(epoch FROM now()))::integer AS ttl;
+        """
+        records = await self.db.fetch(query, current_user_id, fetch_row=False)
+        return [dict(record) for record in records] if records else []
+
     async def get_user_sessions(
         self, user_id: UUID, limit: int, cursor: Optional[UUID] = None
     ) -> List[UserSessionData]:

@@ -43,10 +43,16 @@ class S3Service:
             if not content_type:
                 content_type, _ = mimetypes.guess_type(filename)
 
+            if content_type not in settings.ALLOWED_CONTENT_TYPES:
+                raise ValueError(
+                    f"Content-Type {content_type} is not allowed. "
+                    f"Allowed types: {', '.join(settings.ALLOWED_CONTENT_TYPES)}"
+                )
+
             # Conditions for the policy
             conditions = [
                 ["content-length-range", 0, 5242880],  # 0 to 5MB
-                ["starts-with", "$Content-Type", "image/"],  # Must be an image
+                {"Content-Type": content_type},  # Exact match for content type
                 {"x-amz-tagging": "status=temporary"},  # Must have this tag
             ]
 

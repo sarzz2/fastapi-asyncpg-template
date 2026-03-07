@@ -54,6 +54,8 @@ class Settings(BaseSettings):
         "http://localhost:5173",
     ]
 
+    ALLOWED_CONTENT_TYPES: list[str] = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
+
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
 
