@@ -6,8 +6,6 @@ from fastapi import HTTPException
 
 from api.constants import TokenTypes
 from api.core.auth import (
-    ALGORITHM,
-    SECRET_KEY,
     create_access_token,
     create_refresh_token,
     create_sudo_token,
@@ -15,6 +13,7 @@ from api.core.auth import (
     verify_password,
     verify_token,
 )
+from api.core.config import settings
 
 
 def test_password_hashing() -> None:
@@ -33,7 +32,7 @@ def test_create_access_token() -> None:
     assert "token" in token  # It returns a dict
     encoded = token["token"]
 
-    payload = jwt.decode(encoded, SECRET_KEY, algorithms=[ALGORITHM])
+    payload = jwt.decode(encoded, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
     assert payload["sub"] == "testuser"
     assert payload["type"] == TokenTypes.ACCESS.value
 

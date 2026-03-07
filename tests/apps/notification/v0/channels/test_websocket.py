@@ -1,5 +1,5 @@
-from typing import Any
-from unittest.mock import AsyncMock, patch
+from typing import Any, AsyncGenerator
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -11,9 +11,11 @@ from api.apps.notification.v0.channels.websocket import ConnectionManager
 
 
 @pytest.fixture
-def connection_manager() -> ConnectionManager:
+async def connection_manager(mock_redis_pubsub: Any) -> AsyncGenerator[ConnectionManager, None]:
     """Fixture for ConnectionManager."""
-    return ConnectionManager()
+    manager = ConnectionManager()
+    yield manager
+    await manager.stop()
 
 
 @pytest.fixture
@@ -26,8 +28,14 @@ def mock_websocket() -> AsyncMock:
 @pytest.fixture
 def mock_redis_pubsub() -> Any:
     """Fixture for Redis PubSub mock."""
-    with patch("api.apps.notification.v0.channels.websocket.redis_client") as mock_redis:
+    with patch("api.apps.notification.v0.channels.websocket.redis_socket") as mock_redis:
         mock_pubsub = AsyncMock()
+
+        # pubsub.listen() should return an async iterator
+        async def mock_listen_gen() -> AsyncGenerator[dict, None]:
+            yield {}
+
+        mock_pubsub.listen = MagicMock(return_value=mock_listen_gen())
         mock_redis.client.pubsub.return_value = mock_pubsub
         mock_redis.client.publish = AsyncMock()
         yield mock_pubsub, mock_redis
@@ -132,10 +140,10 @@ async def test_redis_listener_local_broadcast(
     mock_message = {"type": "message", "channel": "notifications:broadcast", "data": message_content}
 
     # Simulate receiving message
-    async def mock_listen() -> Any:
+    async def mock_listen_gen() -> Any:
         yield mock_message
 
-    mock_pubsub.listen.side_effect = mock_listen
+    mock_pubsub.listen = MagicMock(return_value=mock_listen_gen())
 
     # Manually trigger processing
     await connection_manager._local_broadcast(message_content)  # pylint: disable=protected-access

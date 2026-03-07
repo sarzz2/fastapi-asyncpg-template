@@ -1,111 +1,87 @@
-"""Tests for main application entrypoint."""
-# pylint: disable=redefined-outer-name, unused-argument, import-outside-toplevel
+"""
+Tests for the main application entry point, including lifespan management and global middlewares.
+"""
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import Request, Response
 from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 
-from api.main import app, lifespan
+from api.main import app, lifespan, log_requests
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """Create a TestClient."""
-    # We can mock the `lifespan` context manager itself or its internals.
+def test_client() -> TestClient:
+    """Provides a basic TestClient for the FastAPI app."""
     return TestClient(app)
 
 
-def test_health_check_status_ok() -> None:
-    """Test health check endpoint when all services are up."""
-    # Mock DataBase.health_check
+@pytest.mark.asyncio
+async def test_health_check_states() -> None:
+    """
+    Verify health check endpoint responses across various service statuses (up, down, degraded).
+    """
     with (
-        patch("api.main.DataBase.health_check", new_callable=AsyncMock) as mock_db_health,
-        patch("api.main.redis_client.health_check", new_callable=AsyncMock) as mock_redis_health,
+        patch("api.main.DataBase.health_check", new_callable=AsyncMock) as mock_db,
+        patch("api.main.redis_client.health_check", new_callable=AsyncMock) as mock_redis,
     ):
-        mock_db_health.return_value = {"primary": {"healthy_pools": 1, "total_pools": 1, "avg_latency": 0.01}}
-        mock_redis_health.return_value = True
+        # 1. Healthy State
+        mock_db.return_value = {"primary": {"healthy_pools": 1, "total_pools": 1, "avg_latency": 0.01}}
+        mock_redis.return_value = True
 
-        client = TestClient(app)
-        response = client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-        assert data["database"]["status"] == "up"
-        assert data["redis"]["status"] == "up"
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/health")
+            assert response.status_code == 200
+            assert response.json()["status"] == "ok"
+            assert response.json()["database"]["status"] == "up"
 
+            # 2. Database Down
+            mock_db.return_value = {"primary": {"healthy_pools": 0, "total_pools": 1, "avg_latency": 0.0}}
+            response = await client.get("/health")
+            assert response.json()["database"]["status"] == "down"
 
-def test_health_check_db_down() -> None:
-    """Test health check endpoint when database is down."""
-    with (
-        patch("api.main.DataBase.health_check", new_callable=AsyncMock) as mock_db_health,
-        patch("api.main.redis_client.health_check", new_callable=AsyncMock) as mock_redis_health,
-    ):
-        mock_db_health.return_value = {"primary": {"healthy_pools": 0, "total_pools": 1, "avg_latency": 0.0}}
-        mock_redis_health.return_value = True
-
-        client = TestClient(app)
-        response = client.get("/health")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["database"]["status"] == "down"
-
-
-def test_health_check_db_degraded() -> None:
-    """Test health check endpoint when database is degraded."""
-    with (
-        patch("api.main.DataBase.health_check", new_callable=AsyncMock) as mock_db_health,
-        patch("api.main.redis_client.health_check", new_callable=AsyncMock) as mock_redis_health,
-    ):
-        mock_db_health.return_value = {"primary": {"healthy_pools": 1, "total_pools": 2, "avg_latency": 0.01}}
-        mock_redis_health.return_value = True
-
-        client = TestClient(app)
-        response = client.get("/health")
-        data = response.json()
-        assert data["database"]["status"] == "degraded"
+            # 3. Database Degraded
+            mock_db.return_value = {"primary": {"healthy_pools": 1, "total_pools": 2, "avg_latency": 0.01}}
+            response = await client.get("/health")
+            assert response.json()["database"]["status"] == "degraded"
 
 
 @pytest.mark.asyncio
-async def test_log_requests_direct() -> None:
-    """Test log_requests middleware function directly."""
-    # Unit test middleware function directly
-    from fastapi import Request, Response
-
-    from api.main import log_requests
-
+async def test_request_logging_middleware() -> None:
+    """
+    Verify that the log_requests middleware correctly logs request lifecycle and errors.
+    """
     request = MagicMock(spec=Request)
-    request.method = "GET"
-    request.url = "http://test"
-    request.query_params = {}
+    request.method, request.url, request.query_params = "GET", "http://test", {}
 
-    async def call_next(req: Request) -> Response:
+    async def mock_next_success(_req: Request) -> Response:
         return Response(status_code=200)
 
-    with patch("api.main.logger") as mock_logger:
-        await log_requests(request, call_next)
-        # Should be called for request start and completion
-        assert mock_logger.info.call_count >= 2
-
-    async def call_next_error(req: Request) -> Response:
+    async def mock_next_failure(_req: Request) -> Response:
         return Response(status_code=500)
 
     with patch("api.main.logger") as mock_logger:
-        await log_requests(request, call_next_error)
+        await log_requests(request, mock_next_success)
+        assert mock_logger.info.call_count >= 2
+
+        # Should catch and log, not propagate
+        await log_requests(request, mock_next_failure)
         mock_logger.error.assert_called()
 
 
-def test_profile_request_middleware() -> None:
-    """Test profile request middleware."""
-    # Request with ?profile=true
-    # Mock Profiler
-    with patch("api.main.Profiler") as MockProfiler:
+def test_profiler_middleware(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
+    """
+    Verify that the profiling middleware activates when the profile query parameter is present.
+    """
+    with patch("api.main.Profiler") as MockProfiler, patch("api.main.settings") as mock_settings:
+        mock_settings.ENV = "dev"
+        mock_settings.PROFILER_ENABLED = True
         instance = MockProfiler.return_value
         instance.output_html.return_value = "<html>Profile</html>"
 
-        client = TestClient(app)
-        response = client.get("/health?profile=true")
-
+        response = test_client.get("/health?profile=true")
         assert response.status_code == 200
         assert instance.start.called
         assert instance.stop.called
@@ -113,50 +89,69 @@ def test_profile_request_middleware() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_success() -> None:
-    """Test lifespan startup and shutdown."""
-    # Test lifespan logic
-    mock_app = MagicMock()
-
+async def test_application_lifespan_lifecycle() -> None:
+    """
+    Verify that all core services (DB, Redis, EventBus) are correctly initialized and closed
+    during application lifespan.
+    """
     with (
         patch("api.main.DataBase") as MockDB,
-        patch("api.main.redis_client") as mock_redis,
-        patch("api.main.check_all_migrations_applied", new_callable=AsyncMock) as mock_migrate,
+        patch("api.main.redis_client") as m_cache,
+        patch("api.main.redis_socket") as m_sock,
+        patch("api.main.redis_event_bus") as m_eb_redis,
+        patch("api.main.event_bus") as m_eb,
+        patch("api.main.connection_manager") as m_conn,
+        patch("api.main.check_all_migrations_applied", new_callable=AsyncMock) as m_migrate,
         patch("api.main.logger"),
     ):
-        mock_migrate.return_value = True
-        mock_db_instance = MockDB.return_value
-        mock_db_instance.create_pool = AsyncMock()
-        mock_db_instance.close_pool = AsyncMock()
-        mock_redis.connect = AsyncMock()
-        mock_redis.close = AsyncMock()
+        m_migrate.return_value = True
+        db_inst = MockDB.return_value
 
-        async with lifespan(mock_app):
-            mock_db_instance.create_pool.assert_called_once()
-            mock_redis.connect.assert_called_once()
-            mock_migrate.assert_called_once()
+        # Setup async mocks for all lifecycle methods
+        db_inst.create_pool = AsyncMock()
+        db_inst.close_pool = AsyncMock()
+        m_cache.connect = AsyncMock()
+        m_cache.close = AsyncMock()
+        m_sock.connect = AsyncMock()
+        m_sock.close = AsyncMock()
+        m_eb_redis.connect = AsyncMock()
+        m_eb_redis.close = AsyncMock()
+        m_eb.start = AsyncMock()
+        m_eb.stop = AsyncMock()
+        m_conn.stop = AsyncMock()
 
-        mock_db_instance.close_pool.assert_called_once()
-        mock_redis.close.assert_called_once()
+        async with lifespan(MagicMock()):
+            db_inst.create_pool.assert_called_once()
+            m_migrate.assert_called_once()
+            m_eb.start.assert_called_once()
+
+        db_inst.close_pool.assert_called_once()
+        m_eb.stop.assert_called_once()
+        m_conn.stop.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_lifespan_migrations_failed() -> None:
-    """Test lifespan when migrations fail."""
-    mock_app = MagicMock()
-
+async def test_lifespan_failure_on_pending_migrations() -> None:
+    """
+    Verify that the application fails to start if there are pending database migrations.
+    """
     with (
         patch("api.main.DataBase") as MockDB,
-        patch("api.main.redis_client") as mock_redis,
-        patch("api.main.check_all_migrations_applied", new_callable=AsyncMock) as mock_migrate,
+        patch("api.main.redis_client") as m_cache,
+        patch("api.main.redis_socket") as m_sock,
+        patch("api.main.redis_event_bus") as m_eb_redis,
+        patch("api.main.event_bus") as m_eb,
+        patch("api.main.check_all_migrations_applied", new_callable=AsyncMock) as m_migrate,
         patch("api.main.logger"),
     ):
-        mock_migrate.return_value = False
-        mock_db_instance = MockDB.return_value
-        mock_db_instance.create_pool = AsyncMock()
-        mock_redis.connect = AsyncMock()
-        mock_redis.close = AsyncMock()  # Good practice to mock this too even if not reached depending on flow
+        m_migrate.return_value = False
+        db_inst = MockDB.return_value
+        db_inst.create_pool = AsyncMock()
+        m_cache.connect = AsyncMock()
+        m_sock.connect = AsyncMock()
+        m_eb_redis.connect = AsyncMock()
+        m_eb.start = AsyncMock()
 
-        with pytest.raises(RuntimeError, match="You have pending migrations"):
-            async with lifespan(mock_app):
+        with pytest.raises(RuntimeError, match="pending migrations"):
+            async with lifespan(MagicMock()):
                 pass

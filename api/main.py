@@ -17,6 +17,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from api.apps.api import api_router
+from api.apps.notification.v0.channels.websocket import connection_manager
 from api.constants import Environments
 from api.core.config import settings
 from api.core.database import DataBase
@@ -25,7 +26,7 @@ from api.core.exception_handlers import register_exception_handlers
 from api.core.i18n import I18nMiddleware
 from api.core.logging_config import configure_logging
 from api.core.rate_limit import limiter
-from api.core.redis import redis_client
+from api.core.redis import redis_client, redis_event_bus, redis_socket
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
 from migrate import check_all_migrations_applied
@@ -35,7 +36,7 @@ logger = configure_logging()
 
 @asynccontextmanager
 async def lifespan(
-    app: FastAPI,  # pylint: disable=unused-argument,redefined-outer-name
+    _app: FastAPI,
 ) -> AsyncGenerator[None, None]:
     """
     Lifespan context manager for FastAPI application.
@@ -53,6 +54,8 @@ async def lifespan(
     )
     logger.info("Database connected successfully")
     await redis_client.connect()
+    await redis_socket.connect()
+    await redis_event_bus.connect()
     event_bus.autodiscover()
     await event_bus.start()
     all_migrations_applied_check = await check_all_migrations_applied()
@@ -61,8 +64,11 @@ async def lifespan(
         raise RuntimeError("You have pending migrations")
     yield
     await event_bus.stop()
+    await connection_manager.stop()
     await database_instance.close_pool()
     await redis_client.close()
+    await redis_socket.close()
+    await redis_event_bus.close()
     logger.info("Database disconnected successfully")
 
 

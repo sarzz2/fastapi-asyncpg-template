@@ -8,7 +8,7 @@ from redis.asyncio.client import PubSub
 
 from api.core.events.constants import EventNames
 from api.core.events.schema import ApplicationEvent
-from api.core.redis import listen_to_pubsub, redis_client
+from api.core.redis import listen_to_pubsub, redis_event_bus
 
 logger = logging.getLogger("fastapi")
 
@@ -20,7 +20,7 @@ class EventBus:
 
     def __init__(self) -> None:
         self._subscribers: Dict[str, List[Callable[[ApplicationEvent], Any]]] = {}
-        self.pubsub: PubSub = redis_client.client.pubsub()
+        self.pubsub: PubSub = redis_event_bus.client.pubsub()
         self.listener_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
@@ -34,7 +34,7 @@ class EventBus:
         """Stops the Redis Pub/Sub listener."""
         if self.pubsub:
             await self.pubsub.unsubscribe("event_bus:broadcast")
-            await self.pubsub.close()
+            await self.pubsub.aclose()
         if self.listener_task:
             self.listener_task.cancel()
         logger.info("EventBus Redis listener stopped.")
@@ -125,7 +125,7 @@ class EventBus:
             event: The event to publish.
         """
         payload = event.model_dump_json()
-        await redis_client.client.publish("event_bus:broadcast", payload)
+        await redis_event_bus.client.publish("event_bus:broadcast", payload)
         logger.debug("Published %s to Redis EventBus.", event.event_name)
 
     async def _process_remote_event(self, raw_data: str) -> None:
@@ -138,7 +138,7 @@ class EventBus:
                 return
 
             lock_key = f"event_bus:lock:{event.event_id}"
-            acquired = await redis_client.client.set(lock_key, "1", nx=True, ex=60)
+            acquired = await redis_event_bus.client.set(lock_key, "1", nx=True, ex=60)
 
             if not acquired:
                 logger.debug("Event %s dropped. Lock already held by another worker.", event.event_id)

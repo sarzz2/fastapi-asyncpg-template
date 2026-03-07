@@ -33,21 +33,29 @@ def mock_postgres_db() -> Generator[MagicMock, None, None]:
 @pytest.mark.asyncio
 async def test_create_pool() -> None:
     """Test the creation of database pools."""
-    with patch("api.core.database.create_pool", new_callable=AsyncMock) as mock_create_pool:
-        mock_pool = MagicMock()
-        mock_create_pool.return_value = mock_pool
+    from api.core.database import settings
 
-        await DataBase.create_pool(
-            write_uri="postgres://write", read_uris={"us-east": ["postgres://read1"], "eu-west": ["postgres://read2"]}
-        )
+    original_interval = settings.HEALTH_CHECK_INTERVAL
+    settings.HEALTH_CHECK_INTERVAL = 0
+    try:
+        with patch("api.core.database.create_pool", new_callable=AsyncMock) as mock_create_pool:
+            mock_pool = MagicMock()
+            mock_create_pool.return_value = mock_pool
 
-        assert DataBase.write_pool is not None
-        assert "us-east" in DataBase.read_pools_by_region
-        assert "eu-west" in DataBase.read_pools_by_region
-        assert len(DataBase.read_pools_by_region["us-east"]) == 1
+            await DataBase.create_pool(
+                write_uri="postgres://write",
+                read_uris={"us-east": ["postgres://read1"], "eu-west": ["postgres://read2"]},
+            )
 
-        # Verify calls
-        assert mock_create_pool.call_count == 3  # 1 write + 2 reads
+            assert DataBase.write_pool is not None
+            assert "us-east" in DataBase.read_pools_by_region
+            assert "eu-west" in DataBase.read_pools_by_region
+            assert len(DataBase.read_pools_by_region["us-east"]) == 1
+
+            # Verify calls
+            assert mock_create_pool.call_count == 3  # 1 write + 2 reads
+    finally:
+        settings.HEALTH_CHECK_INTERVAL = original_interval
 
 
 @pytest.mark.asyncio

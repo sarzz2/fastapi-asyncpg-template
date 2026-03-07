@@ -13,9 +13,7 @@ class PermissionBase(BaseModel):
 
 
 class PermissionCreate(PermissionBase):
-    """Schema for creating a permission."""
-
-    pass  # pylint: disable=unnecessary-pass
+    """Schema for creating a permission. Inherits all fields from PermissionBase."""
 
 
 class PermissionData(PermissionBase):

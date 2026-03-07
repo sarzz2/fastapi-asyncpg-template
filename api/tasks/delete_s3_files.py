@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True)
-def delete_stagnant_temporary_files(_self: Task) -> None:
+def delete_stagnant_temporary_files(_self: Task | None = None) -> None:
     """
     Deletes temporary files in the S3 bucket that have been stagnant for more than 15 minutes.
     A file is considered temporary if it has the tag 'status' set to 'temporary'.

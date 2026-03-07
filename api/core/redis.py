@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncGenerator, Awaitable, cast
+from typing import AsyncGenerator, Awaitable, Optional, cast
 
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
@@ -16,9 +16,10 @@ class RedisClient:
         self,
         host: str = settings.REDIS_HOST,
         port: int = settings.REDIS_PORT,
+        db: int = settings.REDIS_DB,
         decode_responses: bool = True,
     ):
-        self.client = Redis(host=host, port=port, decode_responses=decode_responses)
+        self.client = Redis(host=host, port=port, db=db, decode_responses=decode_responses)
 
     async def connect(self) -> None:
         """Connect to the Redis server and verify the connection."""
@@ -44,15 +45,18 @@ class RedisClient:
             return False
 
 
-redis_client = RedisClient()
+# Specialized Redis clients for logical separation
+redis_client = RedisClient(db=settings.REDIS_DB)
+redis_socket = RedisClient(db=settings.REDIS_DB_SOCKET)
+redis_event_bus = RedisClient(db=settings.REDIS_DB_EVENT_BUS)
 
 
 async def get_redis() -> Redis:
-    """Dependency to get the Redis client."""
+    """Dependency to get the Redis client (default cache)."""
     return redis_client.client
 
 
-async def listen_to_pubsub(pubsub: PubSub) -> AsyncGenerator[tuple[str, str], None]:
+async def listen_to_pubsub(pubsub: Optional[PubSub]) -> AsyncGenerator[tuple[str, str], None]:
     """Yields (channel, data) from a Redis Pub/Sub subscription."""
     if not pubsub:
         return

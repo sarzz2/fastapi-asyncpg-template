@@ -14,7 +14,7 @@ LOGS_DIR = Path(__file__).resolve().parent.parent.parent / "logs"
 
 
 @celery_app.task(bind=True)
-def delete_old_logs(_self: Task) -> None:
+def delete_old_logs(_self: Task | None = None) -> None:
     """
     Deletes rotated log files older than 30 days.
 

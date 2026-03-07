@@ -1,4 +1,3 @@
-# pylint: disable=unused-argument
 import logging
 import re
 from typing import Any
@@ -39,7 +38,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
 
     @app.exception_handler(RequestValidationError)
-    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
         logger.error("Validation error: %s", exc.errors())
         return JSONResponse(
             status_code=HTTP_422_UNPROCESSABLE_CONTENT,
@@ -47,7 +46,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(asyncpg.UniqueViolationError)
-    async def unique_violation_handler(request: Request, exc: asyncpg.UniqueViolationError) -> JSONResponse:
+    async def unique_violation_handler(_request: Request, exc: asyncpg.UniqueViolationError) -> JSONResponse:
         logger.error("Unique violation error: %s", exc)
         # extract the key(s) and value(s) from exc.detail
         fields = None
@@ -70,7 +69,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(HTTPException)
-    async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
         logger.error("HTTP exception: %s - %s", exc.status_code, exc.detail)
         return JSONResponse(
             status_code=exc.status_code,
@@ -78,7 +77,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(ValueError)
-    async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
+    async def value_error_handler(_request: Request, exc: ValueError) -> JSONResponse:
         logger.error("Value error: %s", exc)
         return JSONResponse(
             status_code=400,
@@ -86,7 +85,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(KeyError)
-    async def key_error_handler(request: Request, exc: KeyError) -> JSONResponse:
+    async def key_error_handler(_request: Request, exc: KeyError) -> JSONResponse:
         logger.error("Key error: %s", exc)
         return JSONResponse(
             status_code=400,
@@ -94,7 +93,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(PermissionError)
-    async def permission_error_handler(request: Request, exc: PermissionError) -> JSONResponse:
+    async def permission_error_handler(_request: Request, exc: PermissionError) -> JSONResponse:
         logger.error("Permission error: %s", exc)
         return JSONResponse(
             status_code=403,
@@ -102,7 +101,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(NotImplementedError)
-    async def not_implemented_error_handler(request: Request, exc: NotImplementedError) -> JSONResponse:
+    async def not_implemented_error_handler(_request: Request, exc: NotImplementedError) -> JSONResponse:
         logger.error("Not implemented error: %s", exc)
         return JSONResponse(
             status_code=501,
@@ -110,7 +109,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(TypeError)
-    async def type_error_handler(request: Request, exc: TypeError) -> JSONResponse:
+    async def type_error_handler(_request: Request, exc: TypeError) -> JSONResponse:
         logger.error("Type error: %s", exc, exc_info=True)
         return JSONResponse(
             status_code=400,
@@ -118,7 +117,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
         logger.error("Unhandled exception: %s", exc, exc_info=True)
         return JSONResponse(
             status_code=HTTP_500_INTERNAL_SERVER_ERROR,

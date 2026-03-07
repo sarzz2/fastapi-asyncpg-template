@@ -8,7 +8,7 @@ from redis.asyncio.client import PubSub
 
 from api.apps.notification.schemas import NotificationSchema
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
-from api.core.redis import listen_to_pubsub, redis_client
+from api.core.redis import listen_to_pubsub, redis_socket
 
 logger = logging.getLogger("fastapi")
 
@@ -21,7 +21,7 @@ class ConnectionManager:
     def __init__(self) -> None:
         # Maps user_id -> List of WebSockets
         self.active_connections: Dict[UUID, List[WebSocket]] = {}
-        self.pubsub: PubSub = redis_client.client.pubsub()
+        self.pubsub: PubSub = redis_socket.client.pubsub()
         self.listener_task: Optional[asyncio.Task] = None
 
     async def _ensure_listener(self) -> None:
@@ -32,6 +32,19 @@ class ConnectionManager:
                 await self.pubsub.subscribe("notifications:broadcast")
                 self.listener_task = asyncio.create_task(self._redis_listener())
                 logger.info("Redis Pub/Sub listener started.")
+
+    async def stop(self) -> None:
+        """Stop the Redis listener task and close Pub/Sub."""
+        if self.pubsub:
+            await self.pubsub.unsubscribe("notifications:broadcast")
+            await self.pubsub.aclose()
+        if self.listener_task:
+            self.listener_task.cancel()
+            try:
+                await self.listener_task
+            except asyncio.CancelledError:
+                pass
+        logger.info("Redis Pub/Sub listener stopped.")
 
     async def _redis_listener(self) -> None:
         """Listen for messages from Redis and dispatch to local connections."""
@@ -86,11 +99,11 @@ class ConnectionManager:
         """Publish message to user's Redis channel."""
         # Instead of sending directly, we publish to Redis.
         # Any worker (including this one) with a connection for this user will pick it up.
-        await redis_client.client.publish(f"notifications:user:{user_id}", message)
+        await redis_socket.client.publish(f"notifications:user:{user_id}", message)
 
     async def broadcast(self, message: str) -> None:
         """Publish message to broadcast Redis channel."""
-        await redis_client.client.publish("notifications:broadcast", message)
+        await redis_socket.client.publish("notifications:broadcast", message)
 
     async def _local_send(self, message: str, user_id: UUID) -> None:
         """Send message to locally connected user (internal use)."""

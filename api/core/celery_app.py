@@ -48,8 +48,8 @@ def autodiscover_tasks() -> list[str]:
 # Initialize Celery
 celery_app = Celery(
     "worker",
-    broker=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/0",
-    backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/1",
+    broker=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY_BROKER}",
+    backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY_BACKEND}",
     include=autodiscover_tasks(),
 )
 

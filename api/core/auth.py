@@ -14,11 +14,7 @@ from api.constants import TokenTypes
 from .config import settings
 from .redis import RedisClient
 
-SECRET_KEY = settings.SECRET_KEY
-ALGORITHM = settings.ALGORITHM
-ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
-REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
-SUDO_TOKEN_EXPIRE_MINUTES = settings.SUDO_TOKEN_EXPIRE_MINUTES
+# We use settings directly to allow dynamic overrides (e.g. in tests)
 redis_client = RedisClient()
 
 
@@ -60,7 +56,7 @@ def _create_token(data: dict, expire: datetime.datetime, token_type: str) -> dic
     to_encode = data.copy()
     jti = str(uuid4())
     to_encode.update({"exp": expire, "type": token_type, "jti": jti})
-    encoded_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    encoded_token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return {
         "token": encoded_token,
         "expires_at": expire,
@@ -76,7 +72,7 @@ def create_access_token(data: dict) -> dict:
     Returns:
         dict: A dictionary containing the encoded token and its metadata.
     """
-    expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return _create_token(data, expire, token_type=TokenTypes.ACCESS.value)
 
 
@@ -88,7 +84,7 @@ def create_refresh_token(data: dict) -> str:
     Returns:
         str: The encoded refresh JWT token.
     """
-    expire = datetime.datetime.now(datetime.UTC) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    expire = datetime.datetime.now(datetime.UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     token_details = _create_token(data, expire, token_type=TokenTypes.REFRESH.value)
     return str(token_details["token"])
 
@@ -101,7 +97,7 @@ def create_sudo_token(data: dict) -> str:
     Returns:
         str: The encoded sudo JWT token.
     """
-    expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=SUDO_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=settings.SUDO_TOKEN_EXPIRE_MINUTES)
     token_details = _create_token(data, expire, token_type=TokenTypes.SUDO.value)
     return str(token_details["token"])
 
@@ -119,7 +115,7 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
         HTTPException: If the token is invalid or has been revoked.
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         username: Optional[str] = payload.get("sub")
         user_id: Optional[str] = payload.get("id")
         exp: Optional[int] = payload.get("exp")

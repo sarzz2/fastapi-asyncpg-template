@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    REDIS_DB_CELERY_BROKER: int = 1
+    REDIS_DB_CELERY_BACKEND: int = 2
+    REDIS_DB_SOCKET: int = 3
+    REDIS_DB_EVENT_BUS: int = 4
 
     # default values for localstack
     S3_ENDPOINT_URL: str = "http://localhost:4566"

@@ -240,7 +240,7 @@ class DataBase(BaseModel):
                     cls.write_pool.get_size() - cls.write_pool.get_free_size()
                 )
 
-            for region, metas in list(cls.read_pools_by_region.items()):  # pylint: disable=unused-variable
+            for region, metas in list(cls.read_pools_by_region.items()):
                 total_in_use = 0
                 for meta in metas:
                     if meta.pool:

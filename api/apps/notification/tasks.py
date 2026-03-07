@@ -56,10 +56,12 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
             metadata=metadata,
         )
 
+    coro = _send()
     try:
         # Use the worker's event loop to run the async method
-        self.loop.run_until_complete(_send())
+        self.loop.run_until_complete(coro)
     except Exception as e:  # pylint: disable=broad-except
+        coro.close()
         log.error("Error sending background notification to user %s: %s", user_id, e)
 
 
@@ -84,15 +86,17 @@ def broadcast_notification_task(
             metadata=metadata,
         )
 
+    coro = _broadcast()
     try:
-        self.loop.run_until_complete(_broadcast())
+        self.loop.run_until_complete(coro)
     except Exception as e:  # pylint: disable=broad-except
+        coro.close()
         log.error("Error broadcasting background notification: %s", e)
 
 
 @celery_app.task(name="send_email_worker_task", bind=True)
-def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
-    self: Task,
+def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    _self: Task,
     to_email: str | list[str],
     subject: str,
     html_content: str,

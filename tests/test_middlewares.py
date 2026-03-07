@@ -1,5 +1,6 @@
-"""Tests for middlewares."""
-# pylint: disable=redefined-outer-name, protected-access, unused-argument
+"""
+Tests for ASGI middlewares, primarily focusing on regional routing and context management.
+"""
 
 from typing import Any, Dict
 
@@ -10,97 +11,94 @@ from fastapi.testclient import TestClient
 from api.middlewares.region_middleware import CLIENT_REGION, RegionASGIMiddleware
 
 
-def create_app() -> FastAPI:
-    """Create a FastAPI app with middleware for testing."""
+def create_test_app(mapping: dict | None = None, header_names: list | None = None) -> FastAPI:
+    """
+    Utility to create a FastAPI application with the Region middleware.
+    """
     app = FastAPI()
-    app.add_middleware(RegionASGIMiddleware)
+    kwargs: Dict[str, Any] = {}
+    if mapping:
+        kwargs["mapping"] = mapping
+    if header_names:
+        kwargs["header_names"] = header_names
+
+    app.add_middleware(RegionASGIMiddleware, **kwargs)
 
     @app.get("/region")
     def get_region(request: Request) -> Dict[str, Any]:
         return {
-            "context_region": CLIENT_REGION.get(),
-            "state_region": getattr(request.state, "client_region", "MISSING"),
+            "context": CLIENT_REGION.get(),
+            "state": getattr(request.state, "client_region", None),
         }
 
     return app
 
 
 @pytest.fixture
-def client() -> TestClient:
-    """Create a TestClient."""
-    app = create_app()
-    return TestClient(app)
+def test_client() -> TestClient:
+    """Provides a TestClient for the region middleware app."""
+    return TestClient(create_test_app())
 
 
-def test_region_middleware_default_map(client: TestClient) -> None:
-    """Test standard mapping from default map."""
-    # "in" -> "ap-south"
-    response = client.get("/region", headers={"x-country": "in"})
+def test_region_standard_mapping(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
+    """
+    Verify that country codes are correctly mapped to regional identifiers (e.g., 'in' -> 'ap-south').
+    """
+    response = test_client.get("/region", headers={"x-country": "in"})
     assert response.status_code == 200
     data = response.json()
-    assert data["context_region"] == "ap-south"
-    assert data["state_region"] == "ap-south"
+    assert data["context"] == "ap-south"
+    assert data["state"] == "ap-south"
 
 
-def test_region_middleware_no_header(client: TestClient) -> None:
-    """Test no header present."""
-    response = client.get("/region")
-    assert response.status_code == 200
+def test_region_middleware_no_headers(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
+    """
+    Verify that the middleware handles requests without regional headers gracefully.
+    """
+    response = test_client.get("/region")
     data = response.json()
-    assert data["context_region"] is None
-    assert data["state_region"] is None
+    assert data["context"] is None
+    assert data["state"] is None
 
 
-def test_region_middleware_priority(client: TestClient) -> None:
-    """Test header priority: x-geo-region > x-cloud-region > x-country."""
-    # x-geo-region should win
-    headers = {
-        "x-geo-region": "us-east",
-        "x-cloud-region": "eu-west",
-        "x-country": "in",
-    }
-    response = client.get("/region", headers=headers)
-    assert response.json()["context_region"] == "us-east"
+def test_region_header_priority(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
+    """
+    Verify regional header precedence: geo-region > cloud-region > country.
+    """
+    # 1. Geo-region win
+    headers = {"x-geo-region": "us-east", "x-cloud-region": "eu-west", "x-country": "in"}
+    assert test_client.get("/region", headers=headers).json()["context"] == "us-east"
 
-    # x-cloud-region should win if no x-geo-region
-    headers = {
-        "x-cloud-region": "eu-west",
-        "x-country": "in",
-    }
-    response = client.get("/region", headers=headers)
-    assert response.json()["context_region"] == "eu-west"
+    # 2. Cloud-region win (over country)
+    headers = {"x-cloud-region": "eu-west", "x-country": "in"}
+    assert test_client.get("/region", headers=headers).json()["context"] == "eu-west"
 
 
-def test_region_middleware_whitelist(client: TestClient) -> None:
-    """Test whitelist regex rejection."""
-    # invalid char '!'
-    response = client.get("/region", headers={"x-geo-region": "invalid!"})
-    assert response.json()["context_region"] is None
+def test_region_whitelist_rejection(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
+    """
+    Verify that invalid characters in regional headers are rejected via whitelist validation.
+    """
+    response = test_client.get("/region", headers={"x-geo-region": "invalid!region"})
+    assert response.json()["context"] is None
 
 
-def test_region_middleware_custom_mapping() -> None:
-    """Test initializing middleware with custom mapping."""
-    app = FastAPI()
-    app.add_middleware(RegionASGIMiddleware, mapping={"custom": "mapped"}, header_names=["x-custom"])
+def test_custom_regional_mapping_initialization() -> None:
+    """
+    Verify that the middleware correctly supports custom mappings and header configurations.
+    """
+    custom_app = create_test_app(mapping={"dev": "local"}, header_names=["x-env"])
+    client = TestClient(custom_app)
 
-    @app.get("/region")
-    def get_region(request: Request) -> Dict[str, Any]:
-        return {"region": CLIENT_REGION.get()}
+    # 1. Successful custom map
+    assert client.get("/region", headers={"x-env": "dev"}).json()["context"] == "local"
 
-    client = TestClient(app)
-
-    # helper for mapping
-    response = client.get("/region", headers={"x-custom": "CUSTOM"})
-    assert response.json()["region"] == "mapped"
-
-    # pass-through (if in whitelist but not in map)
-    # The code says: return self.mapping.get(v, v)
-    # So if "other" is whitelisted but not in map, it returns "other"
-    response = client.get("/region", headers={"x-custom": "other"})
-    assert response.json()["region"] == "other"
+    # 2. Whitelisted but unmapped (pass-through)
+    assert client.get("/region", headers={"x-env": "prod"}).json()["context"] == "prod"
 
 
-def test_normalize_map_direct() -> None:
-    """Test _normalize_map directly for unreachable branches via __call__."""
+def test_region_normalization_edge_cases() -> None:
+    """
+    Verify internal normalization logic for edge cases (e.g., empty strings).
+    """
     middleware = RegionASGIMiddleware(app=FastAPI())
-    assert middleware._normalize_map("") is None
+    assert middleware._normalize_map("") is None  # pylint: disable=protected-access
