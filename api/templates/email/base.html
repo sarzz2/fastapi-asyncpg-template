@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>{% block title %}Notification{% endblock %}</title>
+    </head>
+    <body
+        style="font-family: {{ font_family }}; background-color: {{ bg_color }}; margin: 0; padding: 0; line-height: 1.6;"
+    >
+        <div style="max-width: 600px; margin: 0 auto; padding: 20px">
+            <div
+                style="background-color: {{ card_bg }}; border-radius: {{ container_radius }}; padding: 30px; box-shadow: {{ container_shadow }}; margin-top: 20px;"
+            >
+                <div
+                    style="
+                        text-align: center;
+                        padding-bottom: 20px;
+                        border-bottom: 2px solid {{ divider_color }};
+                        margin-bottom: 20px;
+                    "
+                >
+                    <h2 style="color: {{ heading_color }}; margin: 0">
+                        {{ project_name }}
+                    </h2>
+                </div>
+
+                {% block content %} {% endblock %}
+            </div>
+            <div
+                style="
+                    text-align: center;
+                    margin-top: 30px;
+                    color: {{ footer_text_color }};
+                    font-size: 13px;
+                "
+            >
+                <p style="margin: 0">
+                    &copy; {{ current_year }} {{ project_name }}. All rights
+                    reserved.
+                </p>
+            </div>
+        </div>
+    </body>
+</html>

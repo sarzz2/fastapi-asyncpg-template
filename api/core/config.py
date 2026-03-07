@@ -56,6 +56,11 @@ class Settings(BaseSettings):
 
     ALLOWED_CONTENT_TYPES: list[str] = ["image/jpeg", "image/png", "image/webp", "application/pdf"]
 
+    # SendGrid Options
+    SENDGRID_API_KEY: str | None = None
+    EMAILS_FROM_EMAIL: str | None = None
+    EMAILS_FROM_NAME: str | None = "FastAPI Template"
+
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
 

@@ -1,0 +1,13 @@
+{% extends "email/base.html" %} {% block title %} {% endblock %} {% block
+content %}
+<h3 style="color: {{ heading_color }}; margin-top: 0;">{{ subject }}</h3>
+
+<p style="color: {{ text_color }}; font-size: 16px;">{{ message }}</p>
+
+{% if action_url %}
+<a
+    href="{{ action_url }}"
+    style="display: inline-block; background-color: {{ primary_color }}; color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 5px; font-weight: 600; margin-top: 20px;"
+    >View Details</a
+>
+{% endif %} {% endblock %}

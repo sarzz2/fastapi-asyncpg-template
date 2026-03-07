@@ -26,7 +26,7 @@ async def test_list_sessions(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"sess_{short_id}@test.com"
-    password = "strongpassword123"
+    password = "Str0ngP@ssw0rd!2"
     response = await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Session User"},
@@ -69,7 +69,7 @@ async def test_list_sessions_pagination(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"sess_pag_{short_id}@test.com"
-    password = "strongpassword123"
+    password = "Str0ngP@ssw0rd!2"
     response = await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Session Pagination User"},
@@ -121,7 +121,7 @@ async def test_get_me(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"me_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Me User"},
@@ -156,7 +156,7 @@ async def test_update_user(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"update_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Update User"},
@@ -198,7 +198,7 @@ async def test_revoke_session(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"revoke_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Revoke User"},
@@ -235,7 +235,7 @@ async def test_access_after_revoke_session(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"revoke_access_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Revoke Access User"},
@@ -281,7 +281,7 @@ async def test_invalid_update_user(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"invalid_update_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Invalid Update User"},
@@ -317,7 +317,7 @@ async def test_revoke_nonexistent_session(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"revoke_nonexist_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Revoke Test"},
@@ -352,7 +352,7 @@ async def test_revoke_another_users_session(client: AsyncClient) -> None:
 
     # Create user 1
     email1 = f"user1_{short_id}@test.com"
-    password1 = "password123"
+    password1 = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email1, "email": email1, "password": password1, "full_name": "User 1"},
@@ -367,7 +367,7 @@ async def test_revoke_another_users_session(client: AsyncClient) -> None:
 
     # Create user 2
     email2 = f"user2_{short_id}@test.com"
-    password2 = "password123"
+    password2 = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email2, "email": email2, "password": password2, "full_name": "User 2"},
@@ -397,7 +397,7 @@ async def test_revoke_invalid_jti_format(client: AsyncClient) -> None:
     """
     short_id = uuid4().hex[:8]
     email = f"invalid_jti_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Invalid JTI Test"},
@@ -445,7 +445,7 @@ async def test_assign_role(client: AsyncClient) -> None:
 
     # 1. Create Admin User
     admin_email = f"admin_{short_id}@test.com"
-    admin_password = "password123"
+    admin_password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": admin_email, "email": admin_email, "password": admin_password, "full_name": "Admin User"},
@@ -457,7 +457,12 @@ async def test_assign_role(client: AsyncClient) -> None:
     target_email = f"target_{short_id}@test.com"
     await client.post(
         "/api/v0/users/register",
-        json={"username": target_email, "email": target_email, "password": "password123", "full_name": "Target User"},
+        json={
+            "username": target_email,
+            "email": target_email,
+            "password": "Str0ngP@ssw0rd!1",
+            "full_name": "Target User",
+        },
     )
     target_user = await user_dao.get_by_email(target_email)
     assert target_user is not None
@@ -518,7 +523,7 @@ async def test_token_version_increment(client: AsyncClient) -> None:
 
     short_id = uuid4().hex[:8]
     email = f"token_ver_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
 
     # 1. Create User
     await client.post(
@@ -571,7 +576,7 @@ async def test_token_version_increment_on_role_update(client: AsyncClient) -> No
 
     short_id = uuid4().hex[:8]
     email = f"role_update_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
 
     # 1. Create User
     await client.post(

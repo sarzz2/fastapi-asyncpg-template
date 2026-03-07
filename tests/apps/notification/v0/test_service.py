@@ -26,7 +26,7 @@ def notification_service() -> NotificationService:
     """Fixture for NotificationService."""
     service = NotificationService()
     # Clear default channels for clean testing
-    service.channels = []
+    service.channels = {}
     return service
 
 
@@ -34,11 +34,11 @@ def notification_service() -> NotificationService:
 async def test_register_channel(notification_service: NotificationService) -> None:  # pylint: disable=redefined-outer-name
     """Test registering a channel."""
     channel = MockChannel()
-    notification_service.register_channel(channel)
-    assert channel in notification_service.channels
+    notification_service.register_channel("mock", channel)
+    assert "mock" in notification_service.channels
 
     # Test duplicate registration
-    notification_service.register_channel(channel)
+    notification_service.register_channel("mock", channel)
     assert len(notification_service.channels) == 1
 
 
@@ -46,7 +46,7 @@ async def test_register_channel(notification_service: NotificationService) -> No
 async def test_notify(notification_service: NotificationService) -> None:  # pylint: disable=redefined-outer-name
     """Test sending a notification to a specific user."""
     channel = AsyncMock(spec=BaseNotificationChannel)
-    notification_service.register_channel(channel)
+    notification_service.register_channel("mock", channel)
 
     user_id = uuid4()
     message = "Test Message"
@@ -64,7 +64,7 @@ async def test_notify(notification_service: NotificationService) -> None:  # pyl
 async def test_broadcast_all(notification_service: NotificationService) -> None:  # pylint: disable=redefined-outer-name
     """Test broadcasting a message to all users."""
     channel = AsyncMock(spec=BaseNotificationChannel)
-    notification_service.register_channel(channel)
+    notification_service.register_channel("mock", channel)
 
     message = "Broadcast"
 

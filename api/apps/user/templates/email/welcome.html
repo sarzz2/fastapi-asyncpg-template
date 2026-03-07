@@ -1,0 +1,25 @@
+{% extends "email/base.html" %} {% block title %} Welcome to {{ project_name }}
+{% endblock %} {% block content %}
+<h3 style="color: {{ heading_color }}; margin-top: 0;">
+    Welcome, {{ username }}!
+</h3>
+
+<p style="color: {{ text_color }}; font-size: 16px;">
+    Thank you for registering an account on {{ project_name }}. We're thrilled
+    to have you!
+</p>
+
+<p style="color: {{ text_color }}; font-size: 16px;">
+    You can now log in and explore your dashboard. If you need any assistance,
+    our support team is always ready to help.
+</p>
+
+<div style="text-align: center; margin-top: 30px; margin-bottom: 10px">
+    <a
+        href="{{ action_url }}"
+        style="display: inline-block; background-color: {{ primary_color }}; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 6px; font-weight: bold; font-size: 16px;"
+    >
+        Go to Dashboard
+    </a>
+</div>
+{% endblock %}

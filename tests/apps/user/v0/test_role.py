@@ -63,7 +63,7 @@ async def test_role_lifecycle(client: AsyncClient) -> None:  # pylint: disable=t
 
     short_id = uuid4().hex[:8]
     email = f"admin_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
 
     # 1. Register Admin
     await client.post(
@@ -165,7 +165,7 @@ async def test_role_pagination(client: AsyncClient) -> None:
 
     short_id = uuid4().hex[:8]
     email = f"admin_pag_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
 
     # Setup: Create Admin User and Role logic extracted
     admin_setup = await _setup_admin_with_perms(client, db, short_id, email, password)

@@ -61,6 +61,8 @@ repos:
                 - sentry-sdk
                 - flagsmith
                 - tenacity
+                - sendgrid
+                - jinja2
 
           - id: mypy
             name: mypy
@@ -90,6 +92,8 @@ repos:
                 - sentry-sdk
                 - flagsmith
                 - tenacity
+                - sendgrid
+                - jinja2
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0

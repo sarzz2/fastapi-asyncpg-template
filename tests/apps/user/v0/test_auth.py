@@ -17,7 +17,7 @@ async def test_auth_service_linking(client: AsyncClient) -> None:
     """Test that Google OAuth linking works for existing users with verified email."""
     short_id = uuid4().hex[:8]
     email = f"link_{short_id}@test.com"
-    password = "strongpassword123"
+    password = "Str0ngP@ssw0rd!2"
     response = await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Original User"},
@@ -50,7 +50,7 @@ async def test_update_password_standard_user(client: AsyncClient) -> None:
     """Test password update flow for standard users with sudo token."""
     short_id = uuid4().hex[:8]
     email = f"pwd_{short_id}@test.com"
-    password = "oldpassword123"
+    password = "Str0ngP@ssw0rd!Old"
     response = await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Password User"},
@@ -61,7 +61,7 @@ async def test_update_password_standard_user(client: AsyncClient) -> None:
     assert sudo_response.status_code == 200
     sudo_token = sudo_response.json()["sudo_token"]
 
-    new_password = "newpassword123"
+    new_password = "Str0ngP@ssw0rd!New"
     headers = {"Authorization": f"Bearer {sudo_token}"}
     response = await client.post("/api/v0/auth/password", json={"password": new_password}, headers=headers)
     assert response.status_code == 204
@@ -78,7 +78,7 @@ async def test_update_password_oauth_user(client: AsyncClient) -> None:
     """Test password update flow for OAuth users with sudo token."""
     short_id = uuid4().hex[:8]
     email = f"oauth_pwd_{short_id}@test.com"
-    password = "initialpassword"
+    password = "Str0ngP@ssw0rd!Init"
     response = await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "OAuth User"},
@@ -89,7 +89,7 @@ async def test_update_password_oauth_user(client: AsyncClient) -> None:
     assert sudo_response.status_code == 200
     sudo_token = sudo_response.json()["sudo_token"]
 
-    new_password = "setpassword123"
+    new_password = "Str0ngP@ssw0rd!Set"
     headers = {"Authorization": f"Bearer {sudo_token}"}
     response = await client.post("/api/v0/auth/password", json={"password": new_password}, headers=headers)
     assert response.status_code == 204
@@ -102,7 +102,7 @@ async def test_update_password_oauth_user(client: AsyncClient) -> None:
 async def test_update_password_invalid_token(client: AsyncClient) -> None:
     """Test that password update fails with invalid token."""
     headers = {"Authorization": "Bearer invalid_token"}
-    response = await client.post("/api/v0/auth/password", json={"password": "newpassword"}, headers=headers)
+    response = await client.post("/api/v0/auth/password", json={"password": "Str0ngP@ssw0rd!New"}, headers=headers)
     assert response.status_code == 401
 
 
@@ -111,7 +111,7 @@ async def test_update_password_access_token_fails(client: AsyncClient) -> None:
     """Test that password update fails when using access token instead of sudo token."""
     short_id = uuid4().hex[:8]
     email = f"access_pwd_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Access User"},
@@ -121,7 +121,7 @@ async def test_update_password_access_token_fails(client: AsyncClient) -> None:
     access_token = login_response.json()["token"]["access_token"]
 
     headers = {"Authorization": f"Bearer {access_token}"}
-    response = await client.post("/api/v0/auth/password", json={"password": "newpassword"}, headers=headers)
+    response = await client.post("/api/v0/auth/password", json={"password": "Str0ngP@ssw0rd!New"}, headers=headers)
     assert response.status_code == 401
 
 
@@ -130,7 +130,7 @@ async def test_refresh_token(client: AsyncClient) -> None:
     """Test token refresh flow returns new access and refresh tokens."""
     short_id = uuid4().hex[:8]
     email = f"refresh_{short_id}@test.com"
-    password = "password123"
+    password = "Str0ngP@ssw0rd!1"
     await client.post(
         "/api/v0/users/register",
         json={"username": email, "email": email, "password": password, "full_name": "Refresh User"},
@@ -190,7 +190,7 @@ async def test_register_duplicate_username(client: AsyncClient) -> None:
         json={
             "username": username,
             "email": f"user1_{short_id}@test.com",
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "User One",
         },
     )
@@ -202,7 +202,7 @@ async def test_register_duplicate_username(client: AsyncClient) -> None:
         json={
             "username": username,
             "email": f"user2_{short_id}@test.com",
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "User Two",
         },
     )
@@ -221,7 +221,7 @@ async def test_register_duplicate_email(client: AsyncClient) -> None:
         json={
             "username": f"user1_{short_id}",
             "email": email,
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "User One",
         },
     )
@@ -233,7 +233,7 @@ async def test_register_duplicate_email(client: AsyncClient) -> None:
         json={
             "username": f"user2_{short_id}",
             "email": email,
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "User Two",
         },
     )
@@ -257,7 +257,7 @@ async def test_register_invalid_email(client: AsyncClient) -> None:
             json={
                 "username": f"user_{short_id}_{invalid_email[:5]}",
                 "email": invalid_email,
-                "password": "password123",
+                "password": "Str0ngP@ssw0rd!1",
                 "full_name": "Test User",
             },
         )
@@ -274,7 +274,7 @@ async def test_register_missing_required_fields(client: AsyncClient) -> None:
         "/api/v0/users/register",
         json={
             "email": f"test_{short_id}@test.com",
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "Test User",
         },
     )
@@ -285,7 +285,7 @@ async def test_register_missing_required_fields(client: AsyncClient) -> None:
         "/api/v0/users/register",
         json={
             "username": f"user_{short_id}",
-            "password": "password123",
+            "password": "Str0ngP@ssw0rd!1",
             "full_name": "Test User",
         },
     )
