@@ -10,7 +10,7 @@ from api.apps.notification.v0.channels.base import BaseNotificationChannel
 from api.core.config import settings
 from api.utils.email import get_email_context
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 # Search core templates, then all apps templates

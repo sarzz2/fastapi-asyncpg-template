@@ -22,6 +22,7 @@ from api.core.auth import (
     verify_token,
 )
 from api.core.config import settings
+from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
 from api.utils.date import get_utc_now
@@ -329,6 +330,20 @@ class AuthService:
         """
         hashed_password = get_password_hash(password)
         await self._user_dao.update_password(user_id, hashed_password)
+
+        user = await self._user_dao.get_by_id(user_id)
+        if user:
+            # Publish security event
+            await event_bus.publish(
+                ApplicationEvent(
+                    event_name=EventNames.USER_PASSWORD_CHANGED,
+                    payload={
+                        "user_id": str(user_id),
+                        "email": user.email,
+                        "username": user.username,
+                    },
+                )
+            )
 
 
 async def get_auth_service(

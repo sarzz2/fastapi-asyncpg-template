@@ -7,6 +7,7 @@ from fastapi import Depends
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
 from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
+from api.core.events import ApplicationEvent, EventNames, event_bus
 
 
 class UserDAO:
@@ -381,6 +382,20 @@ class UserDAO:
             ),
             self.db.execute(update_query, user_id),
         )
+
+        user = await self.get_by_id(user_id)
+        if user:
+            await event_bus.publish(
+                ApplicationEvent(
+                    event_name=EventNames.USER_ROLE_ASSIGNED,
+                    payload={
+                        "user_id": str(user_id),
+                        "email": user.email,
+                        "username": user.username,
+                        "role_ids": [str(r) for r in role_ids],
+                    },
+                )
+            )
 
 
 async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:

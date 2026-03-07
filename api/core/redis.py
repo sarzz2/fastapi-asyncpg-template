@@ -1,7 +1,8 @@
 import logging
-from typing import Awaitable, cast
+from typing import AsyncGenerator, Awaitable, cast
 
 from redis.asyncio import Redis
+from redis.asyncio.client import PubSub
 
 from api.core.config import settings
 
@@ -49,3 +50,12 @@ redis_client = RedisClient()
 async def get_redis() -> Redis:
     """Dependency to get the Redis client."""
     return redis_client.client
+
+
+async def listen_to_pubsub(pubsub: PubSub) -> AsyncGenerator[tuple[str, str], None]:
+    """Yields (channel, data) from a Redis Pub/Sub subscription."""
+    if not pubsub:
+        return
+    async for message in pubsub.listen():
+        if message["type"] == "message":
+            yield message["channel"], message["data"]

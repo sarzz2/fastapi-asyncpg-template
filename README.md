@@ -10,37 +10,39 @@ Add your sentry dsn in the .env file
 
 ## Features
 
--   **Asynchronous Core**: Built with FastAPI and `asyncpg` for high-performance, non-blocking I/O.
--   **Scalable Database**: Out-of-the-box support for read-write splitting with PostgreSQL, including automatic health checks and failover for read replicas.
--   **Background Tasks**: Integrated Celery for handling long-running background jobs and scheduled tasks (Celery Beat) with async support.
--   **Custom Migration System**: A simple, script-based database migration tool (`migrate.py`) for managing schema changes.
--   **Centralized Configuration**: Environment-aware settings management using Pydantic.
--   **Code Quality Suite**: Pre-configured with `ruff`, `pylint`, and `mypy` for linting, formatting, and static type checking.
--   **Dependency Management**: Uses Poetry for clear, deterministic dependency management.
+- **Asynchronous Core**: Built with FastAPI and `asyncpg` for high-performance, non-blocking I/O.
+- **Scalable Database**: Out-of-the-box support for read-write splitting with PostgreSQL, including automatic health checks and failover for read replicas.
+- **Background Tasks**: Integrated Celery for handling long-running background jobs and scheduled tasks (Celery Beat) with async support.
+- **Custom Migration System**: A simple, script-based database migration tool (`migrate.py`) for managing schema changes.
+- **Centralized Configuration**: Environment-aware settings management using Pydantic.
+- **Code Quality Suite**: Pre-configured with `ruff`, `pylint`, and `mypy` for linting, formatting, and static type checking.
+- **Dependency Management**: Uses Poetry for clear, deterministic dependency management.
 
 ## Tech Stack
 
--   **Framework**: FastAPI
--   **Database**: PostgreSQL (via `asyncpg`)
--   **Task Queue**: Celery
--   **Broker & Backend**: Redis
--   **Dependency Management**: Poetry
--   **Linting & Formatting**: Ruff, Pylint
--   **Type Checking**: Mypy
+- **Framework**: FastAPI
+- **Database**: PostgreSQL (via `asyncpg`)
+- **Task Queue**: Celery
+- **Broker & Backend**: Redis
+- **Dependency Management**: Poetry
+- **Linting & Formatting**: Ruff, Pylint
+- **Type Checking**: Mypy
 
 ---
 
 ## Table of Contents
 
--   [Features](#features)
--   [Tech Stack](#tech-stack)
--   [Getting Started](#getting-started)
--   [Development](#development)
--   [Database Migrations](#database-migrations)
--   [Database Core](#database-apicoredatabasepy)
--   [User Management & Authentication](#user-management--authentication)
--   [AWS S3 Integration](#aws-s3-integration)
--   [Code Quality](#code-quality)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Development](#development)
+- [Database Migrations](#database-migrations)
+- [Database Core](#database-apicoredatabasepy)
+- [User Management & Authentication](#user-management--authentication)
+- [AWS S3 Integration](#aws-s3-integration)
+- [Notification System](#notification-system)
+- [Event Bus](#event-bus)
+- [Code Quality](#code-quality)
 
 ---
 
@@ -48,11 +50,11 @@ Add your sentry dsn in the .env file
 
 ### Prerequisites
 
--   Python 3.12+
--   Poetry
--   PostgreSQL17+
--   Redis
--   LocalStack (for local AWS setup if you've AWS creds then no need of localstack)
+- Python 3.12+
+- Poetry
+- PostgreSQL17+
+- Redis
+- LocalStack (for local AWS setup if you've AWS creds then no need of localstack)
 
 ### 1. Setup Environment
 
@@ -111,8 +113,8 @@ You can run the entire application stack (API, Postgres, Redis, Celery, LocalSta
 
 ### Prerequisites
 
--   Docker
--   Docker Compose
+- Docker
+- Docker Compose
 
 ### Running with Docker
 
@@ -127,18 +129,16 @@ You can run the entire application stack (API, Postgres, Redis, Celery, LocalSta
     The API will be available at `http://localhost:8000`.
 
 3.  **Services:**
-
-    -   **api**: The FastAPI application.
-    -   **postgres**: PostgreSQL database (Primary).
-    -   **redis**: Redis for caching and Celery broker.
-    -   **celery_worker**: Background task worker.
-    -   **celery_beat**: Scheduled task scheduler.
-    -   **localstack**: AWS S3 emulation for local development.
+    - **api**: The FastAPI application.
+    - **postgres**: PostgreSQL database (Primary).
+    - **redis**: Redis for caching and Celery broker.
+    - **celery_worker**: Background task worker.
+    - **celery_beat**: Scheduled task scheduler.
+    - **localstack**: AWS S3 emulation for local development.
 
 4.  **Persistent Data:**
-
-    -   Database data is persisted in the `postgres_data` volume.
-    -   LocalStack data (S3 buckets) is persisted in the `localstack_data` volume.
+    - Database data is persisted in the `postgres_data` volume.
+    - LocalStack data (S3 buckets) is persisted in the `localstack_data` volume.
 
 ---
 
@@ -218,22 +218,22 @@ Location: `api/core/database.py`
 
 What it does:
 
--   Manages async PostgreSQL connection pools using `asyncpg` for both write (primary) and read (replica) databases.
--   Supports read-write splitting with per-region read pools, round-robin load balancing, health checks, and automatic failover.
--   Provides convenient async helpers used throughout the codebase:
-    -   `DataBase.create_pool(write_uri, read_uris, ...)` — initialize pools
-    -   `DataBase.fetch(...)`, `DataBase.fetchrow(...)`, `DataBase.fetchval(...)`, `DataBase.write(...)`, `DataBase.execute(...)` — query helpers
-    -   `DataBase.get_pool_stats()` and `DataBase.health_check()` — runtime diagnostics
-    -   `DataBase.close_pool()` — graceful shutdown
--   Exposes a FastAPI dependency `get_db()` (yields the `DataBase` class) for DI in route handlers and background tasks.
+- Manages async PostgreSQL connection pools using `asyncpg` for both write (primary) and read (replica) databases.
+- Supports read-write splitting with per-region read pools, round-robin load balancing, health checks, and automatic failover.
+- Provides convenient async helpers used throughout the codebase:
+    - `DataBase.create_pool(write_uri, read_uris, ...)` — initialize pools
+    - `DataBase.fetch(...)`, `DataBase.fetchrow(...)`, `DataBase.fetchval(...)`, `DataBase.write(...)`, `DataBase.execute(...)` — query helpers
+    - `DataBase.get_pool_stats()` and `DataBase.health_check()` — runtime diagnostics
+    - `DataBase.close_pool()` — graceful shutdown
+- Exposes a FastAPI dependency `get_db()` (yields the `DataBase` class) for DI in route handlers and background tasks.
 
 How to configure:
 
--   The project uses `api/core/config.py` (Pydantic settings). Important settings for DB behavior are:
-    -   `PRIMARY_DATABASE_URL` — connection URL for the primary (write) DB
-    -   `REPLICA_DATABASE_URL` — a replica/read URL (used in the example initialization)
-    -   `HEALTH_CHECK_INTERVAL` — seconds between automatic health checks (0 to disable)
-    -   `REGION_PRIORITY` — list of region names to prefer when routing reads
+- The project uses `api/core/config.py` (Pydantic settings). Important settings for DB behavior are:
+    - `PRIMARY_DATABASE_URL` — connection URL for the primary (write) DB
+    - `REPLICA_DATABASE_URL` — a replica/read URL (used in the example initialization)
+    - `HEALTH_CHECK_INTERVAL` — seconds between automatic health checks (0 to disable)
+    - `REGION_PRIORITY` — list of region names to prefer when routing reads
 
 Initialization (example):
 The app's lifespan in `api/main.py` already shows how the DB is initialized on startup. In short, call `DataBase.create_pool(...)` with your write and read URIs (for example, values from `settings.PRIMARY_DATABASE_URL` and `settings.REPLICA_DATABASE_URL`). On shutdown call `DataBase.close_pool()` to clean up connections.
@@ -255,9 +255,9 @@ await database_instance.close_pool()
 
 Notes and tips:
 
--   If you don't configure read replicas, the code will fall back to using the write pool for reads.
--   The DB implementation uses a custom `CustomRecord` (wrapping `asyncpg.Record`) to make conversion to Pydantic models simple and fast.
--   Health checks run in a background task (when `HEALTH_CHECK_INTERVAL > 0`) and update per-pool health/latency metrics that the routing logic uses to prefer healthy, low-latency pools.
+- If you don't configure read replicas, the code will fall back to using the write pool for reads.
+- The DB implementation uses a custom `CustomRecord` (wrapping `asyncpg.Record`) to make conversion to Pydantic models simple and fast.
+- Health checks run in a background task (when `HEALTH_CHECK_INTERVAL > 0`) and update per-pool health/latency metrics that the routing logic uses to prefer healthy, low-latency pools.
 
 ## Caching (api/core/cache.py)
 
@@ -265,11 +265,11 @@ The project implements a flexible caching mechanism using Redis, designed to imp
 
 ### Features
 
--   **Decorators**:
-    -   `@cache`: Caches the result of a function. Supports both simple keys (Redis Strings) and Hash fields (Redis Hashes).
-    -   `@cache_invalidate`: Automatically invalidates cache keys (or Hash fields) after a function executes (useful for create/update/delete operations).
--   **Serialization**: Automatically handles Pydantic models and lists of models using `model_validate` and `model_dump`.
--   **Centralized Keys**: All Redis key patterns are defined in `api/shared/redis_keys.py` to prevent key collisions and ensure consistency.
+- **Decorators**:
+    - `@cache`: Caches the result of a function. Supports both simple keys (Redis Strings) and Hash fields (Redis Hashes).
+    - `@cache_invalidate`: Automatically invalidates cache keys (or Hash fields) after a function executes (useful for create/update/delete operations).
+- **Serialization**: Automatically handles Pydantic models and lists of models using `model_validate` and `model_dump`.
+- **Centralized Keys**: All Redis key patterns are defined in `api/shared/redis_keys.py` to prevent key collisions and ensure consistency.
 
 ### Usage Example
 
@@ -359,18 +359,18 @@ The project comes with a comprehensive user management system located in `api/ap
 
 ### Features
 
--   **Authentication**:
-    -   **JWT Auth**: Secure access and refresh token rotation.
-    -   **OAuth2**: Google Login integration.
--   **Session Management**:
-    -   Track active sessions.
-    -   Revoke specific sessions (logout from specific devices).
--   **Security**:
-    -   **Sudo Mode**: Require re-authentication (or "sudo token") for sensitive actions like changing passwords.
-    -   **Password Hashing**: Uses `bcrypt` for secure password storage.
--   **Profile**:
-    -   Update user details.
-    -   Profile picture support (integrated with S3).
+- **Authentication**:
+    - **JWT Auth**: Secure access and refresh token rotation.
+    - **OAuth2**: Google Login integration.
+- **Session Management**:
+    - Track active sessions.
+    - Revoke specific sessions (logout from specific devices).
+- **Security**:
+    - **Sudo Mode**: Require re-authentication (or "sudo token") for sensitive actions like changing passwords.
+    - **Password Hashing**: Uses `bcrypt` for secure password storage.
+- **Profile**:
+    - Update user details.
+    - Profile picture support (integrated with S3).
 
 ## AWS S3 Integration
 
@@ -380,34 +380,31 @@ The project includes a robust AWS S3 integration for handling file uploads and d
 
 Ensure the following environment variables are set in your `.env` file:
 
--   `AWS_ACCESS_KEY`: Your AWS access key ID.
--   `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
--   `AWS_BUCKET_NAME`: The name of your S3 bucket.
--   `S3_REGION_NAME`: The AWS region (e.g., `us-east-1`).
--   `S3_ENDPOINT_URL`: The S3 endpoint URL (use `http://localhost:4566` for LocalStack).
+- `AWS_ACCESS_KEY`: Your AWS access key ID.
+- `AWS_SECRET_ACCESS_KEY`: Your AWS secret access key.
+- `AWS_BUCKET_NAME`: The name of your S3 bucket.
+- `S3_REGION_NAME`: The AWS region (e.g., `us-east-1`).
+- `S3_ENDPOINT_URL`: The S3 endpoint URL (use `http://localhost:4566` for LocalStack).
 
 ### Features
 
 1.  **Secure Direct Uploads (Presigned POST)**:
-
-    -   The backend generates a **Presigned POST URL** and a set of fields.
-    -   The frontend uses these to upload files directly to S3, bypassing the backend server for better performance.
-    -   **Security Policies**:
-        -   **Max File Size**: 5MB (enforced by S3).
-        -   **File Type**: Must be an image (`image/*`) (enforced by S3).
-        -   **Tagging**: Files are automatically tagged with `status=temporary`.
+    - The backend generates a **Presigned POST URL** and a set of fields.
+    - The frontend uses these to upload files directly to S3, bypassing the backend server for better performance.
+    - **Security Policies**:
+        - **Max File Size**: 5MB (enforced by S3).
+        - **File Type**: Must be an image (`image/*`) (enforced by S3).
+        - **Tagging**: Files are automatically tagged with `status=temporary`.
 
 2.  **Authenticated Deletion**:
-
-    -   Deleting files requires authentication (`DELETE /api/v0/s3/file`).
+    - Deleting files requires authentication (`DELETE /api/v0/s3/file`).
 
 3.  **Smart URL Generation**:
-
-    -   `GET /api/v0/s3/file/{key}` returns a URL that forces the browser to display the file inline (instead of downloading) by setting the correct `Content-Type` and `Content-Disposition`.
+    - `GET /api/v0/s3/file/{key}` returns a URL that forces the browser to display the file inline (instead of downloading) by setting the correct `Content-Type` and `Content-Disposition`.
 
 4.  **Automatic Cleanup**:
-    -   A Celery task (`api/tasks/delete_s3_files.py`) runs periodically to delete "temporary" files that haven't been saved (referenced by the backend) within 15 minutes.
-    -   **Flow**:
+    - A Celery task (`api/tasks/delete_s3_files.py`) runs periodically to delete "temporary" files that haven't been saved (referenced by the backend) within 15 minutes.
+    - **Flow**:
         1.  User uploads file -> Tagged `status=temporary`.
         2.  User saves profile -> Backend should update tag to `status=saved` (implementation dependent) or simply reference the key.
         3.  If not saved, the cleanup task deletes it after 15 mins.
@@ -467,21 +464,21 @@ The project includes a robust, versioned Notification System designed for scalab
 
 ### Architecture
 
--   **Service**: `NotificationService` (Singleton) dispatches messages to registered channels.
--   **Channels**:
-    -   **Base**: `BaseNotificationChannel` (Abstract strategy).
-    -   **WebSockets**: Real-time notifications to connected clients. Supports personal messages and broadcasting.
-    -   **Future (SMS/Email)**: Easily extensible by inheriting from `BaseNotificationChannel`.
--   **Structure**: Located in `api/apps/notification/v0`. Schemas are shared in `api/apps/notification/schemas.py`.
+- **Service**: `NotificationService` (Singleton) dispatches messages to registered channels.
+- **Channels**:
+    - **Base**: `BaseNotificationChannel` (Abstract strategy).
+    - **WebSockets**: Real-time notifications to connected clients. Supports personal messages and broadcasting.
+    - **Future (SMS/Email)**: Easily extensible by inheriting from `BaseNotificationChannel`.
+- **Structure**: Located in `api/apps/notification/v0`. Schemas are shared in `api/apps/notification/schemas.py`.
 
 ### WebSockets
 
--   **Endpoint**: `/api/v0/notifications/ws`
--   **Auth**: Query parameter `?token=<JWT_TOKEN>`.
--   **Features**:
-    -   **Authentication**: Validates JWT and checks User status (must be active).
-    -   **Connections**: Supports multiple connections per user (e.g., Phone + Laptop).
-    -   **Broadcast**: `notification_service.broadcast_all("message")` sends to everyone.
+- **Endpoint**: `/api/v0/notifications/ws`
+- **Auth**: Query parameter `?token=<JWT_TOKEN>`.
+- **Features**:
+    - **Authentication**: Validates JWT and checks User status (must be active).
+    - **Connections**: Supports multiple connections per user (e.g., Phone + Laptop).
+    - **Broadcast**: `notification_service.broadcast_all("message")` sends to everyone.
 
 ### Extending (Adding Email/SMS)
 
@@ -543,6 +540,62 @@ send_notification_task.delay(
 )
 ```
 
+## Event Bus
+
+The project features a decentralized, robust **Event Bus** architecture powered by Redis Pub/Sub. This enables loosely-coupled asynchronous communication between different backend domains. All local application instances share the unified event loop ensuring reliability and exactly-once processing via distributed locking.
+
+### Architecture
+
+- **Event Schema**: All events inherit from `ApplicationEvent` (in `api/core/events/schema.py`) enforcing a standard structure containing `event_name` and `payload`.
+- **Broker**: Redis Pub/Sub broadcasts the events across all active API workers ensuring durability and scaling.
+- **Locking**: The backend implements a Redis-based distributed lock (`SETNX` with TTL) prior to triggering subscribers. This secures exactly-once processing of events, preventing race conditions or duplicate notification dispatches if 5+ API workers consume the exact same Pub/Sub broadcast at the identical millisecond.
+
+### Defining and Listening to Events
+
+1. **Define an Event Name:**
+
+```python
+# api/core/events/constants.py
+class EventNames:
+    USER_CREATED = "user.created"
+```
+
+2. **Publish the Event:**
+
+To dispatch an event payload from anywhere within the API (e.g., inside the User Service after login):
+
+```python
+from api.core.events.bus import event_bus
+from api.core.events.schema import ApplicationEvent
+from api.core.events.constants import EventNames
+
+await event_bus.publish(
+    ApplicationEvent(
+        event_name=EventNames.USER_CREATED,
+        payload={"user_id": str(user.id), "email": user.email, "username": user.username}
+    )
+)
+```
+
+3. **Subscribe to the Event:**
+
+Listening for events across different app domains is simple and highly decoupled using our decorator factory (e.g., triggering a Welcome Email when the `user.created` event hits the system):
+
+```python
+# api/apps/notification/v0/listeners/user_created.py
+from api.apps.notification.schemas import NotificationType
+from api.apps.notification.v0.listeners.utils import register_notification_listener
+from api.core.events.constants import EventNames
+
+on_user_created = register_notification_listener(
+    event_name=EventNames.USER_CREATED,
+    notification_type=NotificationType.INFO,
+    subject="Welcome to FastAPI Template!",
+    message="Your registration was successful.",
+    template_path="email/welcome.html",
+)
+```
+
 ## Feature Management (Flagsmith)
 
 The project integrates [Flagsmith](https://flagsmith.com/) for feature flag management, allowing you to toggle features, manage rollouts, and target specific user segments without code deploys.
@@ -591,9 +644,9 @@ The project includes a comprehensive monitoring stack using **Prometheus** and *
 
 When running with Docker, the monitoring services are available at:
 
--   **Grafana**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Password: `admin`)
--   **Prometheus**: [http://localhost:9090](http://localhost:9090)
--   **Celery Flower**: [http://localhost:5555](http://localhost:5555)
+- **Grafana**: [http://localhost:3000](http://localhost:3000) (User: `admin`, Password: `admin`)
+- **Prometheus**: [http://localhost:9090](http://localhost:9090)
+- **Celery Flower**: [http://localhost:5555](http://localhost:5555)
 
 A pre-configured **FastAPI Dashboard** is automatically provisioned. It provides real-time insights into:
 
@@ -601,18 +654,18 @@ A pre-configured **FastAPI Dashboard** is automatically provisioned. It provides
 2.  **Application Health**: Request rates, error rates (5xx/4xx), and detailed latency percentiles (P50, P95, P99).
 3.  **System Resources**: Container CPU and Memory usage.
 4.  **Database Metrics**:
-    -   Connection pool usage (Read/Write pools).
-    -   Query throughput and latency histograms.
-    -   Cache hit ratios and active transaction counts.
+    - Connection pool usage (Read/Write pools).
+    - Query throughput and latency histograms.
+    - Cache hit ratios and active transaction counts.
 5.  **Cache & Redis**: Redis operations throughput, cache hit/miss rates, and latency.
 6.  **Celery Tasks**: Queue lengths and task states (Success/Failure/Retry).
 
 ### Key Metrics Instrumented
 
--   **HTTP**: `http_requests_total`, `http_request_duration_seconds`, `http_request_size_bytes`
--   **Database**: `db_query_total`, `db_query_duration_seconds`, `db_pool_connections_in_use`
--   **Cache**: `cache_requests_total`, `cache_hit_miss_total`
--   **Celery**: `celery_tasks_total`, `celery_queue_length`
+- **HTTP**: `http_requests_total`, `http_request_duration_seconds`, `http_request_size_bytes`
+- **Database**: `db_query_total`, `db_query_duration_seconds`, `db_pool_connections_in_use`
+- **Cache**: `cache_requests_total`, `cache_hit_miss_total`
+- **Celery**: `celery_tasks_total`, `celery_queue_length`
 
 ---
 

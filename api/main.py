@@ -20,6 +20,7 @@ from api.apps.api import api_router
 from api.constants import Environments
 from api.core.config import settings
 from api.core.database import DataBase
+from api.core.events import event_bus
 from api.core.exception_handlers import register_exception_handlers
 from api.core.i18n import I18nMiddleware
 from api.core.logging_config import configure_logging
@@ -52,11 +53,14 @@ async def lifespan(
     )
     logger.info("Database connected successfully")
     await redis_client.connect()
+    event_bus.autodiscover()
+    await event_bus.start()
     all_migrations_applied_check = await check_all_migrations_applied()
     if not all_migrations_applied_check:
         logger.critical("You have pending migrations")
         raise RuntimeError("You have pending migrations")
     yield
+    await event_bus.stop()
     await database_instance.close_pool()
     await redis_client.close()
     logger.info("Database disconnected successfully")

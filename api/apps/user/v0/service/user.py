@@ -5,12 +5,10 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from redis.asyncio import Redis
 
-from api.apps.notification.schemas import NotificationType
-from api.apps.notification.v0.service import notification_service
 from api.apps.user.schemas.user import UserCreate, UserData, UserSessionData, UserUpdate
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.core.auth import get_password_hash
-from api.core.config import settings
+from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
 from api.shared.pagination import CursorPage
@@ -43,18 +41,15 @@ class UserService:
         user_db = await self._user_dao.create_user(user_in, hashed_password)
 
         # Dispatch welcome email asynchronously
-        await notification_service.notify(
-            user_id=user_db.id,
-            notification_type=NotificationType.INFO,
-            subject="Welcome to FastAPI Template!",
-            message="Your registration was successful.",
-            template_path="email/welcome.html",
-            action_url=settings.FRONTEND_URL,
-            metadata={
-                "email": user_db.email,
-                "username": user_db.username,
-            },
-            channels=["email"],
+        await event_bus.publish(
+            ApplicationEvent(
+                event_name=EventNames.USER_CREATED,
+                payload={
+                    "user_id": str(user_db.id),
+                    "email": user_db.email,
+                    "username": user_db.username,
+                },
+            )
         )
 
         return UserData.model_validate(user_db)

@@ -8,9 +8,9 @@ from redis.asyncio.client import PubSub
 
 from api.apps.notification.schemas import NotificationSchema
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
-from api.core.redis import redis_client
+from api.core.redis import listen_to_pubsub, redis_client
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 class ConnectionManager:
@@ -21,13 +21,12 @@ class ConnectionManager:
     def __init__(self) -> None:
         # Maps user_id -> List of WebSockets
         self.active_connections: Dict[UUID, List[WebSocket]] = {}
-        self.pubsub: Optional[PubSub] = None
+        self.pubsub: PubSub = redis_client.client.pubsub()
         self.listener_task: Optional[asyncio.Task] = None
 
     async def _ensure_listener(self) -> None:
         """Start the Redis listener task if it's not running."""
         if self.listener_task is None or self.listener_task.done():
-            self.pubsub = redis_client.client.pubsub()
             if self.pubsub:
                 # Subscribe to broadcast channel by default
                 await self.pubsub.subscribe("notifications:broadcast")
@@ -36,23 +35,17 @@ class ConnectionManager:
 
     async def _redis_listener(self) -> None:
         """Listen for messages from Redis and dispatch to local connections."""
-        if not self.pubsub:
-            return
         try:
-            async for message in self.pubsub.listen():
-                if message["type"] == "message":
-                    channel = message["channel"]
-                    data = message["data"]
-
-                    if channel == "notifications:broadcast":
-                        await self._local_broadcast(data)
-                    elif channel.startswith("notifications:user:"):
-                        user_id_str = channel.split(":")[-1]
-                        try:
-                            user_id = UUID(user_id_str)
-                            await self._local_send(data, user_id)
-                        except ValueError:
-                            logger.error("Invalid user ID in channel: %s", channel)
+            async for channel, data in listen_to_pubsub(self.pubsub):
+                if channel == "notifications:broadcast":
+                    await self._local_broadcast(data)
+                elif channel.startswith("notifications:user:"):
+                    user_id_str = channel.split(":")[-1]
+                    try:
+                        user_id = UUID(user_id_str)
+                        await self._local_send(data, user_id)
+                    except ValueError:
+                        logger.error("Invalid user ID in channel: %s", channel)
         except Exception as e:  # pylint: disable=broad-except
             logger.error("Redis listener error: %s", e)
             # Optional: Implement reconnection logic here if needed
