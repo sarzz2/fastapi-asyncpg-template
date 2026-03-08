@@ -36,7 +36,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -48,14 +48,13 @@ jobs:
           virtualenvs-in-project: true
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "poetry"
 
       - name: Install dependencies
         run: poetry install --no-interaction --no-root --only main --with test
-
 
       # Wait for Postgres service to be healthy (pg_isready)
       - name: Wait for Postgres
@@ -66,7 +65,7 @@ jobs:
           # wait for pg_isready via docker exec on the container that runs postgres:17
           PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
           if [ -z "$PG_CONTAINER" ]; then
-            echo "Postgres container not found"
+            echo "::error::Postgres container not found"
             docker ps -a
             exit 1
           fi
@@ -76,24 +75,29 @@ jobs:
           done
           docker exec -u postgres "$PG_CONTAINER" pg_isready -U user -d fastapi_template
 
-      # Install build dependencies and compile pg_uuidv7 inside the running postgres container
+      # Install and build pg_uuidv7: Clone on runner (has internet), copy to isolated container, then build.
       - name: Install and build pg_uuidv7 in Postgres service container
         run: |
           PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
           if [ -z "$PG_CONTAINER" ]; then
-            echo "Postgres container not found"
+            echo "::error::Postgres container not found"
             docker ps -a
             exit 1
           fi
 
-          # Update apt & install build dependencies as root inside the container.
-          # Use -u root so apt works.
-          docker exec -u root "$PG_CONTAINER" bash -lc "apt-get update && apt-get install -y git make gcc postgresql-server-dev-17 && rm -rf /var/lib/apt/lists/*"
+          # 1. Clone on the runner host (which has internet access)
+          git clone https://github.com/fboulnois/pg_uuidv7.git /tmp/pg_uuidv7
 
-          # Clone, build and install pg_uuidv7
-          docker exec -u root "$PG_CONTAINER" bash -lc "git clone https://github.com/fboulnois/pg_uuidv7.git /tmp/pg_uuidv7 && cd /tmp/pg_uuidv7 && make && make install && rm -rf /tmp/pg_uuidv7"
+          # 2. Copy the source to the container
+          docker cp /tmp/pg_uuidv7 "$PG_CONTAINER":/tmp/pg_uuidv7
 
-          # Make sure extension is visible to postgres and create it in the DB (run as postgres user)
+          # 3. Install build dependencies inside the container as root
+          docker exec -u root "$PG_CONTAINER" bash -lc "apt-get update && apt-get install -y make gcc postgresql-server-dev-17 && rm -rf /var/lib/apt/lists/*"
+
+          # 4. Build and install the extension inside the container
+          docker exec -u root "$PG_CONTAINER" bash -lc "cd /tmp/pg_uuidv7 && make && make install && rm -rf /tmp/pg_uuidv7"
+
+          # 5. Create the extension in the database
           docker exec -u postgres "$PG_CONTAINER" bash -lc "psql -v ON_ERROR_STOP=1 -U user -d fastapi_template -c \"CREATE EXTENSION IF NOT EXISTS pg_uuidv7;\""
 
       - name: Verify pg_uuidv7 is installed
