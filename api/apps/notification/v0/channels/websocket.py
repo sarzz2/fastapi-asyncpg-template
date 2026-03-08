@@ -21,12 +21,15 @@ class ConnectionManager:
     def __init__(self) -> None:
         # Maps user_id -> List of WebSockets
         self.active_connections: Dict[UUID, List[WebSocket]] = {}
-        self.pubsub: PubSub = redis_socket.client.pubsub()
+        self.pubsub: Optional[PubSub] = None
         self.listener_task: Optional[asyncio.Task] = None
 
     async def _ensure_listener(self) -> None:
         """Start the Redis listener task if it's not running."""
         if self.listener_task is None or self.listener_task.done():
+            if self.pubsub is None:
+                self.pubsub = redis_socket.client.pubsub()
+
             if self.pubsub:
                 # Subscribe to broadcast channel by default
                 await self.pubsub.subscribe("notifications:broadcast")
@@ -78,7 +81,7 @@ class ConnectionManager:
 
         # Subscribe to user-specific channel if this is their first connection on this worker
         if len(self.active_connections[user_id]) == 1:
-            if self.pubsub:
+            if self.pubsub is not None:
                 await self.pubsub.subscribe(f"notifications:user:{user_id}")
 
     async def disconnect(self, websocket: WebSocket, user_id: UUID) -> None:
@@ -90,7 +93,7 @@ class ConnectionManager:
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
                 # Unsubscribe from Redis if no more connections for this user on this worker
-                if self.pubsub:
+                if self.pubsub is not None:
                     await self.pubsub.unsubscribe(f"notifications:user:{user_id}")
 
         logger.info("User %s disconnected.", user_id)

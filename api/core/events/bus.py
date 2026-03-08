@@ -20,11 +20,14 @@ class EventBus:
 
     def __init__(self) -> None:
         self._subscribers: Dict[str, List[Callable[[ApplicationEvent], Any]]] = {}
-        self.pubsub: PubSub = redis_event_bus.client.pubsub()
+        self.pubsub: Optional[PubSub] = None
         self.listener_task: Optional[asyncio.Task] = None
 
     async def start(self) -> None:
         """Starts the Redis Pub/Sub listener."""
+        if self.pubsub is None:
+            self.pubsub = redis_event_bus.client.pubsub()
+
         if self.pubsub:
             await self.pubsub.subscribe("event_bus:broadcast")
             self.listener_task = asyncio.create_task(self._redis_listener())

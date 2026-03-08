@@ -12,6 +12,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from api.constants import Environments
 from api.core.config import settings
 
 
@@ -50,6 +51,8 @@ def setup_telemetry(app: FastAPI) -> None:
     """
     Setup OpenTelemetry for the FastAPI application.
     """
+    if not settings.OTEL_ENABLED or settings.ENV == Environments.TEST.value:
+        return
     resource = Resource.create(
         attributes={
             "service.name": settings.PROJECT_NAME,

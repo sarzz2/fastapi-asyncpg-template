@@ -34,6 +34,13 @@ def mock_user_dao() -> AsyncMock:
     return dao
 
 
+def test_websocket_endpoint_missing_token(sync_client: Any) -> None:  # pylint: disable=redefined-outer-name
+    """Test connection with missing token."""
+    with pytest.raises(Exception):
+        with sync_client.websocket_connect("/api/v0/notifications/ws") as websocket:
+            websocket.receive_text()
+
+
 def test_websocket_endpoint_success(sync_client: Any, mock_token_data: TokenData, mock_user_dao: AsyncMock) -> None:  # pylint: disable=redefined-outer-name
     """Test successful connection and message sending."""
     token = "valid_token"

@@ -7,6 +7,7 @@ class Environments(Enum):
     DEV = "dev"
     STAGING = "staging"
     PROD = "prod"
+    TEST = "test"
 
 
 class TokenTypes(Enum):

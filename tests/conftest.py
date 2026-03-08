@@ -14,6 +14,7 @@ from httpx import ASGITransport, AsyncClient
 from redis.asyncio import Redis
 
 from api.apps.notification.v0.channels.websocket import connection_manager
+from api.constants import Environments
 from api.core.config import settings
 from api.core.database import DataBase
 from api.core.events import event_bus
@@ -28,7 +29,7 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
     Initial configuration and test database setup.
     Isolates workers when running with xdist.
     """
-    settings.ENV = "test"
+    settings.ENV = Environments.TEST.value
     settings.SECRET_KEY = "a_very_long_and_secure_test_secret_key_32_chars"
     limiter.enabled = False
 

@@ -2,6 +2,7 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
 
+from api.constants import Environments
 from api.core.config import settings
 
 
@@ -28,4 +29,6 @@ def get_real_user_key(request: Request) -> str:
 # - key_func: determines how to identify distinct users
 # - default_limits: applies to all routes unless overridden
 # - enabled: disabled in 'test' environment to allow pytest to run freely
-limiter = Limiter(key_func=get_real_user_key, default_limits=["100/minute"], enabled=settings.ENV != "test")
+limiter = Limiter(
+    key_func=get_real_user_key, default_limits=["100/minute"], enabled=settings.ENV != Environments.TEST.value
+)
