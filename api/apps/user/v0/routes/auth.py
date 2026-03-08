@@ -172,7 +172,7 @@ async def refresh_access_token(
 @router.post("/sudo", response_model=SudoTokenResponse)
 @limiter.limit("5/minute")
 async def create_sudo_token(
-    _request: Request,
+    request: Request,  # pylint: disable=unused-argument
     sudo_request: SudoTokenRequest,
     svc: AuthService = Depends(get_auth_service),
 ) -> SudoTokenResponse:
@@ -192,7 +192,7 @@ async def create_sudo_token(
 @router.post("/google/sudo", response_model=SudoTokenResponse)
 @limiter.limit("5/minute")
 async def google_sudo_token(
-    _request: Request,
+    request: Request,  # pylint: disable=unused-argument
     sudo_request: OAuthSudoTokenRequest,
     svc: AuthService = Depends(get_auth_service),
 ) -> SudoTokenResponse:

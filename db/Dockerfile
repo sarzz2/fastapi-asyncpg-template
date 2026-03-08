@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y \
     git \
     make \
     gcc \
-    postgresql-server-dev-17 \
+    postgresql-server-dev-18 \
     && rm -rf /var/lib/apt/lists/*
 
 # Clone and install pg_uuidv7

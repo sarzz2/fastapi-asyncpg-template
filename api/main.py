@@ -1,7 +1,7 @@
 import time
 from contextlib import asynccontextmanager
 from http import HTTPStatus
-from typing import AsyncGenerator, Awaitable, Callable, cast
+from typing import AsyncGenerator, Awaitable, Callable
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,6 +27,7 @@ from api.core.i18n import I18nMiddleware
 from api.core.logging_config import configure_logging
 from api.core.rate_limit import limiter
 from api.core.redis import redis_client, redis_event_bus, redis_socket
+from api.core.telemetry import setup_telemetry
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
 from migrate import check_all_migrations_applied
@@ -88,7 +89,30 @@ app.add_middleware(SlowAPIMiddleware)
 
 register_exception_handlers(app)
 
+setup_telemetry(app)
 Instrumentator().instrument(app).expose(app)
+
+# Pyinstrument profiling middleware — append ?profile=1 to any endpoint URL
+# to get a detailed HTML profiling report. Only active in local/dev environments.
+if settings.ENV not in [Environments.PROD.value, Environments.STAGING.value]:
+
+    @app.middleware("http")
+    async def profiling_middleware(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        """
+        Middleware to profile API requests and generate HTML profiling reports.
+        Args:
+            request (Request): The incoming HTTP request.
+            call_next (Callable): The next middleware or route handler to call.
+        Returns:
+            Response: The HTTP response.
+        """
+        if request.query_params.get("profile") == "1":
+            profiler = Profiler(interval=0.001, async_mode="enabled")
+            profiler.start()
+            await call_next(request)
+            profiler.stop()
+            return HTMLResponse(profiler.output_html())
+        return await call_next(request)
 
 
 @app.get("/health", tags=["health"], response_model=HealthResponse)
@@ -157,22 +181,6 @@ async def log_requests(request: Request, call_next: Callable[[Request], Awaitabl
             process_time,
         )
     return response
-
-
-@app.middleware("http")
-async def profile_request(request: Request, call_next: Callable) -> Response:
-    """
-    Middleware to profile requests using pyinstrument.
-    Activated by the 'profile=true' query parameter.
-    """
-    if request.query_params.get("profile"):
-        profiler = Profiler(interval=0.001, async_mode="enabled")
-        profiler.start()
-        await call_next(request)
-        profiler.stop()
-        return HTMLResponse(profiler.output_html())
-
-    return cast(Response, await call_next(request))
 
 
 # Add CORS middleware to the FastAPI application

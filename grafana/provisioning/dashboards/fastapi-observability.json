@@ -1,0 +1,283 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "target": {
+                    "limit": 100,
+                    "matchAny": false,
+                    "tags": [],
+                    "type": "dashboard"
+                },
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "id": null,
+    "links": [],
+    "panels": [
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 2,
+            "panels": [],
+            "title": "Tempo Tracing Analytics",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "tempo"
+            },
+            "description": "Recent API endpoint traces (HTTP server spans only). Use the Endpoint Search box above to filter by name. Click a Trace ID to view the full span waterfall.",
+            "fieldConfig": {
+                "defaults": {
+                    "custom": {
+                        "align": "auto",
+                        "cellOptions": {
+                            "type": "auto"
+                        },
+                        "inspect": false
+                    }
+                },
+                "overrides": [
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Trace ID"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 220
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Start time"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 180
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Status Code"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 100
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": ".http.status_code"
+                        },
+                        "properties": [
+                            {
+                                "id": "displayName",
+                                "value": "Status Code"
+                            },
+                            {
+                                "id": "custom.width",
+                                "value": 100
+                            }
+                        ]
+                    },
+                    {
+                        "matcher": {
+                            "id": "byName",
+                            "options": "Duration"
+                        },
+                        "properties": [
+                            {
+                                "id": "custom.width",
+                                "value": 100
+                            }
+                        ]
+                    }
+                ]
+            },
+            "gridPos": {
+                "h": 20,
+                "w": 24,
+                "x": 0,
+                "y": 1
+            },
+            "id": 1,
+            "options": {
+                "cellHeight": "sm",
+                "footer": {
+                    "countRows": false,
+                    "fields": "",
+                    "reducer": ["sum"],
+                    "show": false
+                },
+                "showHeader": true,
+                "sortBy": [
+                    {
+                        "desc": true,
+                        "displayName": "Start time"
+                    }
+                ]
+            },
+            "pluginVersion": "12.3.0",
+            "targets": [
+                {
+                    "datasource": {
+                        "type": "tempo"
+                    },
+                    "limit": 50,
+                    "queryType": "traceql",
+                    "query": "{ kind = server && resource.service.name = \"FastAPI Template\" && name =~ \".*${endpoint_search:pipe}.*\" ${status_filter} } | select(.http.status_code)",
+                    "tableType": "traces",
+                    "refId": "A"
+                }
+            ],
+            "title": "API Endpoint Traces (sorted by time, newest first)",
+            "type": "table"
+        }
+    ],
+    "schemaVersion": 40,
+    "tags": ["observability", "fastapi"],
+    "templating": {
+        "list": [
+            {
+                "current": {
+                    "selected": false,
+                    "text": "",
+                    "value": ""
+                },
+                "description": "Search endpoints by name (e.g. users, login, GET)",
+                "hide": 0,
+                "label": "Endpoint Search",
+                "name": "endpoint_search",
+                "options": [
+                    {
+                        "selected": true,
+                        "text": "",
+                        "value": ""
+                    }
+                ],
+                "query": "",
+                "skipUrlSync": false,
+                "type": "textbox"
+            },
+            {
+                "current": {
+                    "selected": true,
+                    "text": "All",
+                    "value": "&& .http.status_code >= 100"
+                },
+                "description": "Filter traces by HTTP status code",
+                "hide": 0,
+                "includeAll": false,
+                "label": "Status Code",
+                "name": "status_filter",
+                "options": [
+                    {
+                        "selected": true,
+                        "text": "All",
+                        "value": "&& .http.status_code >= 100"
+                    },
+                    {
+                        "selected": false,
+                        "text": "2xx (200-299)",
+                        "value": "&& .http.status_code >= 200 && .http.status_code < 300"
+                    },
+                    {
+                        "selected": false,
+                        "text": "200",
+                        "value": "&& .http.status_code = 200"
+                    },
+                    {
+                        "selected": false,
+                        "text": "201",
+                        "value": "&& .http.status_code = 201"
+                    },
+                    {
+                        "selected": false,
+                        "text": "4xx (400-499)",
+                        "value": "&& .http.status_code >= 400 && .http.status_code < 500"
+                    },
+                    {
+                        "selected": false,
+                        "text": "400",
+                        "value": "&& .http.status_code = 400"
+                    },
+                    {
+                        "selected": false,
+                        "text": "401",
+                        "value": "&& .http.status_code = 401"
+                    },
+                    {
+                        "selected": false,
+                        "text": "403",
+                        "value": "&& .http.status_code = 403"
+                    },
+                    {
+                        "selected": false,
+                        "text": "404",
+                        "value": "&& .http.status_code = 404"
+                    },
+                    {
+                        "selected": false,
+                        "text": "5xx (500+)",
+                        "value": "&& .http.status_code >= 500"
+                    },
+                    {
+                        "selected": false,
+                        "text": "500",
+                        "value": "&& .http.status_code = 500"
+                    },
+                    {
+                        "selected": false,
+                        "text": "502",
+                        "value": "&& .http.status_code = 502"
+                    },
+                    {
+                        "selected": false,
+                        "text": "503",
+                        "value": "&& .http.status_code = 503"
+                    }
+                ],
+                "query": "All : && .http.status_code >= 100,2xx (200-299) : && .http.status_code >= 200 && .http.status_code < 300,200 : && .http.status_code = 200,201 : && .http.status_code = 201,4xx (400-499) : && .http.status_code >= 400 && .http.status_code < 500,400 : && .http.status_code = 400,401 : && .http.status_code = 401,403 : && .http.status_code = 403,404 : && .http.status_code = 404,5xx (500+) : && .http.status_code >= 500,500 : && .http.status_code = 500,502 : && .http.status_code = 502,503 : && .http.status_code = 503",
+                "skipUrlSync": false,
+                "type": "custom"
+            }
+        ]
+    },
+    "time": {
+        "from": "now-1h",
+        "to": "now"
+    },
+    "timepicker": {},
+    "timezone": "",
+    "title": "FastAPI Observability Suite",
+    "uid": "fastapi-obs",
+    "version": 1
+}

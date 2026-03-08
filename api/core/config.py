@@ -52,11 +52,18 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
 
+    # OpenTelemetry
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://tempo:4317"
+
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:5173",
+        "http://localhost:3200",
+        "http://localhost:4040",
+        "http://localhost:4317",
+        "http://localhost:4318",
     ]
 
     ALLOWED_CONTENT_TYPES: list[str] = ["image/jpeg", "image/png", "image/webp", "application/pdf"]

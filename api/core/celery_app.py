@@ -6,6 +6,7 @@ from typing import cast
 from celery import Celery, Task
 from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
+from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
 from api.core.config import settings
 from api.core.database import DataBase
@@ -52,6 +53,8 @@ celery_app = Celery(
     backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY_BACKEND}",
     include=autodiscover_tasks(),
 )
+
+CeleryInstrumentor().instrument()
 
 # Celery Configuration
 celery_app.conf.update(

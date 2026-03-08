@@ -23,7 +23,6 @@ authlib = "^1.6.9"
 itsdangerous = "^2.2.0"
 pydantic-settings = "^2.13.1"
 uvicorn = { extras = ["standard"], version = "^0.41.0" }
-pyinstrument = "^5.1.2"
 prometheus-fastapi-instrumentator = "^7.1.0"
 slowapi = "^0.1.9"
 python-json-logger = "^4.0.0"
@@ -34,6 +33,15 @@ tenacity = "^9.1.4"
 werkzeug = "3.1.6"
 sendgrid = "^6.12.5"
 jinja2 = "^3.1.6"
+opentelemetry-api = "^1.29.0"
+opentelemetry-sdk = "^1.29.0"
+opentelemetry-exporter-otlp = "^1.29.0"
+opentelemetry-instrumentation-fastapi = "^0.50b0"
+opentelemetry-instrumentation-asyncpg = "^0.50b0"
+opentelemetry-instrumentation-redis = "^0.50b0"
+opentelemetry-instrumentation-celery = "^0.50b0"
+pyroscope-io = "^1.0.4"
+pyinstrument = "^5.1.2"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -85,6 +93,8 @@ module = [
   "secure.*",
   "sentry_sdk.*",
   "sendgrid.*",
+  "opentelemetry.*",
+  "pyroscope.*",
 
 ]
 ignore_missing_imports = true
