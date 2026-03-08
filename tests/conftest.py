@@ -1,11 +1,5 @@
-# pylint: disable=wrong-import-position
-import os
-
-# Set environment to test BEFORE any other imports to prevent telemetry startup
-os.environ["ENV"] = "test"
-os.environ["OTEL_SDK_DISABLED"] = "true"
-
 import asyncio
+import os
 import sys
 from typing import Any, AsyncGenerator, Generator
 
@@ -35,7 +29,6 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
     Isolates workers when running with xdist.
     """
     settings.ENV = "test"
-    settings.OTEL_ENABLED = False
     settings.SECRET_KEY = "a_very_long_and_secure_test_secret_key_32_chars"
     limiter.enabled = False
 
