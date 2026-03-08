@@ -22,6 +22,9 @@ from api.core.redis import get_redis, redis_client, redis_event_bus, redis_socke
 from api.main import app
 from migrate import apply_migrations, create_migrations_table
 
+# Set environment to test BEFORE any other imports to prevent telemetry startup
+os.environ["ENV"] = "test"
+
 
 def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
     """
@@ -29,6 +32,7 @@ def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
     Isolates workers when running with xdist.
     """
     settings.ENV = "test"
+    settings.OTEL_ENABLED = False
     settings.SECRET_KEY = "a_very_long_and_secure_test_secret_key_32_chars"
     limiter.enabled = False
 
