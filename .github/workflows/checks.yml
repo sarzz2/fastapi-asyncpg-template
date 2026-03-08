@@ -7,69 +7,55 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
   lint:
-    name: Linting (Ruff & Isort)
+    name: Linting (Ruff)
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "poetry"
+        run: pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root --only main --with dev
+        run: poetry install --no-interaction --no-root --only dev
 
-      - name: Run Ruff (Lint)
+      - name: Run Ruff Lint
         run: poetry run ruff check .
 
-      - name: Run Ruff (Format)
+      - name: Run Ruff Format
         run: poetry run ruff format --check .
-
-      - name: Run Isort
-        run: poetry run isort --check-only .
 
   types:
     name: Type Checking (MyPy)
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "poetry"
+        run: pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root --only main --with dev --with test
+        run: poetry install --no-interaction --no-root --only dev
 
       - name: Cache MyPy
         uses: actions/cache@v4
         with:
           path: .mypy_cache
           key: mypy-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
-          restore-keys: |
-            mypy-${{ runner.os }}-
 
       - name: Run MyPy
         run: poetry run mypy .
@@ -77,25 +63,19 @@ jobs:
   pylint:
     name: Code Quality (Pylint)
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "poetry"
+        run: pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root --only main --with dev --with test
+        run: poetry install --no-interaction --no-root --only dev
 
       - name: Run Pylint
         run: poetry run pylint api
@@ -103,37 +83,52 @@ jobs:
   security:
     name: Security Analysis
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "poetry"
+        run: pip install poetry
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root --only main --with dev
+        run: poetry install --no-interaction --no-root --only dev
 
       - name: Run Bandit
         run: poetry run bandit -r api
 
-      - name: Run Pip-audit
+      - name: Run Pip Audit
         run: |
           poetry run pip-audit --format json > pip-audit-report.json || true
           FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix_versions | length > 0) | .id' pip-audit-report.json)
+
           if [ ! -z "$FIXABLE_VULNS" ]; then
             echo "::error::Found fixable vulnerabilities: $FIXABLE_VULNS"
             cat pip-audit-report.json
             exit 1
           else
-            echo "No fixable vulnerabilities found. Ignoring unfixed."
+            echo "No fixable vulnerabilities found."
           fi
+
+  tests:
+    name: Tests (Pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Install dependencies
+        run: poetry install --no-interaction --no-root --with dev --with test
+
+      - name: Run Tests
+        run: poetry run pytest

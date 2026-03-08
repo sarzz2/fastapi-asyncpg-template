@@ -1,4 +1,4 @@
-name: Tests
+name: Checks
 
 on:
   push:
@@ -7,108 +7,160 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+env:
+  PYTHON_VERSION: "3.12"
+
 jobs:
-  build:
-    name: Build & Test
+  lint:
+    name: Linting (Ruff)
     runs-on: ubuntu-latest
 
-    # Use service containers for postgres + redis (faster than docker-compose)
-    services:
-      postgres:
-        image: postgres:17
-        env:
-          POSTGRES_USER: user
-          POSTGRES_PASSWORD: password
-          POSTGRES_DB: fastapi_template
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U user -d fastapi_template"
-          --health-interval 2s --health-timeout 2s --health-retries 15
-
-      redis:
-        image: redis:8-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping || exit 1"
-          --health-interval 2s --health-timeout 2s --health-retries 10
-
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Install Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: latest
-          virtualenvs-create: true
-          virtualenvs-in-project: true
-
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: "poetry"
+          python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
-        run: poetry install --no-interaction --no-root --only main --with test
+      - name: Install Poetry
+        run: pip install poetry
 
-      # Wait for Postgres service to be healthy (pg_isready)
-      - name: Wait for Postgres
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry + venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dev dependencies
+        run: poetry install --no-interaction --no-root --only dev
+
+      - name: Ruff Lint
+        run: poetry run ruff check .
+
+      - name: Ruff Format Check
+        run: poetry run ruff format --check .
+
+  types:
+    name: Type Checking (MyPy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry + venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dev dependencies
+        run: poetry install --no-interaction --no-root --only dev
+
+      - name: Cache MyPy
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Run MyPy
+        run: poetry run mypy .
+
+  pylint:
+    name: Code Quality (Pylint)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry + venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dev dependencies
+        run: poetry install --no-interaction --no-root --only dev
+
+      - name: Run Pylint
+        run: poetry run pylint api
+
+  security:
+    name: Security Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry
+        run: poetry config virtualenvs.in-project true
+
+      - name: Cache Poetry + venv
+        uses: actions/cache@v4
+        with:
+          path: |
+            .venv
+            ~/.cache/pypoetry
+          key: poetry-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dev dependencies
+        run: poetry install --no-interaction --no-root --only dev
+
+      - name: Run Bandit
+        run: poetry run bandit -r api
+
+      - name: Run Pip Audit
         run: |
-          for i in $(seq 1 30); do
-            docker ps --format '{{.Names}}\t{{.Image}}' | grep -E 'postgres:17' && break || sleep 1
-          done
-          # wait for pg_isready via docker exec on the container that runs postgres:17
-          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
-          if [ -z "$PG_CONTAINER" ]; then
-            echo "::error::Postgres container not found"
-            docker ps -a
+          poetry run pip-audit --format json > pip-audit-report.json || true
+          FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix_versions | length > 0) | .id' pip-audit-report.json)
+
+          if [ ! -z "$FIXABLE_VULNS" ]; then
+            echo "::error::Found fixable vulnerabilities: $FIXABLE_VULNS"
+            cat pip-audit-report.json
             exit 1
+          else
+            echo "No fixable vulnerabilities found."
           fi
-          for i in $(seq 1 60); do
-            docker exec -u postgres "$PG_CONTAINER" pg_isready -U user -d fastapi_template && break
-            sleep 1
-          done
-          docker exec -u postgres "$PG_CONTAINER" pg_isready -U user -d fastapi_template
-
-      # Install and build pg_uuidv7: Clone on runner (has internet), copy to isolated container, then build.
-      - name: Install and build pg_uuidv7 in Postgres service container
-        run: |
-          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
-          if [ -z "$PG_CONTAINER" ]; then
-            echo "::error::Postgres container not found"
-            docker ps -a
-            exit 1
-          fi
-
-          # 1. Clone on the runner host (which has internet access)
-          git clone https://github.com/fboulnois/pg_uuidv7.git /tmp/pg_uuidv7
-
-          # 2. Copy the source to the container
-          docker cp /tmp/pg_uuidv7 "$PG_CONTAINER":/tmp/pg_uuidv7
-
-          # 3. Install build dependencies inside the container as root
-          docker exec -u root "$PG_CONTAINER" bash -lc "apt-get update && apt-get install -y make gcc postgresql-server-dev-17 && rm -rf /var/lib/apt/lists/*"
-
-          # 4. Build and install the extension inside the container
-          docker exec -u root "$PG_CONTAINER" bash -lc "cd /tmp/pg_uuidv7 && make && make install && rm -rf /tmp/pg_uuidv7"
-
-          # 5. Create the extension in the database
-          docker exec -u postgres "$PG_CONTAINER" bash -lc "psql -v ON_ERROR_STOP=1 -U user -d fastapi_template -c \"CREATE EXTENSION IF NOT EXISTS pg_uuidv7;\""
-
-      - name: Verify pg_uuidv7 is installed
-        run: |
-          PG_CONTAINER=$(docker ps --filter ancestor=postgres:17 --format '{{.ID}}' | head -n1)
-          docker exec -u postgres "$PG_CONTAINER" psql -U user -d fastapi_template -c "SELECT extname, extversion FROM pg_extension WHERE extname = 'pg_uuidv7';"
-
-      - name: Run Tests
-        env:
-          TEST_DATABASE_URL: postgresql://user:password@localhost:5432/fastapi_template
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          SECRET_KEY: test_secret_key
-        run: poetry run pytest -q
