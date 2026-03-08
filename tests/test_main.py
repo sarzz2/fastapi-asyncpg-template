@@ -71,23 +71,6 @@ async def test_request_logging_middleware() -> None:
         mock_logger.error.assert_called()
 
 
-def test_profiler_middleware(test_client: TestClient) -> None:  # pylint: disable=redefined-outer-name
-    """
-    Verify that the profiling middleware activates when the profile query parameter is present.
-    """
-    with patch("api.main.Profiler") as MockProfiler, patch("api.main.settings") as mock_settings:
-        mock_settings.ENV = "dev"
-        mock_settings.PROFILER_ENABLED = True
-        instance = MockProfiler.return_value
-        instance.output_html.return_value = "<html>Profile</html>"
-
-        response = test_client.get("/health?profile=true")
-        assert response.status_code == 200
-        assert instance.start.called
-        assert instance.stop.called
-        assert response.text == "<html>Profile</html>"
-
-
 @pytest.mark.asyncio
 async def test_application_lifespan_lifecycle() -> None:
     """

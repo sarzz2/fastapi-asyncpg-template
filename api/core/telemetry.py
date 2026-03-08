@@ -50,6 +50,9 @@ def setup_telemetry(app: FastAPI) -> None:
     """
     Setup OpenTelemetry for the FastAPI application.
     """
+    if not settings.OTEL_ENABLED or settings.ENV == "test":
+        return
+
     resource = Resource.create(
         attributes={
             "service.name": settings.PROJECT_NAME,
