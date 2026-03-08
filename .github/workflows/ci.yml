@@ -1,4 +1,4 @@
-name: CI
+name: Tests
 
 on:
   push:
@@ -54,45 +54,8 @@ jobs:
           cache: "poetry"
 
       - name: Install dependencies
-        run: poetry install --no-interaction --no-root
+        run: poetry install --no-interaction --no-root --only main --with test
 
-      - name: Run Ruff (Lint)
-        run: poetry run ruff check .
-
-      - name: Run Ruff (Format)
-        run: poetry run ruff format --check .
-
-      - name: Run Isort
-        run: poetry run isort --check-only .
-
-      - name: Cache MyPy
-        uses: actions/cache@v5
-        with:
-          path: .mypy_cache
-          key: mypy-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
-          restore-keys: |
-            mypy-${{ runner.os }}-
-
-      - name: Run MyPy
-        run: poetry run mypy .
-
-      - name: Run Pylint
-        run: poetry run pylint api
-
-      - name: Run Bandit
-        run: poetry run bandit -r api
-
-      - name: Run Pip-audit (fail on fixable vulns)
-        run: |
-          poetry run pip-audit --format json > pip-audit-report.json || true
-          FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix_versions | length > 0) | .id' pip-audit-report.json)
-          if [ ! -z "$FIXABLE_VULNS" ]; then
-            echo "::error::Found fixable vulnerabilities: $FIXABLE_VULNS"
-            cat pip-audit-report.json
-            exit 1
-          else
-            echo "No fixable vulnerabilities found. Ignoring unfixed."
-          fi
 
       # Wait for Postgres service to be healthy (pg_isready)
       - name: Wait for Postgres
