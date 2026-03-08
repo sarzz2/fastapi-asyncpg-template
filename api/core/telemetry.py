@@ -1,3 +1,4 @@
+import os
 from typing import Any, Callable
 
 import fastapi.routing
@@ -50,7 +51,12 @@ def setup_telemetry(app: FastAPI) -> None:
     """
     Setup OpenTelemetry for the FastAPI application.
     """
-    if not settings.OTEL_ENABLED or settings.ENV == "test":
+    if (
+        not settings.OTEL_ENABLED
+        or settings.ENV == "test"
+        or os.getenv("ENV") == "test"
+        or os.getenv("OTEL_SDK_DISABLED") == "true"
+    ):
         return
 
     resource = Resource.create(

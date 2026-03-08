@@ -1,5 +1,11 @@
-import asyncio
+# pylint: disable=wrong-import-position
 import os
+
+# Set environment to test BEFORE any other imports to prevent telemetry startup
+os.environ["ENV"] = "test"
+os.environ["OTEL_SDK_DISABLED"] = "true"
+
+import asyncio
 import sys
 from typing import Any, AsyncGenerator, Generator
 
@@ -21,9 +27,6 @@ from api.core.rate_limit import limiter
 from api.core.redis import get_redis, redis_client, redis_event_bus, redis_socket
 from api.main import app
 from migrate import apply_migrations, create_migrations_table
-
-# Set environment to test BEFORE any other imports to prevent telemetry startup
-os.environ["ENV"] = "test"
 
 
 def pytest_configure(config: Any) -> None:  # pylint: disable=unused-argument
