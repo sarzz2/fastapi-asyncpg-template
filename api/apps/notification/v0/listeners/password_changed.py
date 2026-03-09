@@ -1,7 +1,7 @@
 import logging
 
-from api.apps.notification.schemas import NotificationType
 from api.apps.notification.v0.listeners.utils import dispatch_user_notification
+from api.apps.notification.v0.schemas import NotificationType
 from api.core.events.bus import event_bus
 from api.core.events.constants import EventNames
 from api.core.events.schema import ApplicationEvent

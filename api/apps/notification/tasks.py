@@ -20,7 +20,7 @@ from sendgrid.helpers.mail import (
     To,
 )
 
-from api.apps.notification.schemas import NotificationType
+from api.apps.notification.v0.schemas import NotificationType
 from api.apps.notification.v0.service import notification_service
 from api.core.celery_app import celery_app
 from api.core.config import settings

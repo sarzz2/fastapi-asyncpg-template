@@ -3,8 +3,8 @@ from uuid import uuid4
 
 import pytest
 
-from api.apps.notification.schemas import NotificationSchema, NotificationType
 from api.apps.notification.v0.channels.email import EmailChannel
+from api.apps.notification.v0.schemas import NotificationSchema, NotificationType
 
 
 @pytest.fixture

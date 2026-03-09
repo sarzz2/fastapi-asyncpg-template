@@ -1,7 +1,7 @@
 import logging
 from uuid import UUID
 
-from api.apps.notification.schemas import NotificationType
+from api.apps.notification.v0.schemas import NotificationType
 from api.apps.notification.v0.service import notification_service
 from api.core.config import settings
 from api.core.events.schema import ApplicationEvent

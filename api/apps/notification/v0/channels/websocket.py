@@ -6,8 +6,8 @@ from uuid import UUID
 from fastapi import WebSocket
 from redis.asyncio.client import PubSub
 
-from api.apps.notification.schemas import NotificationSchema
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
+from api.apps.notification.v0.schemas import NotificationSchema
 from api.core.redis import listen_to_pubsub, redis_socket
 
 logger = logging.getLogger("fastapi")

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
-from api.apps.user.schemas.role import RoleData
+from api.apps.user.v0.schemas.role import RoleData
 from api.utils.pydantic_utils import StrongPassword, generate_file_url
 
 

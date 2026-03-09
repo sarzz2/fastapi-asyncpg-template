@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import Depends
 
-from api.apps.user.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
+from api.apps.user.v0.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.core.cache import cache, cache_invalidate
 from api.core.database import DataBase, get_db
 from api.shared.redis_keys import RedisKeys

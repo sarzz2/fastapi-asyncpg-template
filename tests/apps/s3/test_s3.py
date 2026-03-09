@@ -5,8 +5,8 @@ import pytest
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
 
-from api.apps.s3.schemas.s3 import S3UploadUrlRequest
 from api.apps.s3.v0.routes.s3 import delete_file, generate_upload_url, get_file
+from api.apps.s3.v0.schemas.s3 import S3UploadUrlRequest
 from api.apps.s3.v0.services.s3 import S3Service, get_s3_service
 
 

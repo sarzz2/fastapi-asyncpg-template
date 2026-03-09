@@ -6,8 +6,8 @@ from uuid import uuid4
 import pytest
 from fastapi import WebSocket
 
-from api.apps.notification.schemas import NotificationSchema, NotificationType
 from api.apps.notification.v0.channels.websocket import ConnectionManager, WebSocketChannel
+from api.apps.notification.v0.schemas import NotificationSchema, NotificationType
 
 
 @pytest.fixture

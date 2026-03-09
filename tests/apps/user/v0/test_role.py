@@ -5,9 +5,9 @@ import pytest
 from httpx import AsyncClient
 from starlette import status
 
-from api.apps.user.schemas.role import RoleCreate
 from api.apps.user.v0.dao.role import RoleDAO
 from api.apps.user.v0.dao.user import UserDAO
+from api.apps.user.v0.schemas.role import RoleCreate
 from api.core.database import DataBase
 from api.core.redis import redis_client
 from api.shared.redis_keys import RedisKeys

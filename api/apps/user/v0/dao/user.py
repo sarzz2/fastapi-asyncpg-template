@@ -4,7 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends
 
-from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
+from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
 from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
 from api.core.events import ApplicationEvent, EventNames, event_bus

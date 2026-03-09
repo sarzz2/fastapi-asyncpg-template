@@ -7,11 +7,11 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
-from api.apps.user.schemas.auth import LoginResponse, SudoTokenResponse, Token, TokenData
-from api.apps.user.schemas.role import RoleData
-from api.apps.user.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
+from api.apps.user.v0.schemas.auth import LoginResponse, SudoTokenResponse, Token, TokenData
+from api.apps.user.v0.schemas.role import RoleData
+from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.constants import TokenTypes
 from api.core.auth import (
     create_access_token,

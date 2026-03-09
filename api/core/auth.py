@@ -8,7 +8,7 @@ import jwt
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
 
-from api.apps.user.schemas.auth import TokenData
+from api.apps.user.v0.schemas.auth import TokenData
 from api.constants import TokenTypes
 
 from .config import settings

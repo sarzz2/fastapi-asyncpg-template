@@ -2,7 +2,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from api.apps.notification.schemas import NotificationType
+from api.apps.notification.v0.schemas import NotificationType
 
 # NOTE: We do NOT import tasks at top level to allow patching decorators
 

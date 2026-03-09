@@ -4,7 +4,7 @@ from jose import JWTError
 from redis.asyncio import Redis
 from starlette import status
 
-from api.apps.user.schemas.user import UserData
+from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.auth import verify_token
 from api.core.redis import get_redis

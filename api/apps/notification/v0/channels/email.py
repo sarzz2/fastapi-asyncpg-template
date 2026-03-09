@@ -5,8 +5,8 @@ from uuid import UUID
 
 from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 
-from api.apps.notification.schemas import NotificationSchema
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
+from api.apps.notification.v0.schemas import NotificationSchema
 from api.core.config import settings
 from api.utils.email import get_email_context
 

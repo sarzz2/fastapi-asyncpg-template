@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from redis.asyncio import Redis
 
 from api.apps.user.constants import GoogleAuthEndpoints
-from api.apps.user.schemas.auth import (
+from api.apps.user.v0.schemas.auth import (
     LoginResponse,
     OAuthSudoTokenRequest,
     PasswordUpdateRequest,
@@ -16,7 +16,7 @@ from api.apps.user.schemas.auth import (
     SudoTokenResponse,
     UserLogin,
 )
-from api.apps.user.schemas.user import UserData
+from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.core.config import settings
 from api.core.dependencies import get_sudo_user

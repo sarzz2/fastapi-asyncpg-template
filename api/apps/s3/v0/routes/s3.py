@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.apps.s3.schemas.s3 import S3UploadUrlRequest, S3UploadUrlResponse
+from api.apps.s3.v0.schemas.s3 import S3UploadUrlRequest, S3UploadUrlResponse
 from api.apps.s3.v0.services.s3 import S3Service, get_s3_service
-from api.apps.user.schemas.user import UserData
+from api.apps.user.v0.schemas.user import UserData
 from api.core.dependencies import get_current_user
 from api.core.i18n import trans
 

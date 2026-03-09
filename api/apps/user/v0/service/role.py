@@ -3,8 +3,8 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 
-from api.apps.user.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
+from api.apps.user.v0.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.core.i18n import trans
 
 

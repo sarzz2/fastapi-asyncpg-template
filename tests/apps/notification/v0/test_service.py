@@ -4,8 +4,8 @@ from uuid import uuid4
 
 import pytest
 
-from api.apps.notification.schemas import NotificationSchema
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
+from api.apps.notification.v0.schemas import NotificationSchema
 from api.apps.notification.v0.service import NotificationService, get_notification_service
 
 # pylint: disable=redefined-outer-name

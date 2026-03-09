@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from api.apps.user.schemas.user import UserData
+from api.apps.user.v0.schemas.user import UserData
 from api.utils.pydantic_utils import StrongPassword
 
 

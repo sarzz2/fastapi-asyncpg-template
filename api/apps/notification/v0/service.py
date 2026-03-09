@@ -2,10 +2,10 @@ import logging
 from typing import List, Optional
 from uuid import UUID
 
-from api.apps.notification.schemas import NotificationSchema, NotificationType
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
 from api.apps.notification.v0.channels.email import email_channel
 from api.apps.notification.v0.channels.websocket import websocket_channel
+from api.apps.notification.v0.schemas import NotificationSchema, NotificationType
 
 log = logging.getLogger("fastapi")
 

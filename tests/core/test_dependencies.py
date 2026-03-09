@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from fastapi.security import SecurityScopes
 from jose import JWTError
 
-from api.apps.user.schemas.auth import TokenData
+from api.apps.user.v0.schemas.auth import TokenData
 from api.core.dependencies import get_current_user, get_sudo_user
 
 

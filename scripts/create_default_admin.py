@@ -3,10 +3,10 @@ import os
 import sys
 import traceback
 
-from api.apps.user.schemas.role import RoleCreate, RoleUpdate
-from api.apps.user.schemas.user import UserCreate
 from api.apps.user.v0.dao.role import RoleDAO
 from api.apps.user.v0.dao.user import UserDAO
+from api.apps.user.v0.schemas.role import RoleCreate, RoleUpdate
+from api.apps.user.v0.schemas.user import UserCreate
 from api.core.auth import get_password_hash
 from api.core.config import settings
 from api.core.database import DataBase

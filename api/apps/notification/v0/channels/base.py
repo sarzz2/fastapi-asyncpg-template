@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
 
-from api.apps.notification.schemas import NotificationSchema
+from api.apps.notification.v0.schemas import NotificationSchema
 
 
 class BaseNotificationChannel(ABC):
