@@ -43,6 +43,7 @@ def autodiscover_tasks() -> list[str]:
             if filename.endswith(".py") and not filename.startswith("__"):
                 module_name = filename[:-3]  # remove .py
                 task_modules.append(f"api.tasks.{module_name}")
+    log.info("Discovered Celery tasks in: %s", task_modules)
     return task_modules
 
 

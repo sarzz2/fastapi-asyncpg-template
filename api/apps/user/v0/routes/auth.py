@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -25,6 +26,8 @@ from api.core.rate_limit import limiter
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
 
+logger = logging.getLogger("fastapi")
+
 router = APIRouter()
 
 
@@ -48,6 +51,9 @@ async def google_login(request: Request, redis: Redis = Depends(get_redis)) -> R
     state_key = RedisKeys.OAUTH_STATE_GOOGLE.format(state=state)
     await redis.set(state_key, "1", ex=300)
 
+    logger.info(
+        "Google OAuth login initiated for IP: %s", request.client.host if request.client is not None else "unknown"
+    )
     # build auth url
     scope = "openid email profile"
     params = {

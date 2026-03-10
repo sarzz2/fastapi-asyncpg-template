@@ -102,10 +102,12 @@ class ConnectionManager:
         """Publish message to user's Redis channel."""
         # Instead of sending directly, we publish to Redis.
         # Any worker (including this one) with a connection for this user will pick it up.
+        logger.debug("Publishing personal message to Redis for user: %s", user_id)
         await redis_socket.client.publish(f"notifications:user:{user_id}", message)
 
     async def broadcast(self, message: str) -> None:
         """Publish message to broadcast Redis channel."""
+        logger.debug("Publishing broadcast message to Redis")
         await redis_socket.client.publish("notifications:broadcast", message)
 
     async def _local_send(self, message: str, user_id: UUID) -> None:

@@ -107,6 +107,7 @@ if settings.ENV not in [Environments.PROD.value, Environments.STAGING.value]:
             Response: The HTTP response.
         """
         if request.query_params.get("profile") == "1":
+            logger.info("Profiling request for URL: %s", request.url)
             profiler = Profiler(interval=0.001, async_mode="enabled")
             profiler.start()
             await call_next(request)

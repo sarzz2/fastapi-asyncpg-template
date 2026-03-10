@@ -44,6 +44,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
     """
     Celery task to send a notification background.
     """
+    log.info("Executing task: send_notification_task for user %s", user_id_str)
     user_id = UUID(user_id_str)
     type_enum = NotificationType(notification_type)
 
@@ -76,6 +77,7 @@ def broadcast_notification_task(
     """
     Celery task to broadcast a notification in background.
     """
+    log.info("Executing task: broadcast_notification_task")
     type_enum = NotificationType(notification_type)
 
     async def _broadcast() -> None:
@@ -111,6 +113,8 @@ def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-posit
     if not settings.SENDGRID_API_KEY or not settings.EMAILS_FROM_EMAIL:
         log.warning("SendGrid API Key or From Email not configured. Skipping email.")
         return
+
+    log.info("Executing task: send_email_worker_task to %s", to_email)
 
     # Build primary To list
     if isinstance(to_email, str):

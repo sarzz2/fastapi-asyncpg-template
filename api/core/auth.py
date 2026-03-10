@@ -1,4 +1,5 @@
 import datetime
+import logging
 from datetime import timedelta
 from typing import Optional
 from uuid import uuid4
@@ -16,6 +17,7 @@ from .redis import RedisClient
 
 # We use settings directly to allow dynamic overrides (e.g. in tests)
 redis_client = RedisClient()
+log = logging.getLogger("fastapi")
 
 
 def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
@@ -159,6 +161,7 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
             token_version=token_version,
         )
     except jwt.PyJWTError as exc:
+        log.warning("JWT verification failed for token type '%s': %s", token_type, exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
