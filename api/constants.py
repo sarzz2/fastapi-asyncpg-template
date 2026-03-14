@@ -24,3 +24,12 @@ class OAuthProviders(Enum):
     GOOGLE = "google"
     FACEBOOK = "facebook"
     GITHUB = "github"
+
+
+class RequestHeaders(Enum):
+    """Common Request Headers"""
+
+    APP_VERSION = "X-App-Version"
+    APP_BUILD = "X-App-Build"
+    PLATFORM = "X-Platform"
+    DEVICE_ID = "X-Device-Id"

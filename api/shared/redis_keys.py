@@ -9,3 +9,7 @@ class RedisKeys:
     ROLES_CACHE = "roles_cache"
     ROLE_FIELD_ALL = "all"
     ROLE_FIELD_BY_ID = "{role_id}"
+
+    # App Version Cache (String)
+    APP_VERSION_CACHE = "app_version:{platform}"
+    APP_VERSIONS_ALL_CACHE = "app_versions:all"

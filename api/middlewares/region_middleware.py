@@ -1,12 +1,12 @@
-import contextvars
 import logging
 import re
 from typing import Dict, Iterable, Optional
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from api.core.context import CLIENT_REGION
+
 log = logging.getLogger("fastapi")
-CLIENT_REGION: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar("client_region", default=None)
 
 # default mapping (country code or short name -> your canonical region key)
 DEFAULT_REGION_MAP = {

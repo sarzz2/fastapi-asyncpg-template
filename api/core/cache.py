@@ -59,6 +59,7 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
 
         if cached_value:
             CACHE_HIT.inc()
+            log.debug("Cache hit for key: %s%s", f"[{hash_key}] " if hash_key else "", key)
             data = json.loads(cached_value)
             if model:
                 if isinstance(data, list):
@@ -73,7 +74,7 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
     return None
 
 
-async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: int) -> None:
+async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: Optional[int]) -> None:
     """Helper to serialize and save data to Redis."""
     start = time.perf_counter()
     try:
@@ -91,10 +92,21 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
             if hash_key:
                 async with redis_client.client.pipeline() as pipe:
                     pipe.hset(hash_key, key, serialized_data)
-                    pipe.expire(hash_key, expire)
+                    if expire:
+                        pipe.expire(hash_key, expire)
                     await pipe.execute()
             else:
-                await redis_client.client.set(key, serialized_data, ex=expire)
+                if expire:
+                    await redis_client.client.set(key, serialized_data, ex=expire)
+                else:
+                    await redis_client.client.set(key, serialized_data)
+
+            log.debug(
+                "Cache set for key: %s%s (expire=%s)",
+                f"[{hash_key}] " if hash_key else "",
+                key,
+                expire if expire else "No Expiry",
+            )
 
             duration = time.perf_counter() - start
             CACHE_SET_DURATION.observe(duration)
@@ -106,7 +118,7 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
 def cache(
     key_pattern: str,
     hash_key: Optional[str] = None,
-    expire: int = 3600,
+    expire: Optional[int] = 3600,
     model: Optional[Type[BaseModel]] = None,
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
@@ -116,6 +128,7 @@ def cache(
         key_pattern: The Redis key pattern (or field pattern if hash_key is used).
         hash_key: Optional. If provided, uses a Redis Hash with this key.
         expire: Expiration time in seconds. Defaults to 3600 (1 hour).
+            If None, the key will not expire.
         model: Optional Pydantic model to deserialize the result.
     Returns:
         Callable: The decorated function.

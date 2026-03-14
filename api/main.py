@@ -20,6 +20,7 @@ from api.apps.api import api_router
 from api.apps.notification.v0.channels.websocket import connection_manager
 from api.constants import Environments
 from api.core.config import settings
+from api.core.context import APP_BUILD, APP_VERSION, DEVICE_ID, PLATFORM
 from api.core.database import DataBase
 from api.core.events import event_bus
 from api.core.exception_handlers import register_exception_handlers
@@ -28,6 +29,8 @@ from api.core.logging_config import configure_logging
 from api.core.rate_limit import limiter
 from api.core.redis import redis_client, redis_event_bus, redis_socket
 from api.core.telemetry import setup_telemetry
+from api.middlewares.client_info_middleware import ClientInfoMiddleware
+from api.middlewares.force_update_middleware import ForceUpdateMiddleware
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
 from migrate import check_all_migrations_applied
@@ -162,7 +165,22 @@ async def log_requests(request: Request, call_next: Callable[[Request], Awaitabl
     Returns:
         Response: The HTTP response.
     """
-    logger.info("\033[1;37m%s\033[0m , %s params: %s", request.method, request.url, dict(request.query_params))
+    # Extract client info from context (set by ClientInfoMiddleware)
+    app_version = APP_VERSION.get() or "N/A"
+    app_build = APP_BUILD.get() or "N/A"
+    platform = PLATFORM.get() or "N/A"
+    device_id = DEVICE_ID.get() or "N/A"
+
+    logger.info(
+        "\033[1;37m%s\033[0m , %s params: %s | Version: %s | Build: %s | Platform: %s | Device: %s",
+        request.method,
+        request.url,
+        dict(request.query_params),
+        app_version,
+        app_build,
+        platform,
+        device_id,
+    )
 
     start_time = time.time()
     response: Response = await call_next(request)
@@ -193,6 +211,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
+app.add_middleware(ForceUpdateMiddleware)
+app.add_middleware(ClientInfoMiddleware)
 app.add_middleware(RegionASGIMiddleware)
 app.add_middleware(I18nMiddleware)
 app.add_middleware(ProxyHeadersMiddleware, trusted_hosts="*")
