@@ -22,7 +22,7 @@ asgiref = "^3.11.1"
 authlib = "^1.6.9"
 itsdangerous = "^2.2.0"
 pydantic-settings = "^2.13.1"
-uvicorn = { extras = ["standard"], version = "^0.41.0" }
+uvicorn = { extras = ["standard"], version = "^0.42.0" }
 prometheus-fastapi-instrumentator = "^7.1.0"
 slowapi = "^0.1.9"
 python-json-logger = "^4.0.0"
