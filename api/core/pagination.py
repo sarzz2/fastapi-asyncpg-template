@@ -2,7 +2,6 @@ import binascii
 from base64 import b64decode, b64encode
 from typing import Any, Awaitable, Callable, Generic, Optional, Sequence, TypeVar
 
-from fastapi import Query
 from pydantic import BaseModel, Field
 
 T = TypeVar("T")
@@ -30,18 +29,13 @@ def decode_cursor(cursor: str) -> str:
     return b64decode(cursor.encode("utf-8")).decode("utf-8")
 
 
-class PaginationParams:
+class PaginationParams(BaseModel):
     """
     Dependency class for pagination parameters.
     """
 
-    def __init__(
-        self,
-        first: int = Query(20, ge=1, le=100, description="Items per page"),
-        after: str | None = Query(None, description="Cursor for the next page"),
-    ):
-        self.first = first
-        self.after = after
+    first: int = Field(20, ge=1, le=100, description="Items per page")
+    after: str | None = Field(None, description="Cursor for the next page")
 
 
 class Page(BaseModel, Generic[T]):

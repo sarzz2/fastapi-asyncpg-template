@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Security, status
+from fastapi import APIRouter, Depends, Query, Security, status
 
 from api.apps.user.v0.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.apps.user.v0.schemas.user import UserData
@@ -13,7 +14,7 @@ router = APIRouter()
 
 @router.get("/permissions", response_model=Page[PermissionData])
 async def get_permissions(
-    pagination: PaginationParams = Depends(),
+    pagination: Annotated[PaginationParams, Query()],
     service: RoleService = Depends(get_role_service),
     _current_user: UserData = Security(get_current_user, scopes=["roles:read"]),
 ) -> Page[PermissionData]:
@@ -30,7 +31,7 @@ async def get_permissions(
 
 @router.get("", response_model=Page[RoleData])
 async def get_roles(
-    pagination: PaginationParams = Depends(),
+    pagination: Annotated[PaginationParams, Query()],
     service: RoleService = Depends(get_role_service),
     _current_user: UserData = Security(get_current_user, scopes=["roles:read"]),
 ) -> Page[RoleData]:
