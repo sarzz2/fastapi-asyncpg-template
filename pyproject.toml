@@ -19,7 +19,7 @@ pre-commit = "^4.3.0"
 boto3 = "^1.42.86"
 celery = "^5.6.2"
 asgiref = "^3.11.1"
-authlib = "^1.6.9"
+authlib = "^1.6.11"
 itsdangerous = "^2.2.0"
 pydantic-settings = "^2.13.1"
 uvicorn = { extras = ["standard"], version = "^0.44.0" }
