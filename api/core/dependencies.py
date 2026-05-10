@@ -1,8 +1,8 @@
 import logging
 
+import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, SecurityScopes
-from jose import JWTError
 from redis.asyncio import Redis
 from starlette import status
 
@@ -94,6 +94,6 @@ async def get_sudo_user(
                 detail="Sudo access required",
             )
         return user
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         log.warning("JWT error during sudo verification: %s", exc)
         raise credentials_exception from exc

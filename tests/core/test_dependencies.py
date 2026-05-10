@@ -4,10 +4,10 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
+import jwt
 import pytest
 from fastapi import HTTPException
 from fastapi.security import SecurityScopes
-from jose import JWTError
 
 from api.apps.user.v0.schemas.auth import TokenData
 from api.core.dependencies import get_current_user, get_sudo_user
@@ -144,7 +144,7 @@ async def test_get_sudo_user_jwt_error(mock_user_service: AsyncMock, mock_redis:
     token.credentials = "test_token"
 
     with patch("api.core.dependencies.verify_token", new_callable=AsyncMock) as mock_verify:
-        mock_verify.side_effect = JWTError("Invalid token")
+        mock_verify.side_effect = jwt.PyJWTError("Invalid token")
 
         with pytest.raises(HTTPException) as exc:
             await get_sudo_user(token, mock_user_service, mock_redis)

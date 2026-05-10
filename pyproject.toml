@@ -13,7 +13,6 @@ asyncpg = "^0.31.0"
 colorlog = "^6.10.1"
 bcrypt = "^5.0.0"
 redis = "^7.2.1"
-python-jose = "^3.5.0"
 pyjwt = "^2.11.0"
 pre-commit = "^4.6.0"
 boto3 = "^1.43.3"
@@ -87,7 +86,6 @@ module = [
   "celery.*",
   "boto3.*",
   "botocore.*",
-  "jose.*",
   "psutil.*",
   "uvicorn.*",
   "slowapi.*",
