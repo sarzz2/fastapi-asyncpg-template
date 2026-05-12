@@ -39,12 +39,12 @@ opentelemetry-instrumentation-fastapi = "^0.50b0"
 opentelemetry-instrumentation-asyncpg = "^0.50b0"
 opentelemetry-instrumentation-redis = "^0.50b0"
 opentelemetry-instrumentation-celery = "^0.50b0"
-pyroscope-io = "^1.0.6"
+pyroscope-io = "^1.0.8"
 pyinstrument = "^5.1.2"
 
 
 [tool.poetry.group.dev.dependencies]
-mypy = "^1.20.2"
+mypy = "^2.1.0"
 pylint = "^4.0.5"
 ruff = "^0.15.12"
 isort = "^8.0.1"
