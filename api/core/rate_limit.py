@@ -30,5 +30,8 @@ def get_real_user_key(request: Request) -> str:
 # - default_limits: applies to all routes unless overridden
 # - enabled: disabled in 'test' environment to allow pytest to run freely
 limiter = Limiter(
-    key_func=get_real_user_key, default_limits=["100/minute"], enabled=settings.ENV != Environments.TEST.value
+    key_func=get_real_user_key,
+    default_limits=["100/minute"],
+    storage_uri=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}",
+    enabled=settings.ENV != Environments.TEST.value,
 )

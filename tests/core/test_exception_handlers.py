@@ -58,19 +58,19 @@ def app_with_handlers() -> FastAPI:
 
 
 def test_value_error_handler(app_with_handlers: FastAPI) -> None:
-    """Test ValueError handler."""
+    """Test ValueError handler (now falls back to 500)."""
     client = TestClient(app_with_handlers)
     response = client.get("/value-error")
-    assert response.status_code == 400
-    assert "Test value error" in response.json()["detail"]
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal server error"
 
 
 def test_key_error_handler(app_with_handlers: FastAPI) -> None:
-    """Test KeyError handler."""
+    """Test KeyError handler (now falls back to 500)."""
     client = TestClient(app_with_handlers)
     response = client.get("/key-error")
-    assert response.status_code == 400
-    assert "test_key" in response.json()["detail"]
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal server error"
 
 
 def test_permission_error_handler(app_with_handlers: FastAPI) -> None:
@@ -90,11 +90,11 @@ def test_not_implemented_handler(app_with_handlers: FastAPI) -> None:
 
 
 def test_type_error_handler(app_with_handlers: FastAPI) -> None:
-    """Test TypeError handler."""
+    """Test TypeError handler (now falls back to 500)."""
     client = TestClient(app_with_handlers)
     response = client.get("/type-error")
-    assert response.status_code == 400
-    assert "Type mismatch" in response.json()["detail"]
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Internal server error"
 
 
 def test_unique_violation_fields_only(app_with_handlers: FastAPI) -> None:

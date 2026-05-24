@@ -1,10 +1,8 @@
 import logging
-import os
 import re
 import sys
-from logging.handlers import TimedRotatingFileHandler
+from logging.handlers import QueueHandler, QueueListener
 from queue import Queue
-from threading import Thread
 from typing import Any
 
 import colorlog
@@ -12,16 +10,6 @@ from pythonjsonlogger import json
 
 from api.core.config import settings
 from api.core.context import APP_BUILD, APP_VERSION, CLIENT_REGION, DEVICE_ID, PLATFORM
-
-# Define the directory and file for FastAPI logs.
-LOG_DIR = "logs"
-
-# Create the log directory if it doesn't exist.
-if not os.path.exists(LOG_DIR):
-    os.makedirs(LOG_DIR)
-
-# Set the log file name to "fastapi.log".
-LOG_FILE_NAME = f"{LOG_DIR}/fastapi.log"
 
 
 class ContextualFilter(logging.Filter):
@@ -95,9 +83,6 @@ def configure_logging() -> logging.Logger:
     logger.setLevel(logging.DEBUG)
     logger.addFilter(ContextualFilter())
 
-    # Create a queue for logging.
-    log_queue: Queue = Queue()
-
     # Create the console handler to output logs to stdout.
     console_handler = logging.StreamHandler(sys.stdout)
 
@@ -126,24 +111,9 @@ def configure_logging() -> logging.Logger:
         )
         console_handler.setFormatter(formatter)
 
-    # Create a file handler that rotates at midnight.
-    file_handler = TimedRotatingFileHandler(LOG_FILE_NAME, when="midnight", interval=1, backupCount=365)
-
-    if settings.USE_JSON_LOGS:
-        # Standard flat JSON for file logs
-        f_formatter: logging.Formatter = json.JsonFormatter(
-            "%(asctime)s %(levelname)s %(message)s %(name)s %(module)s %(funcName)s"
-            "%(lineno)d %(app_version)s %(app_build)s %(platform)s %(device_id)s %(client_region)s"
-        )
-        file_handler.setFormatter(f_formatter)
-    else:
-        f_formatter = logging.Formatter(
-            "%(asctime)s - %(levelname)s - [%(platform)s:%(app_version)s:%(app_build)s:%(device_id)s] - %(message)s"
-        )
-        file_handler.setFormatter(f_formatter)
-
-    # Use a queue handler to avoid blocking the main thread.
-    log_queue_handler = logging.handlers.QueueHandler(log_queue)
+    # Create a queue for async logging.
+    log_queue: Queue = Queue()
+    log_queue_handler = QueueHandler(log_queue)
     logger.addHandler(log_queue_handler)
 
     # Set up uvicorn.access logging if needed.
@@ -153,17 +123,8 @@ def configure_logging() -> logging.Logger:
     access_logger.addHandler(log_queue_handler)
     access_logger.propagate = False
 
-    # Start a listener thread that processes log records from the queue.
-    def listener() -> None:
-        while True:
-            record = log_queue.get()
-            if record is None:
-                break
-            # Send the log record to both the console and file handlers.
-            console_handler.handle(record)
-            file_handler.handle(record)
-
-    listener_thread = Thread(target=listener, daemon=True)
-    listener_thread.start()
+    # Start the native QueueListener to handle queue records on a background thread.
+    listener = QueueListener(log_queue, console_handler)
+    listener.start()
 
     return logger

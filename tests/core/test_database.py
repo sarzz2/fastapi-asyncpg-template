@@ -14,9 +14,6 @@ async def cleanup_db() -> Any:
     # Reset DataBase class state before/after each test
     DataBase.write_pool = None
     DataBase.read_pools_by_region = {}
-    DataBase._region_rr_index = {}
-    DataBase._region_locks = {}
-    DataBase._global_lock = None
     if DataBase._health_task and not DataBase._health_task.done():
         DataBase._health_task.cancel()
     yield

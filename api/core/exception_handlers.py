@@ -76,22 +76,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={"detail": format_detail(exc.detail)},
         )
 
-    @app.exception_handler(ValueError)
-    async def value_error_handler(_request: Request, exc: ValueError) -> JSONResponse:
-        logger.error("Value error: %s", exc)
-        return JSONResponse(
-            status_code=400,
-            content={"detail": str(exc) or "Invalid value provided."},
-        )
-
-    @app.exception_handler(KeyError)
-    async def key_error_handler(_request: Request, exc: KeyError) -> JSONResponse:
-        logger.error("Key error: %s", exc)
-        return JSONResponse(
-            status_code=400,
-            content={"detail": f"Missing key: {exc.args[0]}" if exc.args else "Missing key."},
-        )
-
     @app.exception_handler(PermissionError)
     async def permission_error_handler(_request: Request, exc: PermissionError) -> JSONResponse:
         logger.error("Permission error: %s", exc)
@@ -106,14 +90,6 @@ def register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(
             status_code=501,
             content={"detail": str(exc) or "Not implemented."},
-        )
-
-    @app.exception_handler(TypeError)
-    async def type_error_handler(_request: Request, exc: TypeError) -> JSONResponse:
-        logger.error("Type error: %s", exc, exc_info=True)
-        return JSONResponse(
-            status_code=400,
-            content={"detail": str(exc) or "Type error."},
         )
 
     @app.exception_handler(Exception)

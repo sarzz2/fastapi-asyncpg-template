@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     ENV: str = Environments.DEV.value
     USE_JSON_LOGS: bool = False
     SENTRY_DSN: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.1
 
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 336

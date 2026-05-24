@@ -3,6 +3,7 @@ import asyncio
 import json
 import logging
 import re
+import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -107,10 +108,7 @@ class DataBase(BaseModel):
     Class Variables:
         write_pool (ClassVar[Optional[Pool]]): The primary write connection pool
         read_pools_by_region (ClassVar[Dict[str, List[PoolMeta]]]): Mapping of regions to their read pools
-        _region_rr_index (ClassVar[Dict[str, int]]): Round-robin index counter per region
-        _region_locks (ClassVar[Dict[str, asyncio.Lock]]): Synchronization locks per region
-        _global_lock (ClassVar[Optional[asyncio.Lock]]): Global synchronization lock
-        _health_task (ClassVar[Optional[asyncio.Task]]): Task for running health checks
+    # overall tasks
         _region_priority (ClassVar[List[str]]): Ordered list of region failover priorities
     """
 
@@ -118,12 +116,7 @@ class DataBase(BaseModel):
 
     # maps region -> list[PoolMeta]
     read_pools_by_region: ClassVar[Dict[str, List[PoolMeta]]] = {}
-    # per-region round-robin index and lock
-    _region_rr_index: ClassVar[Dict[str, int]] = {}
-    _region_locks: ClassVar[Dict[str, asyncio.Lock]] = {}
-
-    # overall locks / tasks
-    _global_lock: ClassVar[Optional[asyncio.Lock]] = None
+    # overall tasks
     _health_task: ClassVar[Optional[asyncio.Task]] = None
     _region_priority: ClassVar[List[str]] = []
 
@@ -174,16 +167,11 @@ class DataBase(BaseModel):
         )
         log.info("Established Write DB pool with %s - %s connections", min_con, max_con)
 
-        if cls._global_lock is None:
-            cls._global_lock = asyncio.Lock()
-
         # create pools per region
         cls.read_pools_by_region = {}
         if read_uris:
             for region, uris in read_uris.items():
                 cls.read_pools_by_region.setdefault(region, [])
-                cls._region_rr_index.setdefault(region, 0)
-                cls._region_locks.setdefault(region, asyncio.Lock())
                 for uri in uris:
                     try:
                         pool = await create_pool(
@@ -202,8 +190,6 @@ class DataBase(BaseModel):
         # fallback: if no read pools at all, use write pool under "global"
         if not cls.read_pools_by_region:
             cls.read_pools_by_region = {"global": [PoolMeta(uri=write_uri, pool=cls.write_pool, region="global")]}
-            cls._region_rr_index.setdefault("global", 0)
-            cls._region_locks.setdefault("global", asyncio.Lock())
             log.info("No read replicas configured — using write pool for reads (global).")
 
         # save region_priority on class so selection can use it
@@ -391,12 +377,9 @@ class DataBase(BaseModel):
                 # fallback to any configured pool (even unhealthy) to avoid total outage
                 metas = [m for ms in cls.read_pools_by_region.values() for m in ms]
 
-        # round-robin inside metas (use region lock keyed by chosen region for stability)
-        lock = cls._region_locks.setdefault(region, asyncio.Lock())
-        async with lock:
-            idx = cls._region_rr_index.setdefault(region, 0) % len(metas)
-            cls._region_rr_index[region] = (cls._region_rr_index.setdefault(region, 0) + 1) % 1_000_000_000
-            return metas[idx].pool, region
+        # pick randomly from healthy pools to avoid lock contention under high load
+        selected_meta = secrets.choice(metas)
+        return selected_meta.pool, region
 
     @classmethod
     async def get_pool(cls, use_primary: bool = False) -> tuple[Pool, str]:

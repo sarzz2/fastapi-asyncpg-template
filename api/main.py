@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import AsyncGenerator, Awaitable, Callable
 
+import sentry_sdk
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -10,6 +11,9 @@ from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pyinstrument import Profiler
+from sentry_sdk.integrations.asyncio import AsyncioIntegration
+from sentry_sdk.integrations.celery import CeleryIntegration
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -235,11 +239,32 @@ app.include_router(api_router)
 
 # Initialize Sentry
 if settings.SENTRY_DSN:
-    import sentry_sdk
+
+    def traces_sampler(sampling_context: dict) -> float:
+        """
+        Sentry traces sampler to exclude health and metrics endpoints from being sent to Sentry
+
+        Args:
+            sampling_context (dict): The sampling context
+        Returns:
+            float: The sample rate
+        """
+        path = sampling_context.get("asgi_scope", {}).get("path", "")
+        if path in ["/health", "/metrics"]:
+            return 0.0
+        return settings.SENTRY_TRACES_SAMPLE_RATE
 
     sentry_sdk.init(
         dsn=settings.SENTRY_DSN,
         environment=settings.ENV,
-        traces_sample_rate=1.0,
-        profiles_sample_rate=1.0,
+        release=settings.PROJECT_VERSION,
+        integrations=[
+            FastApiIntegration(),
+            AsyncioIntegration(),
+            CeleryIntegration(),
+        ],
+        traces_sampler=traces_sampler,
+        profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
+        send_default_pii=False,
+        enable_tracing=True,
     )

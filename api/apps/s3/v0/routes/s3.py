@@ -10,7 +10,7 @@ router = APIRouter()
 
 
 @router.post("/upload-url", response_model=S3UploadUrlResponse)
-async def generate_upload_url(
+def generate_upload_url(
     request: S3UploadUrlRequest,
     s3_service: S3Service = Depends(get_s3_service),
     _current_user: UserData = Depends(get_current_user),
@@ -29,7 +29,7 @@ async def generate_upload_url(
 
 
 @router.delete("/file", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_file(
+def delete_file(
     key: str,
     s3_service: S3Service = Depends(get_s3_service),
     _current_user: UserData = Depends(get_current_user),
@@ -47,7 +47,7 @@ async def delete_file(
 
 
 @router.get("/file/{key:path}")
-async def get_file(key: str, s3_service: S3Service = Depends(get_s3_service)) -> str:
+def get_file(key: str, s3_service: S3Service = Depends(get_s3_service)) -> str:
     """
     Get a file from S3.
     """
