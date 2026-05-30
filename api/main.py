@@ -1,3 +1,4 @@
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from http import HTTPStatus
@@ -26,6 +27,7 @@ from api.constants import Environments
 from api.core.config import settings
 from api.core.context import APP_BUILD, APP_VERSION, DEVICE_ID, PLATFORM
 from api.core.database import DataBase
+from api.core.event_loop_monitor import monitor_event_loop
 from api.core.events import event_bus
 from api.core.exception_handlers import register_exception_handlers
 from api.core.i18n import I18nMiddleware
@@ -70,7 +72,20 @@ async def lifespan(
     if not all_migrations_applied_check:
         logger.critical("You have pending migrations")
         raise RuntimeError("You have pending migrations")
+
+    # Start the event loop monitoring task in the background
+    monitor_task = asyncio.create_task(monitor_event_loop(interval=1.0))
+    logger.info("Event loop monitor started successfully")
+
     yield
+
+    # Stop the event loop monitoring task on shutdown
+    monitor_task.cancel()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
+
     await event_bus.stop()
     await connection_manager.stop()
     await database_instance.close_pool()

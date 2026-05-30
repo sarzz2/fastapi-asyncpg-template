@@ -59,7 +59,7 @@ def app_with_handlers() -> FastAPI:
 
 def test_value_error_handler(app_with_handlers: FastAPI) -> None:
     """Test ValueError handler (now falls back to 500)."""
-    client = TestClient(app_with_handlers)
+    client = TestClient(app_with_handlers, raise_server_exceptions=False)
     response = client.get("/value-error")
     assert response.status_code == 500
     assert response.json()["detail"] == "Internal server error"
@@ -67,7 +67,7 @@ def test_value_error_handler(app_with_handlers: FastAPI) -> None:
 
 def test_key_error_handler(app_with_handlers: FastAPI) -> None:
     """Test KeyError handler (now falls back to 500)."""
-    client = TestClient(app_with_handlers)
+    client = TestClient(app_with_handlers, raise_server_exceptions=False)
     response = client.get("/key-error")
     assert response.status_code == 500
     assert response.json()["detail"] == "Internal server error"
@@ -91,7 +91,7 @@ def test_not_implemented_handler(app_with_handlers: FastAPI) -> None:
 
 def test_type_error_handler(app_with_handlers: FastAPI) -> None:
     """Test TypeError handler (now falls back to 500)."""
-    client = TestClient(app_with_handlers)
+    client = TestClient(app_with_handlers, raise_server_exceptions=False)
     response = client.get("/type-error")
     assert response.status_code == 500
     assert response.json()["detail"] == "Internal server error"

@@ -43,3 +43,14 @@ CACHE_HIT_MISS_TOTAL = Counter(
     "Total number of cache hits and misses",
     ["result"],  # 'hit', 'miss'
 )
+
+# Event Loop / asyncio Metrics
+EVENT_LOOP_LAG_SECONDS = Gauge(
+    "asyncio_event_loop_lag_seconds",
+    "Event loop lag in seconds",
+)
+
+ASYNCIO_ACTIVE_TASKS = Gauge(
+    "asyncio_active_tasks",
+    "Total number of active/pending asyncio tasks in the event loop",
+)
