@@ -245,8 +245,8 @@ from api.core.config import settings
 
 database_instance = DataBase()
 await database_instance.create_pool(
-        write_uri=settings.PRIMARY_DATABASE_URL,
-        read_uris={"global": [settings.REPLICA_DATABASE_URL]},
+    write_uri=settings.PRIMARY_DATABASE_URL,
+    read_uris={"global": [settings.REPLICA_DATABASE_URL]},
 )
 # ...on shutdown
 await database_instance.close_pool()
@@ -277,8 +277,8 @@ The project implements a flexible caching mechanism using Redis, designed to imp
 ```python
 # api/shared/redis_keys.py
 class RedisKeys:
-    ROLES_CACHE = "roles_cache" # Hash Key
-    ROLE_FIELD_BY_ID = "{role_id}" # Hash Field
+    ROLES_CACHE = "roles_cache"  # Hash Key
+    ROLE_FIELD_BY_ID = "{role_id}"  # Hash Field
 ```
 
 **2. Cache a Method:**
@@ -488,6 +488,7 @@ To add a new channel (e.g., Email), simply create a new class inheriting from `B
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
 from api.apps.notification.schemas import NotificationSchema
 
+
 class EmailChannel(BaseNotificationChannel):
     async def send(self, user_id: UUID, notification: NotificationSchema) -> None:
         # User internal UserDAO to get email, then send using SMTP/SES
@@ -517,10 +518,9 @@ from api.apps.notification.v0.service import NotificationService, get_notificati
 
 router = APIRouter()
 
+
 @router.post("/send")
-async def send_notification(
-    service: NotificationService = Depends(get_notification_service)
-):
+async def send_notification(service: NotificationService = Depends(get_notification_service)):
     await service.notify(user_id=..., message="Hello!")
 ```
 
@@ -533,9 +533,7 @@ from api.apps.notification.v0.tasks import send_notification_task
 
 # Fire and forget
 send_notification_task.delay(
-    user_id_str="user-uuid-string",
-    message="Your report is ready!",
-    notification_type="success"
+    user_id_str="user-uuid-string", message="Your report is ready!", notification_type="success"
 )
 ```
 
@@ -571,7 +569,7 @@ from api.core.events.constants import EventNames
 await event_bus.publish(
     ApplicationEvent(
         event_name=EventNames.USER_CREATED,
-        payload={"user_id": str(user.id), "email": user.email, "username": user.username}
+        payload={"user_id": str(user.id), "email": user.email, "username": user.username},
     )
 )
 ```
@@ -617,10 +615,9 @@ Protect endpoints using the `feature_enabled` dependency. You can optionally pas
 from fastapi import Depends
 from api.core.feature_flags import feature_enabled
 
+
 @router.get("/beta-feature")
-async def beta_endpoint(
-    enabled: bool = Depends(feature_enabled("beta_feature"))
-):
+async def beta_endpoint(enabled: bool = Depends(feature_enabled("beta_feature"))):
     if not enabled:
         return {"message": "Feature disabled"}
     return {"message": "Welcome to Beta!"}
