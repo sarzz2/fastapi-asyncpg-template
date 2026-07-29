@@ -50,7 +50,7 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
     try:
         CACHE_GET_REQUESTS.inc()
         if hash_key:
-            cached_value = await redis_client.client.hget(hash_key, key)  # type: ignore
+            cached_value = await redis_client.client.hget(hash_key, key)
         else:
             cached_value = await redis_client.client.get(key)
 
@@ -196,7 +196,7 @@ def cache_invalidate(
 
                 if keys_to_delete:
                     if hash_key:
-                        await redis_client.client.hdel(hash_key, *keys_to_delete)  # type: ignore
+                        await redis_client.client.hdel(hash_key, *keys_to_delete)
                         log.debug("Invalidated hash fields %s in %s", keys_to_delete, hash_key)
                     else:
                         await redis_client.client.delete(*keys_to_delete)

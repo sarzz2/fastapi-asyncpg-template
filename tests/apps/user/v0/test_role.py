@@ -72,20 +72,20 @@ async def test_role_lifecycle_and_caching(client: AsyncClient) -> None:
         # 2. Verify Cache Population on GET
         field = RedisKeys.ROLE_FIELD_BY_ID.format(role_id=role_id)
         # Ensure it starts empty in cache
-        await redis_client.client.hdel(RedisKeys.ROLES_CACHE, field)  # type: ignore[misc]
+        await redis_client.client.hdel(RedisKeys.ROLES_CACHE, field)
 
         await client.get(f"/api/v0/roles/{role_id}", headers=headers)
-        cached_val = await redis_client.client.hget(RedisKeys.ROLES_CACHE, field)  # type: ignore[misc]
+        cached_val = await redis_client.client.hget(RedisKeys.ROLES_CACHE, field)
         assert cached_val is not None
 
         # 3. Verify Cache Invalidation on Update
         await client.patch(f"/api/v0/roles/{role_id}", json={"description": "Updated"}, headers=headers)
-        assert await redis_client.client.hget(RedisKeys.ROLES_CACHE, field) is None  # type: ignore[misc]
+        assert await redis_client.client.hget(RedisKeys.ROLES_CACHE, field) is None
 
         # 4. Cleanup on Delete
         await client.get(f"/api/v0/roles/{role_id}", headers=headers)  # Repopulate
         await client.delete(f"/api/v0/roles/{role_id}", headers=headers)
-        assert await redis_client.client.hget(RedisKeys.ROLES_CACHE, field) is None  # type: ignore[misc]
+        assert await redis_client.client.hget(RedisKeys.ROLES_CACHE, field) is None
 
     finally:
         await db.close_pool()

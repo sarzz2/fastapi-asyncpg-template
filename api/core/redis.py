@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncGenerator, Awaitable, Optional, cast
+from typing import AsyncGenerator, Optional
 
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
@@ -24,7 +24,7 @@ class RedisClient:
     async def connect(self) -> None:
         """Connect to the Redis server and verify the connection."""
         try:
-            pong = await cast(Awaitable[bool], self.client.ping())
+            pong = await self.client.ping()
             if not pong:
                 raise RuntimeError("Redis ping returned falsy response")
 
@@ -40,7 +40,7 @@ class RedisClient:
     async def health_check(self) -> bool:
         """Check the health of the Redis connection."""
         try:
-            return await cast(Awaitable[bool], self.client.ping())
+            return await self.client.ping()
         except Exception:  # pylint: disable=broad-except
             return False
 
