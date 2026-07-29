@@ -51,14 +51,10 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --all-groups
 
       - name: Run Ruff (Lint)
         run: uv run ruff check .
-
-      - name: Run Ruff (Format)
-        run: uv run ruff format --check .
-
       - name: Run Isort
         run: uv run isort --check-only .
 

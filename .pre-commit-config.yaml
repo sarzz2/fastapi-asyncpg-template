@@ -33,84 +33,17 @@ repos:
       hooks:
           - id: pylint
             name: pylint
-            entry: pylint
-            language: python
+            entry: uv run pylint
+            language: system
             types: [python]
             require_serial: true
-            additional_dependencies:
-                - pylint
-                - pydantic
-                - asyncpg
-                - fastapi
-                - bcrypt
-                - python-jose
-                - colorlog
-                - PyJWT
-                - redis
-                - boto3
-                - celery
-                - httpx
-                - pydantic-settings
-                - uvicorn
-                - pytest
-                - prometheus_client
-                - prometheus_fastapi_instrumentator
-                - pyroscope-io
-                - opentelemetry-api
-                - opentelemetry-sdk
-                - opentelemetry-instrumentation-fastapi
-                - opentelemetry-instrumentation-asyncpg
-                - opentelemetry-instrumentation-redis
-                - opentelemetry-instrumentation-celery
-                - opentelemetry-exporter-otlp-proto-grpc
-                - slowapi
-                - python-json-logger
-                - secure
-                - sentry-sdk
-                - flagsmith
-                - tenacity
-                - sendgrid
-                - jinja2
-                - pyinstrument
 
           - id: mypy
             name: mypy
-            entry: mypy
-            language: python
+            entry: uv run mypy
+            language: system
             types: [python]
             require_serial: true
-            additional_dependencies:
-                - mypy
-                - pydantic
-                - asyncpg
-                - fastapi
-                - bcrypt
-                - python-jose
-                - colorlog
-                - PyJWT
-                - redis
-                - httpx
-                - pydantic-settings
-                - pytest
-                - prometheus_client
-                - prometheus_fastapi_instrumentator
-                - pyroscope-io
-                - opentelemetry-api
-                - opentelemetry-sdk
-                - opentelemetry-instrumentation-fastapi
-                - opentelemetry-instrumentation-asyncpg
-                - opentelemetry-instrumentation-redis
-                - opentelemetry-instrumentation-celery
-                - opentelemetry-exporter-otlp-proto-grpc
-                - slowapi
-                - python-json-logger
-                - secure
-                - sentry-sdk
-                - flagsmith
-                - tenacity
-                - sendgrid
-                - jinja2
-                - pyinstrument
 
     - repo: https://github.com/gitleaks/gitleaks
       rev: v8.18.0
