@@ -105,28 +105,28 @@ Enhancement suggestions are tracked as [GitHub issues](https://github.com/sarzz/
     cd fastapi-template
     ```
 
-2.  **Install Poetry**
-    Follow instructions at https://python-poetry.org/docs/#installation
+2.  **Install uv**
+    Follow instructions at https://docs.astral.sh/uv/
 
 3.  **Install Dependencies**
 
     ```bash
-    poetry install
+    uv sync
     ```
 
 4.  **Install Pre-commit Hooks**
 
     ```bash
-    poetry run pre-commit install
+    uv run pre-commit install
     ```
 
 5.  **Run Tests**
     ```bash
-    poetry run pytest
+    uv run pytest
     ```
 
 ### Style Guide
 
 -   We use `ruff` for linting and formatting.
 -   we use `mypy` for static type checking.
--   Please ensure `poetry run pre-commit run --all-files` passes before submitting a PR.
+-   Please ensure `uv run pre-commit run --all-files` passes before submitting a PR.

@@ -16,7 +16,7 @@ Add your sentry dsn in the .env file
 - **Custom Migration System**: A simple, script-based database migration tool (`migrate.py`) for managing schema changes.
 - **Centralized Configuration**: Environment-aware settings management using Pydantic.
 - **Code Quality Suite**: Pre-configured with `ruff`, `pylint`, and `mypy` for linting, formatting, and static type checking.
-- **Dependency Management**: Uses Poetry for clear, deterministic dependency management.
+- **Dependency Management**: Uses uv for lightning-fast, deterministic dependency management.
 
 ## Tech Stack
 
@@ -24,7 +24,7 @@ Add your sentry dsn in the .env file
 - **Database**: PostgreSQL (via `asyncpg`)
 - **Task Queue**: Celery
 - **Broker & Backend**: Redis
-- **Dependency Management**: Poetry
+- **Dependency Management**: uv
 - **Linting & Formatting**: Ruff, Pylint
 - **Type Checking**: Mypy
 
@@ -51,7 +51,7 @@ Add your sentry dsn in the .env file
 ### Prerequisites
 
 - Python 3.12+
-- Poetry
+- uv
 - PostgreSQL17+
 - Redis
 - LocalStack (for local AWS setup if you've AWS creds then no need of localstack)
@@ -68,10 +68,10 @@ Update the `.env` file with your local configuration.
 
 ### 2. Install Dependencies
 
-Use Poetry to install the project dependencies.
+Use uv to install the project dependencies.
 
 ```bash
-poetry install
+uv sync
 ```
 
 ### 3. Install DB extensions Run Database Migrations
@@ -87,8 +87,7 @@ brew services restart postgresql@17
 Activate the virtual environment and run the migration script to set up your database schema.
 
 ```bash
-poetry shell
-python migrate.py
+uv run python migrate.py
 ```
 
 ### 4. Setup pre-commit hooks
@@ -676,18 +675,18 @@ This project is configured with a suite of tools to ensure high code quality.
 **Auto-format Code:**
 
 ```bash
-poetry run ruff format
+uv run ruff format
 ```
 
 **Run All Checks:**
 
 ```bash
 # Run linter
-poetry run pylint .
+uv run pylint .
 
 # Run formatter and linter
-poetry run ruff check .
+uv run ruff check .
 
 # Run static type checker
-poetry run mypy .
+uv run mypy .
 ```

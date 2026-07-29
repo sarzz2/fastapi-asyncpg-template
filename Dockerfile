@@ -5,12 +5,7 @@ FROM python:3.14-slim AS builder
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    POETRY_VERSION=2.2.1 \
-    POETRY_HOME="/opt/poetry" \
-    POETRY_NO_INTERACTION=1
-
-# Add Poetry to PATH
-ENV PATH="$POETRY_HOME/bin:$PATH"
+    UV_PROJECT_ENVIRONMENT=/opt/venv
 
 # Install system dependencies
 RUN apt-get update \
@@ -21,21 +16,18 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Poetry
-RUN curl -sSL https://install.python-poetry.org | python3 -
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Set working directory
 WORKDIR /app
 
 # Copy dependency files
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml uv.lock ./
 
-# Create virtual environment and install dependencies
-RUN python -m venv /opt/venv
-ENV VIRTUAL_ENV=/opt/venv
-ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+# Create virtual environment and install dependencies using uv
+RUN uv sync --frozen --no-install-project
 
-RUN poetry install --no-root --no-ansi
 
 # Runtime stage
 FROM python:3.14-slim AS runtime

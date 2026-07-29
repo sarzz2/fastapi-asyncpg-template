@@ -102,7 +102,7 @@ def test_unique_violation_fields_only(app_with_handlers: FastAPI) -> None:
 
     @app_with_handlers.get("/unique-fields-only")
     async def raise_unique_fields() -> None:
-        exc = asyncpg.UniqueViolationError()
+        exc = asyncpg.UniqueViolationError("Unique violation")
         exc.detail = "Key (username)="  # Malformed - no values
         raise exc
 
@@ -117,7 +117,7 @@ def test_unique_violation_no_match(app_with_handlers: FastAPI) -> None:
 
     @app_with_handlers.get("/unique-no-match")
     async def raise_unique_no_match() -> None:
-        exc = asyncpg.UniqueViolationError()
+        exc = asyncpg.UniqueViolationError("Unique violation")
         exc.detail = "Some other error message"  # No Key pattern
         raise exc
 

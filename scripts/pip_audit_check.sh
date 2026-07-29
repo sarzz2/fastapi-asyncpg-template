@@ -9,8 +9,8 @@ fi
 
 # Run pip-audit and capture output in JSON format
 # We use || true to prevent immediate failure
-# We use poetry run to ensure we check the project dependencies
-poetry run pip-audit --format json > pip-audit-report.json || true
+# We use uv run to ensure we check the project dependencies
+uv run pip-audit --format json > pip-audit-report.json || true
 
 # Check for fixable vulnerabilities
 # Filter: dependencies -> vulns -> fix_versions length > 0
@@ -18,7 +18,7 @@ FIXABLE_VULNS=$(jq -r '.dependencies[] | select(.vulns) | .vulns[] | select(.fix
 
 if [ ! -z "$FIXABLE_VULNS" ]; then
     echo "❌ Found fixable vulnerabilities: $FIXABLE_VULNS"
-    echo "Run 'poetry run pip-audit' to see details."
+    echo "Run 'uv run pip-audit' to see details."
     rm pip-audit-report.json
     exit 0
 else

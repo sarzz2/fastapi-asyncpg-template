@@ -1,68 +1,74 @@
-[tool.poetry]
+[project]
 name = "fastapi-template"
 version = "0.1.1"
 description = ""
-authors = ["Sarthak singh <sarthaksingh2001@gmail.com>"]
+authors = [
+    { name = "Sarthak singh", email = "sarthaksingh2001@gmail.com" }
+]
 readme = "README.md"
-packages = [{ include = "api" }]
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.140.7",
+    "asyncpg>=0.31.0",
+    "colorlog>=6.12.0",
+    "bcrypt>=5.0.0",
+    "redis>=8.0.1",
+    "pyjwt>=2.13.0",
+    "pre-commit>=4.6.1",
+    "boto3>=1.43.56",
+    "celery>=5.6.2",
+    "asgiref>=3.12.1",
+    "authlib>=1.7.1",
+    "itsdangerous>=2.2.0",
+    "pydantic-settings>=2.14.2",
+    "uvicorn[standard]>=0.51.0",
+    "prometheus-fastapi-instrumentator>=8.1.0",
+    "slowapi>=0.1.10",
+    "python-json-logger>=4.0.0",
+    "sentry-sdk>=2.66.1",
+    "babel>=2.18.0",
+    "flagsmith>=6.1.0",
+    "tenacity>=9.1.4",
+    "werkzeug==3.1.8",
+    "sendgrid>=6.12.5",
+    "jinja2>=3.1.6",
+    "opentelemetry-api>=1.29.0",
+    "opentelemetry-sdk>=1.29.0",
+    "opentelemetry-exporter-otlp>=1.29.0",
+    "opentelemetry-instrumentation-fastapi>=0.50b0",
+    "opentelemetry-instrumentation-asyncpg>=0.50b0",
+    "opentelemetry-instrumentation-redis>=0.50b0",
+    "opentelemetry-instrumentation-celery>=0.50b0",
+    "pyroscope-io>=1.2.1",
+    "pyinstrument>=5.1.2",
+]
 
-[tool.poetry.dependencies]
-python = "^3.12"
-fastapi = "^0.140.7"
-asyncpg = "^0.31.0"
-colorlog = "^6.12.0"
-bcrypt = "^5.0.0"
-redis = "^8.0.1"
-pyjwt = "^2.13.0"
-pre-commit = "^4.6.1"
-boto3 = "^1.43.56"
-celery = "^5.6.2"
-asgiref = "^3.12.1"
-authlib = "^1.7.1"
-itsdangerous = "^2.2.0"
-pydantic-settings = "^2.14.2"
-uvicorn = { extras = ["standard"], version = "^0.51.0" }
-prometheus-fastapi-instrumentator = "^8.1.0"
-slowapi = "^0.1.10"
-python-json-logger = "^4.0.0"
-sentry-sdk = "^2.66.1"
-babel = "^2.18.0"
-flagsmith = "^6.1.0"
-tenacity = "^9.1.4"
-werkzeug = "3.1.8"
-sendgrid = "^6.12.5"
-jinja2 = "^3.1.6"
-opentelemetry-api = "^1.29.0"
-opentelemetry-sdk = "^1.29.0"
-opentelemetry-exporter-otlp = "^1.29.0"
-opentelemetry-instrumentation-fastapi = "^0.50b0"
-opentelemetry-instrumentation-asyncpg = "^0.50b0"
-opentelemetry-instrumentation-redis = "^0.50b0"
-opentelemetry-instrumentation-celery = "^0.50b0"
-pyroscope-io = "^1.2.1"
-pyinstrument = "^5.1.2"
-
-
-[tool.poetry.group.dev.dependencies]
-mypy = "^2.3.0"
-pylint = "^4.0.6"
-ruff = "^0.16.0"
-isort = "^8.0.1"
-bandit = "^1.9.4"
-pip-audit = "^2.10.1"
-
-[tool.poetry.group.test.dependencies]
-pytest = "^9.1.1"
-httpx = "^0.28.1"
-pytest-asyncio = "^1.4.0"
-pytest-cov = "^7.1.0"
-pytest-xdist = "^3.8.0"
-httpx-ws = "^0.9.0"
-fastapi = { extras = ["standard"], version = "^0.140.7" }
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pylint>=4.0.6",
+    "ruff>=0.16.0",
+    "isort>=8.0.1",
+    "bandit>=1.9.4",
+    "pip-audit>=2.10.1",
+]
+test = [
+    "pytest>=9.1.1",
+    "httpx>=0.28.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-xdist>=3.8.0",
+    "httpx-ws>=0.9.0",
+    "fastapi[standard]>=0.140.7",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["api"]
+
 
 [tool.fastapi]
 entrypoint = "api.main:app"
