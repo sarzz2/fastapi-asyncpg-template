@@ -1,3 +1,4 @@
+import hashlib
 from unittest.mock import MagicMock, patch
 
 from starlette.requests import Request
@@ -6,12 +7,13 @@ from api.core.rate_limit import get_real_user_key
 
 
 def test_get_real_user_key_bearer() -> None:
-    """Test identifying user by Bearer token."""
+    """Test identifying user by Bearer token hash."""
     mock_request = MagicMock(spec=Request)
     mock_request.headers = {"Authorization": "Bearer some-token"}
 
     key = get_real_user_key(mock_request)
-    assert key == "Bearer some-token"
+    expected_hash = hashlib.sha256(b"some-token").hexdigest()
+    assert key == f"token:{expected_hash}"
 
 
 def test_get_real_user_key_basic_fallback() -> None:

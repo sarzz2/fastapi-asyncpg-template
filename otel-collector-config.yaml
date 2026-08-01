@@ -1,0 +1,44 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  batch:
+    send_batch_size: 10000
+    timeout: 10s
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 20
+
+exporters:
+  clickhousemetricswrite:
+    endpoint: tcp://clickhouse:9000?database=signoz_metrics
+    resource_to_telemetry_conversion:
+      enabled: true
+
+  clickhousetraces:
+    datasources:
+      - endpoint: tcp://clickhouse:9000?database=signoz_traces
+
+  clickhouse:
+    endpoint: tcp://clickhouse:9000?database=signoz_logs
+
+service:
+  pipelines:
+    tracers:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhousetraces]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhousemetricswrite]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [clickhouse]

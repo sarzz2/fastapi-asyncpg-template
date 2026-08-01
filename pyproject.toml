@@ -39,6 +39,9 @@ dependencies = [
     "opentelemetry-instrumentation-asyncpg>=0.50b0",
     "opentelemetry-instrumentation-redis>=0.50b0",
     "opentelemetry-instrumentation-celery>=0.50b0",
+    "opentelemetry-instrumentation-httpx>=0.50b0",
+    "opentelemetry-instrumentation-botocore>=0.50b0",
+    "opentelemetry-instrumentation-logging>=0.50b0",
     "pyroscope-io>=1.2.1",
     "pyinstrument>=5.1.2",
 ]
@@ -136,4 +139,16 @@ exclude_lines = [
   "pragma: no cover",
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
+]
+
+[tool.pylint.main]
+source-roots = ["."]
+max-line-length = 120
+
+[tool.pylint.messages_control]
+disable = [
+  "missing-module-docstring",
+  "too-few-public-methods",
+  "no-name-in-module",
+  "invalid-name",
 ]

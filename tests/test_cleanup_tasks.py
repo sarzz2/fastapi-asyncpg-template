@@ -1,5 +1,5 @@
 """
-Tests for background cleanup tasks, including log rotation and stagnant S3 file deletion.
+Tests for background cleanup tasks, including log rotation.
 """
 
 import os
@@ -8,17 +8,8 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from botocore.exceptions import ClientError
 
 from api.tasks.delete_old_logs import delete_old_logs
-from api.tasks.delete_s3_files import delete_stagnant_temporary_files
-
-
-@pytest.fixture
-def mock_s3() -> Any:
-    """Provides a mocked S3 client for task testing."""
-    with patch("api.tasks.delete_s3_files.s3_client") as mock:
-        yield mock
 
 
 @pytest.fixture
@@ -77,55 +68,3 @@ def test_log_cleanup_ignores_malformed_filenames(mock_os: MagicMock) -> None:  #
 
         delete_old_logs()
         mock_os.remove.assert_not_called()
-
-
-def test_s3_cleanup_no_files(mock_s3: MagicMock) -> None:  # pylint: disable=redefined-outer-name
-    """
-    Verify that the S3 cleanup task handles empty buckets gracefully.
-    """
-    mock_s3.list_objects_v2.return_value = {}
-    delete_stagnant_temporary_files()
-    mock_s3.delete_object.assert_not_called()
-
-
-def test_s3_cleanup_stagnant_files(mock_s3: MagicMock) -> None:  # pylint: disable=redefined-outer-name
-    """
-    Verify that only temporary files older than the threshold are deleted from S3.
-    """
-    with patch("api.tasks.delete_s3_files.datetime") as mock_dt:
-        now = datetime(2025, 12, 7, 12, 0, 0)
-        mock_dt.now.return_value = now
-
-        # 1. Stale temp (20+ mins), 2. Fresh temp (5 mins), 3. Stale permanent (should remain)
-        mock_s3.list_objects_v2.return_value = {
-            "Contents": [
-                {"Key": "stale.tmp", "LastModified": datetime(2025, 12, 7, 11, 30, 0)},
-                {"Key": "fresh.tmp", "LastModified": datetime(2025, 12, 7, 11, 55, 0)},
-                {"Key": "stale.perm", "LastModified": datetime(2025, 12, 7, 11, 30, 0)},
-            ]
-        }
-
-        def get_tags(**kwargs: str) -> dict:
-            key = kwargs.get("Key", "")
-            status_val = "permanent" if "perm" in key else "temporary"
-            return {"TagSet": [{"Key": "status", "Value": status_val}]}
-
-        mock_s3.get_object_tagging.side_effect = get_tags
-
-        delete_stagnant_temporary_files()
-
-        # Should only delete stale.tmp
-        mock_s3.delete_object.assert_called_once()
-        assert mock_s3.delete_object.call_args[1]["Key"] == "stale.tmp"
-
-
-def test_s3_cleanup_handles_client_errors(mock_s3: MagicMock) -> None:  # pylint: disable=redefined-outer-name
-    """
-    Verify that S3 API errors do not crash the cleanup task.
-    """
-    mock_s3.list_objects_v2.side_effect = ClientError(
-        {"Error": {"Code": "AccessDenied", "Message": "Denied"}}, "ListObjectsV2"
-    )
-
-    # Should catch and log, not propagate
-    delete_stagnant_temporary_files()

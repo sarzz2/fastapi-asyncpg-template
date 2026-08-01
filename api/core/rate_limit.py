@@ -1,3 +1,5 @@
+import hashlib
+
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from starlette.requests import Request
@@ -10,16 +12,18 @@ def get_real_user_key(request: Request) -> str:
     """
     Identify the user for rate limiting.
     Priority:
-    1. Authorization Header (for API clients)
+    1. Authorization Header Hash (for API clients)
     2. IP Address (fallback for unauthenticated)
 
     This ensures that multiple authenticated users behind the same NAT
-    (Organization Network) are not blocked by each other's traffic.
+    (Organization Network) are not blocked by each other's traffic, while
+    preventing Redis key bloat from raw JWT tokens.
     """
     # 1. Authorization Header
     auth_header = request.headers.get("Authorization")
     if auth_header and auth_header.startswith("Bearer "):
-        return auth_header
+        token = auth_header[7:]
+        return f"token:{hashlib.sha256(token.encode()).hexdigest()}"
 
     # 2. Fallback to IP
     return str(get_remote_address(request))

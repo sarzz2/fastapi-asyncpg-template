@@ -1,5 +1,6 @@
 import asyncio
 import time
+import uuid
 from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import AsyncGenerator, Awaitable, Callable
@@ -10,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.httpsredirect import HTTPSRedirectMiddleware
 from fastapi.responses import HTMLResponse
+from opentelemetry import trace
 from prometheus_fastapi_instrumentator import Instrumentator
 from pyinstrument import Profiler
 from sentry_sdk.integrations.asyncio import AsyncioIntegration
@@ -177,13 +179,16 @@ async def health_check() -> HealthResponse:
 @app.middleware("http")
 async def log_requests(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """
-    Middleware to log incoming HTTP requests and their processing time.
+    Middleware to log incoming HTTP requests, process time, and attach X-Trace-ID & X-Request-ID headers.
     Args:
         request (Request): The incoming HTTP request.
         call_next (Callable): The next middleware or route handler to call.
     Returns:
         Response: The HTTP response.
     """
+    # Extract or generate Request ID
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+
     # Extract client info from context (set by ClientInfoMiddleware)
     app_version = APP_VERSION.get() or "N/A"
     app_build = APP_BUILD.get() or "N/A"
@@ -191,10 +196,11 @@ async def log_requests(request: Request, call_next: Callable[[Request], Awaitabl
     device_id = DEVICE_ID.get() or "N/A"
 
     logger.info(
-        "\033[1;37m%s\033[0m , %s params: %s | Version: %s | Build: %s | Platform: %s | Device: %s",
+        "\033[1;37m%s\033[0m , %s params: %s | Request-ID: %s | Version: %s | Build: %s | Platform: %s | Device: %s",
         request.method,
         request.url,
         dict(request.query_params),
+        request_id,
         app_version,
         app_build,
         platform,
@@ -204,6 +210,16 @@ async def log_requests(request: Request, call_next: Callable[[Request], Awaitabl
     start_time = time.time()
     response: Response = await call_next(request)
     process_time = time.time() - start_time
+
+    # Attach X-Request-ID response header
+    response.headers["X-Request-ID"] = request_id
+
+    # Attach OpenTelemetry X-Trace-ID response header if active span exists
+    span_context = trace.get_current_span().get_span_context()
+    if span_context.is_valid:
+        trace_id_hex = f"{span_context.trace_id:032x}"
+        response.headers["X-Trace-ID"] = trace_id_hex
+
     if response.status_code < 400:
         logger.info(
             "\033[1;37m Request completed with %s \033[0m %s in %.6fs",
@@ -281,5 +297,5 @@ if settings.SENTRY_DSN:
         traces_sampler=traces_sampler,
         profiles_sample_rate=settings.SENTRY_PROFILES_SAMPLE_RATE,
         send_default_pii=False,
-        enable_tracing=True,
+        enable_tracing=False,
     )

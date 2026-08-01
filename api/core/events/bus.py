@@ -84,7 +84,7 @@ class EventBus:
 
     def autodiscover(self) -> None:
         """
-        Automatically searches for listener files within 'api/apps/*/v0/listeners/*.py' and imports them.
+        Automatically searches for listener files within 'api/apps/**/listeners/*.py' and imports them.
         This triggers any `@event_bus.on` decorators to register at startup, enforcing decoupled organization.
         """
         base_dir = Path(__file__).resolve().parent.parent.parent / "apps"
@@ -95,13 +95,9 @@ class EventBus:
         logger.info("Initializing EventBus listener autodiscovery...")
         discovered_count = 0
 
-        # Scan for structured listener folders dynamically
-        for app_dir in base_dir.iterdir():
-            if not app_dir.is_dir() or app_dir.name == "__pycache__":
-                continue
-
-            listeners_dir = app_dir / "v0" / "listeners"
-            if not listeners_dir.exists():
+        # Dynamically scan for any 'listeners' directory inside apps
+        for listeners_dir in base_dir.rglob("listeners"):
+            if not listeners_dir.is_dir():
                 continue
 
             for listener_file in listeners_dir.rglob("*.py"):
@@ -110,7 +106,7 @@ class EventBus:
 
                 # Convert OS path to Python module string (e.g. api.apps.notification.v0.listeners.user_created)
                 rel_path = listener_file.relative_to(base_dir.parent.parent)
-                module_name = str(rel_path).replace(".py", "").replace("/", ".")
+                module_name = str(rel_path.with_suffix("")).replace("/", ".").replace("\\", ".")
 
                 try:
                     importlib.import_module(module_name)

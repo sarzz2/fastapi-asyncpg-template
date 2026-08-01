@@ -34,8 +34,8 @@ services:
 
   db:
     build:
-      context: ./db
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: db.Dockerfile
     image: fastapi-template-db
     container_name: fastapi_db
     environment:
@@ -191,17 +191,62 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
 
-  tempo:
-    image: grafana/tempo:2.6.1
-    container_name: fastapi_tempo
-    command: [ "-config.file=/etc/tempo.yaml" ]
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: signoz-clickhouse
     volumes:
-      - ./tempo.yaml:/etc/tempo.yaml
-      - tempo_data:/var/tempo
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app_network
+
+  signoz-query-service:
+    image: signoz/query-service:latest
+    container_name: signoz-query-service
+    environment:
+      - ClickHouseUrl=tcp://clickhouse:9000
+      - STORAGE=clickhouse
+      - GODEBUG=netdns=go
+      - TELEMETRY_ENABLED=true
+      - DEPLOYMENT_TYPE=docker-standalone
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  signoz-frontend:
+    image: signoz/frontend:latest
+    container_name: signoz-frontend
     ports:
-      - "3200:3200"   # Tempo
-      - "4317:4317"   # OTLP gRPC
-      - "4318:4318"   # OTLP HTTP
+      - "3301:3301"
+    environment:
+      - FRONTEND_PORT=3301
+    depends_on:
+      - signoz-query-service
+    networks:
+      - app_network
+
+  signoz-otel-collector:
+    image: signoz/signoz-otel-collector:latest
+    container_name: signoz-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    environment:
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=signoz-collector
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      signoz-query-service:
+        condition: service_started
     networks:
       - app_network
 
@@ -214,4 +259,4 @@ volumes:
   # localstack_data:
   prometheus_data:
   grafana_data:
-  tempo_data:
+  clickhouse_data:

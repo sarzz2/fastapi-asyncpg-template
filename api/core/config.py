@@ -56,14 +56,14 @@ class Settings(BaseSettings):
 
     # OpenTelemetry
     OTEL_ENABLED: bool = False
-    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://tempo:4317"
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://signoz-otel-collector:4317"
 
     # CORS
     CORS_ORIGINS: list[str] = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "http://localhost:3301",
         "http://localhost:5173",
-        "http://localhost:3200",
         "http://localhost:4040",
         "http://localhost:4317",
         "http://localhost:4318",

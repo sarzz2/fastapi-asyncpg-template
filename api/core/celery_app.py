@@ -128,10 +128,6 @@ celery_app.Task = AsyncBaseTask
 
 # Celery Beat Schedule
 celery_app.conf.beat_schedule = {
-    "delete-stagnant-s3-files": {
-        "task": "api.tasks.delete_s3_files.delete_stagnant_temporary_files",
-        "schedule": crontab(minute="*/15"),  # Runs every 15 minutes
-    },
     "delete-old-logs": {
         "task": "api.tasks.delete_old_logs.delete_old_logs",
         "schedule": crontab(minute=0, hour=0),  # Runs midnight daily

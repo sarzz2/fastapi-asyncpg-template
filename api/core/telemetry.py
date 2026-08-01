@@ -1,12 +1,11 @@
-from typing import Any, Callable
-
-import fastapi.routing
-from fastapi import FastAPI, Request, Response
-from fastapi.routing import APIRoute
+from fastapi import FastAPI
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.asyncpg import AsyncPGInstrumentor
+from opentelemetry.instrumentation.botocore import BotocoreInstrumentor
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -16,43 +15,14 @@ from api.constants import Environments
 from api.core.config import settings
 
 
-def instrument_fastapi_validation() -> None:
-    """
-    Monkey-patch fastapi.routing.serialize_response to capture Pydantic validation time.
-    """
-    original_serialize_response = fastapi.routing.serialize_response
-
-    async def patched_serialize_response(*args: Any, **kwargs: Any) -> Any:
-        tracer = trace.get_tracer(__name__)
-        with tracer.start_as_current_span("response_model_validation"):
-            return await original_serialize_response(*args, **kwargs)
-
-    fastapi.routing.serialize_response = patched_serialize_response
-
-
-class TelemetryRoute(APIRoute):
-    """
-    Custom APIRoute to add OpenTelemetry spans for detailed tracing.
-    """
-
-    def get_route_handler(self) -> Callable:
-        original_route_handler = super().get_route_handler()
-        tracer = trace.get_tracer(__name__)
-
-        async def custom_route_handler(request: Request) -> Response:
-            with tracer.start_as_current_span(f"{request.scope['route'].name}_handler"):
-                response: Response = await original_route_handler(request)
-                return response
-
-        return custom_route_handler
-
-
 def setup_telemetry(app: FastAPI) -> None:
     """
     Setup OpenTelemetry for the FastAPI application.
+    Instruments FastAPI, AsyncPG, Redis, HTTPX, Botocore (AWS/S3), and Logging.
     """
     if not settings.OTEL_ENABLED or settings.ENV == Environments.TEST.value:
         return
+
     resource = Resource.create(
         attributes={
             "service.name": settings.PROJECT_NAME,
@@ -61,26 +31,31 @@ def setup_telemetry(app: FastAPI) -> None:
         }
     )
 
-    utils = TracerProvider(resource=resource)
-    trace.set_tracer_provider(utils)
+    provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(provider)
 
     otlp_exporter = OTLPSpanExporter(endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)
-
     span_processor = BatchSpanProcessor(otlp_exporter)
-    utils.add_span_processor(span_processor)
+    provider.add_span_processor(span_processor)
 
-    # Instrument Pydantic Validation (Monkey Patch)
-    instrument_fastapi_validation()
-
-    # Instrument FastAPI (exclude noisy internal endpoints from traces)
+    # 1. Instrument FastAPI (HTTP requests)
     FastAPIInstrumentor.instrument_app(
         app,
-        tracer_provider=utils,
-        excluded_urls="health,metrics,openapi.json,docs,redoc,trace-test",
+        tracer_provider=provider,
+        excluded_urls="health,metrics,openapi.json,docs,redoc",
     )
 
-    # Instrument AsyncPG
-    AsyncPGInstrumentor().instrument(tracer_provider=utils)
+    # 2. Instrument Database (AsyncPG SQL queries)
+    AsyncPGInstrumentor().instrument(tracer_provider=provider)
 
-    # Instrument Redis
-    RedisInstrumentor().instrument(tracer_provider=utils)
+    # 3. Instrument Cache (Redis commands)
+    RedisInstrumentor().instrument(tracer_provider=provider)
+
+    # 4. Instrument Outbound HTTP (HTTPX calls)
+    HTTPXClientInstrumentor().instrument(tracer_provider=provider)
+
+    # 5. Instrument AWS S3 & Cloud Services (Botocore calls)
+    BotocoreInstrumentor().instrument(tracer_provider=provider)
+
+    # 6. Instrument Logging (attaches trace_id and span_id to log records)
+    LoggingInstrumentor().instrument(set_logging_format=True)
