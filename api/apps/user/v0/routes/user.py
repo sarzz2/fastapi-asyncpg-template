@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Security, status
 from api.apps.user.v0.schemas.user import UserCreate, UserData, UserRoleAssignment, UserSessionData, UserUpdate
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.dependencies import get_current_user
-from api.shared.pagination import CursorPage
+from api.schemas.pagination import CursorPage
 
 router = APIRouter()
 

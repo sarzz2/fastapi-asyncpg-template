@@ -11,7 +11,7 @@ from api.core.auth import get_password_hash
 from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
-from api.shared.pagination import CursorPage
+from api.schemas.pagination import CursorPage
 
 
 class UserService:
