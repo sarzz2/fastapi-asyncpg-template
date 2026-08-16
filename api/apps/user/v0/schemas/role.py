@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -9,7 +8,7 @@ class PermissionBase(BaseModel):
     """Base Permission schema."""
 
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class PermissionCreate(PermissionBase):
@@ -29,21 +28,21 @@ class RoleBase(BaseModel):
     """Base Role schema."""
 
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class RoleCreate(RoleBase):
     """Schema for creating a role."""
 
-    permission_ids: List[UUID] = []
+    permission_ids: list[UUID] = []
 
 
 class RoleUpdate(BaseModel):
     """Schema for updating a role."""
 
-    name: Optional[str] = None
-    description: Optional[str] = None
-    permission_ids: Optional[List[UUID]] = None
+    name: str | None = None
+    description: str | None = None
+    permission_ids: list[UUID] | None = None
 
 
 class RoleData(RoleBase):
@@ -52,6 +51,6 @@ class RoleData(RoleBase):
     id: UUID
     created_at: datetime
     updated_at: datetime
-    permissions: List[PermissionData] = []
+    permissions: list[PermissionData] = []
 
     model_config = ConfigDict(from_attributes=True)

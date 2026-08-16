@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Dict, List, Optional
 from uuid import UUID
 
 from fastapi import WebSocket
@@ -20,9 +19,9 @@ class ConnectionManager:
 
     def __init__(self) -> None:
         # Maps user_id -> List of WebSockets
-        self.active_connections: Dict[UUID, List[WebSocket]] = {}
-        self.pubsub: Optional[PubSub] = None
-        self.listener_task: Optional[asyncio.Task] = None
+        self.active_connections: dict[UUID, list[WebSocket]] = {}
+        self.pubsub: PubSub | None = None
+        self.listener_task: asyncio.Task | None = None
 
     async def _ensure_listener(self) -> None:
         """Start the Redis listener task if it's not running."""

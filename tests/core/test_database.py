@@ -1,6 +1,6 @@
 # pylint: disable=protected-access, import-outside-toplevel, redefined-outer-name, unused-argument
 import asyncio
-from typing import Any, Generator, List, cast
+from typing import Any, Generator, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -153,7 +153,7 @@ async def test_fetch_query() -> None:
         # Test fetch list
         res = await DataBase.fetch("SELECT * FROM table")
         assert res is not None
-        assert len(cast(List[Any], res)) == 1
+        assert len(cast(list[Any], res)) == 1
         mock_pool.fetch.assert_called_once()
 
         # Test fetch row

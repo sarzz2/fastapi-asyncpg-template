@@ -1,5 +1,5 @@
 import re
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 from pydantic import BeforeValidator
 
@@ -41,16 +41,16 @@ StrongPassword = Annotated[str, BeforeValidator(validate_password_strength)]
 _s3_service = S3Service()
 
 
-def generate_file_url(key: Optional[str], presigned: bool = True) -> Optional[str]:
+def generate_file_url(key: str | None, presigned: bool = True) -> str | None:
     """
     Generate a URL for a given S3 key.
 
     Args:
-        key (Optional[str]): The S3 key.
+        key (str | None): The S3 key.
         presigned (bool): Whether to generate a presigned URL.
 
     Returns:
-        Optional[str]: The generated URL or None if key is missing.
+        str | None: The generated URL or None if key is missing.
     """
     if not key:
         return None

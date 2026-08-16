@@ -1,6 +1,5 @@
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address
-from typing import Optional, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -15,31 +14,31 @@ class UserBase(BaseModel):
 
     email: EmailStr
     username: str
-    full_name: Optional[str] = None
+    full_name: str | None = None
     is_active: bool = True
 
 
 class UserCreate(UserBase):
     """Schema for user creation request."""
 
-    password: Optional[StrongPassword] = None
+    password: StrongPassword | None = None
 
 
 class UserUpdate(BaseModel):
     """Schema for user update request."""
 
-    full_name: Optional[str] = None
-    email: Optional[EmailStr] = None
-    username: Optional[str] = None
+    full_name: str | None = None
+    email: EmailStr | None = None
+    username: str | None = None
 
 
 class UserData(UserBase):
     """Schema for user data in responses."""
 
     id: UUID
-    hashed_password: Optional[str] = Field(None, exclude=True)
+    hashed_password: str | None = Field(None, exclude=True)
     created_at: datetime
-    profile_picture_url: Optional[str] = None
+    profile_picture_url: str | None = None
     roles: list[RoleData] = []
     token_version: int = 1
 
@@ -47,7 +46,7 @@ class UserData(UserBase):
 
     @field_validator("profile_picture_url", mode="before")
     @classmethod
-    def generate_profile_picture_url(cls, v: Optional[str]) -> Optional[str]:
+    def generate_profile_picture_url(cls, v: str | None) -> str | None:
         """Generate profile picture URL."""
         return generate_file_url(v)
 
@@ -59,8 +58,8 @@ class UserSessionBase(BaseModel):
     user_id: UUID
     issued_at: datetime
     expires_at: datetime
-    ip_address: Optional[Union[str, IPv4Address, IPv6Address]] = None
-    user_agent: Optional[str] = None
+    ip_address: str | IPv4Address | IPv6Address | None = None
+    user_agent: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

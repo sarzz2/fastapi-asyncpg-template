@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 from uuid import UUID
 
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
@@ -38,11 +37,11 @@ class NotificationService:
         user_id: UUID,
         message: str,
         notification_type: NotificationType = NotificationType.INFO,
-        subject: Optional[str] = None,
-        metadata: Optional[dict] = None,
-        action_url: Optional[str] = None,
+        subject: str | None = None,
+        metadata: dict | None = None,
+        action_url: str | None = None,
         template_path: str = "email/notification.html",
-        channels: Optional[List[str]] = None,
+        channels: list[str | None] = None,
     ) -> None:
         """
         Send a notification to a user via all registered channels.
@@ -51,11 +50,11 @@ class NotificationService:
             user_id (UUID): User ID.
             message (str): Message to send.
             notification_type (NotificationType): Type of notification.
-            subject (Optional[str]): Subject of the notification.
-            metadata (Optional[dict]): Metadata of the notification.
-            action_url (Optional[str]): Action URL of the notification.
+            subject (str | None): Subject of the notification.
+            metadata (dict | None): Metadata of the notification.
+            action_url (str | None): Action URL of the notification.
             template_path (str): Template path of the notification.
-            channels (Optional[List[str]]): Channels to send the notification to.
+            channels (List[str | None]): Channels to send the notification to.
         """
         notification = NotificationSchema(
             type=notification_type,
@@ -82,11 +81,11 @@ class NotificationService:
         self,
         message: str,
         notification_type: NotificationType = NotificationType.INFO,
-        subject: Optional[str] = None,
-        metadata: Optional[dict] = None,
-        action_url: Optional[str] = None,
+        subject: str | None = None,
+        metadata: dict | None = None,
+        action_url: str | None = None,
         template_path: str = "email/notification.html",
-        channels: Optional[List[str]] = None,
+        channels: list[str | None] = None,
     ) -> None:
         """
         Broadcast a notification to all users via all registered channels.
@@ -94,11 +93,11 @@ class NotificationService:
         Args:
             message (str): Message to send.
             notification_type (NotificationType): Type of notification.
-            subject (Optional[str]): Subject of the notification.
-            metadata (Optional[dict]): Metadata of the notification.
-            action_url (Optional[str]): Action URL of the notification.
+            subject (str | None): Subject of the notification.
+            metadata (dict | None): Metadata of the notification.
+            action_url (str | None): Action URL of the notification.
             template_path (str): Template path of the notification.
-            channels (Optional[List[str]]): Channels to send the notification to.
+            channels (List[str | None]): Channels to send the notification to.
         """
         notification = NotificationSchema(
             type=notification_type,

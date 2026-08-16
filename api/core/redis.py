@@ -1,5 +1,5 @@
 import logging
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator
 
 from redis.asyncio import Redis
 from redis.asyncio.client import PubSub
@@ -56,7 +56,7 @@ async def get_redis() -> Redis:
     return redis_client.client
 
 
-async def listen_to_pubsub(pubsub: Optional[PubSub]) -> AsyncGenerator[tuple[str, str], None]:
+async def listen_to_pubsub(pubsub: PubSub | None) -> AsyncGenerator[tuple[str, str], None]:
     """Yields (channel, data) from a Redis Pub/Sub subscription."""
     if not pubsub:
         return

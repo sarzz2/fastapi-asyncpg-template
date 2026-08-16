@@ -3,7 +3,7 @@ import inspect
 import json
 import logging
 import time
-from typing import Any, Awaitable, Callable, List, Optional, ParamSpec, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, ParamSpec, TypeVar
 
 from pydantic import BaseModel
 
@@ -43,7 +43,7 @@ def _generate_key(pattern: str, func: Callable, args: tuple, kwargs: dict) -> st
         raise ValueError(f"Failed to generate cache key for pattern '{pattern}'") from e
 
 
-async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Type[BaseModel]]) -> Optional[Any]:
+async def _get_from_cache(key: str, hash_key: str | None, model: type[BaseModel] | None) -> Any | None:
     """Helper to retrieve and deserialize data from Redis."""
 
     start = time.perf_counter()
@@ -74,7 +74,7 @@ async def _get_from_cache(key: str, hash_key: Optional[str], model: Optional[Typ
     return None
 
 
-async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: Optional[int]) -> None:
+async def _save_to_cache(key: str, hash_key: str | None, value: Any, expire: int | None) -> None:
     """Helper to serialize and save data to Redis."""
     start = time.perf_counter()
     try:
@@ -117,9 +117,9 @@ async def _save_to_cache(key: str, hash_key: Optional[str], value: Any, expire: 
 
 def cache(
     key_pattern: str,
-    hash_key: Optional[str] = None,
-    expire: Optional[int] = 3600,
-    model: Optional[Type[BaseModel]] = None,
+    hash_key: str | None = None,
+    expire: int | None = 3600,
+    model: type[BaseModel] | None = None,
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to cache the result of a function in Redis.
@@ -163,8 +163,8 @@ def cache(
 
 
 def cache_invalidate(
-    key_pattern: Union[str, List[str]],
-    hash_key: Optional[str] = None,
+    key_pattern: str | list[str],
+    hash_key: str | None = None,
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to invalidate cache keys after function execution.

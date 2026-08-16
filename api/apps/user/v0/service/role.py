@@ -1,4 +1,3 @@
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -14,7 +13,7 @@ class RoleService:
     def __init__(self, role_dao: RoleDAO):
         self.role_dao = role_dao
 
-    async def get_all_roles(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[RoleData]:
+    async def get_all_roles(self, limit: int = 20, cursor: UUID | None = None) -> list[RoleData]:
         """
         Get all roles.
         Args:
@@ -90,7 +89,7 @@ class RoleService:
         await self.get_role_by_id(role_id)
         await self.role_dao.delete_role(role_id)
 
-    async def get_all_permissions(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[PermissionData]:
+    async def get_all_permissions(self, limit: int = 20, cursor: UUID | None = None) -> list[PermissionData]:
         """
         Get all permissions.
         Args:

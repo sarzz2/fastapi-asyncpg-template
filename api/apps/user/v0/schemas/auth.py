@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -33,7 +32,7 @@ class TokenData(BaseModel):
     """Schema for decoded token data."""
 
     username: str
-    id: Optional[UUID] = None
+    id: UUID | None = None
     exp: int
     jti: str
     type: str = "Bearer"

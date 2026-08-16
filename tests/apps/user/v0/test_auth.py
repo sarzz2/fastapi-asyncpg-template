@@ -1,5 +1,4 @@
 # pylint: disable=duplicate-code  # Shared user-registration pattern across test modules is intentional
-from typing import Tuple
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -14,7 +13,7 @@ from api.core.redis import RedisClient
 from api.shared.redis_keys import RedisKeys
 
 
-async def register_test_user(client: AsyncClient, prefix: str = "auth") -> Tuple[str, str]:
+async def register_test_user(client: AsyncClient, prefix: str = "auth") -> tuple[str, str]:
     """
     Helper to register a users and return (email, password).
     """

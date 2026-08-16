@@ -1,5 +1,4 @@
 import logging
-from typing import List, Optional
 
 from fastapi import Depends
 
@@ -17,13 +16,13 @@ class VersionService:
     def __init__(self, version_dao: VersionDAO):
         self.version_dao = version_dao
 
-    async def get_version_info(self, platform: str) -> Optional[AppVersionData]:
+    async def get_version_info(self, platform: str) -> AppVersionData | None:
         """
         Fetch version info for a specific platform.
         """
         return await self.version_dao.get_version_info(platform=platform)
 
-    async def check_force_update(self, platform: str, build_num: int) -> Optional[ForceUpdateResponse]:
+    async def check_force_update(self, platform: str, build_num: int) -> ForceUpdateResponse | None:
         """
         Check if a force update is required for the given platform and build number.
         """
@@ -60,13 +59,13 @@ class VersionService:
 
         return None
 
-    async def get_all_versions(self) -> List[AppVersionData]:
+    async def get_all_versions(self) -> list[AppVersionData]:
         """
         Fetch all version configurations.
         """
         return await self.version_dao.get_all_versions()
 
-    async def update_version_info(self, platform: str, update_data: AppVersionUpdate) -> Optional[AppVersionData]:
+    async def update_version_info(self, platform: str, update_data: AppVersionUpdate) -> AppVersionData | None:
         """
         Update version info for a platform.
         """

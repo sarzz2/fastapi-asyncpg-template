@@ -1,6 +1,6 @@
 import binascii
 from base64 import b64decode, b64encode
-from typing import Any, Awaitable, Callable, Generic, Optional, Sequence, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Sequence, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -76,7 +76,7 @@ async def apply_cursor_pagination(
     fetch_func: Callable[..., Awaitable[Sequence[T]]],
     params: PaginationParams,
     get_cursor_value: Callable[[T], str],
-    count_func: Optional[Callable[[], Awaitable[int]]] = None,
+    count_func: Callable[[], Awaitable[int]] | None = None,
     **kwargs: Any,
 ) -> Page[T]:
     """

@@ -1,4 +1,3 @@
-from typing import Tuple
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,7 +9,7 @@ from api.apps.user.v0.schemas.role import RoleCreate, RoleUpdate
 from api.core.database import DataBase
 
 
-async def register_and_login(client: AsyncClient, prefix: str = "test") -> Tuple[str, str, str]:
+async def register_and_login(client: AsyncClient, prefix: str = "test") -> tuple[str, str, str]:
     """
     Helper to register and login a test user.
     Returns (user_id, email, access_token).

@@ -1,5 +1,3 @@
-from typing import List, Optional, Type
-
 from fastapi import Depends
 
 from api.apps.user.v0.schemas.version import AppVersionData, AppVersionUpdate
@@ -11,12 +9,12 @@ from api.shared.redis_keys import RedisKeys
 class VersionDAO:
     """Data Access Object for app version-related database operations."""
 
-    def __init__(self, db: Type[DataBase]):
+    def __init__(self, db: type[DataBase]):
         """Initialize the VersionDAO with a database connection."""
         self.db = db
 
     @cache(key_pattern=RedisKeys.APP_VERSION_CACHE, model=AppVersionData, expire=None)
-    async def get_version_info(self, platform: str) -> Optional[AppVersionData]:
+    async def get_version_info(self, platform: str) -> AppVersionData | None:
         """
         Fetch version info for a specific platform.
         """
@@ -24,7 +22,7 @@ class VersionDAO:
         return await self.db.fetch(query, platform.lower(), model=AppVersionData, fetch_row=True)
 
     @cache(key_pattern=RedisKeys.APP_VERSIONS_ALL_CACHE, model=AppVersionData, expire=None)
-    async def get_all_versions(self) -> List[AppVersionData]:
+    async def get_all_versions(self) -> list[AppVersionData]:
         """
         Fetch all version configurations.
         """
@@ -32,7 +30,7 @@ class VersionDAO:
         return await self.db.fetch(query, model=AppVersionData, fetch_row=False)
 
     @cache_invalidate(key_pattern=[RedisKeys.APP_VERSION_CACHE, RedisKeys.APP_VERSIONS_ALL_CACHE])
-    async def update_version_info(self, platform: str, update_data: AppVersionUpdate) -> Optional[AppVersionData]:
+    async def update_version_info(self, platform: str, update_data: AppVersionUpdate) -> AppVersionData | None:
         """
         Update version info for a platform and invalidate cache.
         Uses a static query with COALESCE to avoid dynamic SQL construction.
@@ -62,6 +60,6 @@ class VersionDAO:
         )
 
 
-async def get_version_dao(db: Type[DataBase] = Depends(get_db)) -> VersionDAO:
+async def get_version_dao(db: type[DataBase] = Depends(get_db)) -> VersionDAO:
     """Dependency to get VersionDAO."""
     return VersionDAO(db=db)

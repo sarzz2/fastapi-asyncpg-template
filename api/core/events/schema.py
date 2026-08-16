@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -18,4 +18,4 @@ class ApplicationEvent(BaseModel):
     event_id: UUID = Field(default_factory=uuid4)
     event_name: str
     timestamp: datetime = Field(default_factory=get_utc_now)
-    payload: Dict[str, Any] = Field(default_factory=dict)
+    payload: dict[str, Any] = Field(default_factory=dict)

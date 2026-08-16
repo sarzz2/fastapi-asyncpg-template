@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, List, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
@@ -16,7 +16,7 @@ class UserDAO:
     def __init__(self, db: DataBase):
         self.db = db
 
-    async def _get_user_with_roles(self, where_clause: str, *args: Any) -> Optional[UserData]:
+    async def _get_user_with_roles(self, where_clause: str, *args: Any) -> UserData | None:
         query = f"""
             SELECT
                 u.*,
@@ -53,14 +53,14 @@ class UserDAO:
         record = await self.db.fetch(query, *args, fetch_row=True)
         return UserData.model_validate(dict(record)) if record else None
 
-    async def get_by_google_sub(self, sub: str) -> Optional[UserData]:
+    async def get_by_google_sub(self, sub: str) -> UserData | None:
         """
         Retrieve a user by Google OAuth subject (sub).
 
         Args:
             sub (str): Google subject identifier.
         Returns:
-            Optional[UserData]: User if found, None otherwise.
+            UserData | None: User if found, None otherwise.
         """
         # For this one, we need to join user_identities as well
         query = """
@@ -126,7 +126,7 @@ class UserDAO:
         await self.db.execute(query, *params)
         return user
 
-    async def get_by_username(self, username: str) -> Optional[UserData]:
+    async def get_by_username(self, username: str) -> UserData | None:
         """
         Retrieve a user by username.
 
@@ -135,11 +135,11 @@ class UserDAO:
                 username: Username to search for
 
         Returns:
-                Optional[UserData]: User if found, None otherwise
+                UserData | None: User if found, None otherwise
         """
         return await self._get_user_with_roles("u.username = $1", username)
 
-    async def get_by_id(self, user_id: UUID) -> Optional[UserData]:
+    async def get_by_id(self, user_id: UUID) -> UserData | None:
         """
         Retrieve a user by id.
 
@@ -147,18 +147,18 @@ class UserDAO:
             user_id: User id to search for
 
         Returns:
-            Optional[UserData]: User if found, None otherwise
+            UserData | None: User if found, None otherwise
         """
         return await self._get_user_with_roles("u.id = $1", user_id)
 
-    async def get_by_email(self, email: str) -> Optional[UserData]:
+    async def get_by_email(self, email: str) -> UserData | None:
         """
         Retrieve a user by email.
 
         Args:
             email: Email to search for.
         Returns:
-            Optional[UserData]: User if found, None otherwise.
+            UserData | None: User if found, None otherwise.
         """
         return await self._get_user_with_roles("u.email = $1", email)
 
@@ -187,7 +187,7 @@ class UserDAO:
     async def create_user(
         self,
         user_data: UserCreate,
-        hashed_password: Optional[str] = None,
+        hashed_password: str | None = None,
     ) -> UserData:
         """
         Create a new user in the database.
@@ -285,7 +285,7 @@ class UserDAO:
         query = "UPDATE users SET hashed_password = $1, token_version = token_version + 1 WHERE id = $2"
         await self.db.execute(query, hashed_password, user_id)
 
-    async def revoke_user_session(self, current_user_id: UUID, jti: str) -> Optional[int]:
+    async def revoke_user_session(self, current_user_id: UUID, jti: str) -> int | None:
         """
         Revoke a user session by its JTI.
 
@@ -307,7 +307,7 @@ class UserDAO:
             return None
         return int(row)
 
-    async def revoke_all_user_sessions(self, current_user_id: UUID) -> List[dict]:
+    async def revoke_all_user_sessions(self, current_user_id: UUID) -> list[dict]:
         """
         Revoke all sessions for a user.
 
@@ -325,9 +325,7 @@ class UserDAO:
         records = await self.db.fetch(query, current_user_id, fetch_row=False)
         return [dict(record) for record in records] if records else []
 
-    async def get_user_sessions(
-        self, user_id: UUID, limit: int, cursor: Optional[UUID] = None
-    ) -> List[UserSessionData]:
+    async def get_user_sessions(self, user_id: UUID, limit: int, cursor: UUID | None = None) -> list[UserSessionData]:
         """
         Retrieve paginated user sessions.
 
@@ -356,7 +354,7 @@ class UserDAO:
 
         return result if result is not None else []
 
-    async def assign_roles(self, user_id: UUID, role_ids: List[UUID]) -> None:
+    async def assign_roles(self, user_id: UUID, role_ids: list[UUID]) -> None:
         """
         Assign roles to a user.
         Args:

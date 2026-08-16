@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from contextvars import ContextVar
-from typing import Any, Dict
+from typing import Any
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -15,7 +15,7 @@ from api.core.config import settings
 _locale_ctx_var: ContextVar[str] = ContextVar("locale", default=settings.DEFAULT_LOCALE or "en")
 
 # Simple in-memory cache for loaded translations
-_translations_cache: Dict[str, Dict[str, Any]] = {}
+_translations_cache: dict[str, dict[str, Any]] = {}
 log = logging.getLogger("fastapi")
 
 
@@ -68,7 +68,7 @@ def get_locale() -> str:
     return _locale_ctx_var.get()
 
 
-def load_translations(locale: str) -> Dict[str, Any]:
+def load_translations(locale: str) -> dict[str, Any]:
     """Load translations from JSON file with caching."""
     if locale in _translations_cache:
         return _translations_cache[locale]
@@ -87,7 +87,7 @@ def load_translations(locale: str) -> Dict[str, Any]:
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
-            data: Dict[str, Any] = json.load(f)
+            data: dict[str, Any] = json.load(f)
             _translations_cache[locale] = data
             return data
     except Exception as e:  # pylint: disable=broad-except

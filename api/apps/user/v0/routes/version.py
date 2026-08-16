@@ -1,5 +1,3 @@
-from typing import List, Optional
-
 from fastapi import APIRouter, Depends, HTTPException, Response, Security, status
 
 from api.apps.user.v0.schemas.user import UserData
@@ -10,10 +8,10 @@ from api.core.dependencies import get_current_user
 router = APIRouter()
 
 
-@router.get("/check", response_model=Optional[ForceUpdateResponse])
+@router.get("/check", response_model=ForceUpdateResponse | None)
 async def check_version(
     platform: str, build: int, response: Response, svc: VersionService = Depends(get_version_service)
-) -> Optional[ForceUpdateResponse]:
+) -> ForceUpdateResponse | None:
     """
     Check if an update is available or required for the given platform and build.
     Publicly accessible. Returns 426 if update is forced.
@@ -26,11 +24,11 @@ async def check_version(
     return update_info
 
 
-@router.get("/configs", response_model=List[AppVersionData])
+@router.get("/configs", response_model=list[AppVersionData])
 async def get_all_version_configs(
     svc: VersionService = Depends(get_version_service),
     _current_user: UserData = Security(get_current_user, scopes=["app:read"]),
-) -> List[AppVersionData]:
+) -> list[AppVersionData]:
     """
     Get all version configurations.
     Requires 'app:read' scope.

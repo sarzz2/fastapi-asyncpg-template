@@ -1,7 +1,7 @@
-from typing import Any, Dict
+from typing import Any
 
 
-def get_email_context() -> Dict[str, Any]:
+def get_email_context() -> dict[str, Any]:
     """
     Returns the centralized context payload for Jinja2 email templates.
     """

@@ -1,4 +1,3 @@
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Security, status
@@ -101,7 +100,7 @@ async def revoke_all_sessions(
 @router.get("/sessions", response_model=CursorPage[UserSessionData])
 async def get_sessions(
     limit: int = Query(10, ge=1, le=100),
-    cursor: Optional[UUID] = Query(None),
+    cursor: UUID | None = Query(None),
     current_user: UserData = Depends(get_current_user),
     svc: UserService = Depends(get_user_service),
 ) -> CursorPage[UserSessionData]:

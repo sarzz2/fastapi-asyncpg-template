@@ -1,6 +1,6 @@
 # pylint: disable=duplicate-code
 import asyncio
-from typing import Any, List, Optional
+from typing import Any
 from uuid import UUID
 
 from fastapi import Depends
@@ -19,7 +19,7 @@ class RoleDAO:
         self.db = db
 
     @cache(key_pattern=RedisKeys.ROLE_FIELD_ALL, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
-    async def get_all_roles(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[RoleData]:
+    async def get_all_roles(self, limit: int = 20, cursor: UUID | None = None) -> list[RoleData]:
         """
         Retrieve all roles with their permissions.
         Args:
@@ -49,7 +49,7 @@ class RoleDAO:
             LEFT JOIN role_permissions rp ON r.id = rp.role_id
             LEFT JOIN permissions p ON rp.permission_id = p.id
         """
-        args: List[Any] = []
+        args: list[Any] = []
         if cursor:
             query = base_query + " WHERE r.id < $1 GROUP BY r.id ORDER BY r.id DESC LIMIT $2"
             args.append(cursor)
@@ -63,7 +63,7 @@ class RoleDAO:
             records = []
         return [RoleData.model_validate(dict(record)) for record in records]
 
-    async def _get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
+    async def _get_role_by_id(self, role_id: UUID) -> RoleData | None:
         """
         Get a role by ID (Internal, no cache).
         """
@@ -90,23 +90,23 @@ class RoleDAO:
         return record
 
     @cache(key_pattern=RedisKeys.ROLE_FIELD_BY_ID, hash_key=RedisKeys.ROLES_CACHE, model=RoleData)
-    async def get_role_by_id(self, role_id: UUID) -> Optional[RoleData]:
+    async def get_role_by_id(self, role_id: UUID) -> RoleData | None:
         """
         Get a role by ID.
         Args:
             role_id: Role ID.
         Returns:
-            Optional[RoleData]: Role data.
+            RoleData | None: Role data.
         """
         return await self._get_role_by_id(role_id)
 
-    async def get_role_by_name(self, name: str) -> Optional[RoleData]:
+    async def get_role_by_name(self, name: str) -> RoleData | None:
         """
         Get a role by name.
         Args:
             name: Role name.
         Returns:
-            Optional[RoleData]: Role data.
+            RoleData | None: Role data.
         """
         query = """
             SELECT
@@ -168,14 +168,14 @@ class RoleDAO:
     @cache_invalidate(
         key_pattern=[RedisKeys.ROLE_FIELD_ALL, RedisKeys.ROLE_FIELD_BY_ID], hash_key=RedisKeys.ROLES_CACHE
     )
-    async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> Optional[RoleData]:
+    async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> RoleData | None:
         """
         Update a role.
         Args:
             role_id: Role ID.
             role_update: Role update data.
         Returns:
-            Optional[RoleData]: Updated role data.
+            RoleData | None: Updated role data.
         """
         # 1. Update Role fields
         if role_update.name is not None or role_update.description is not None:
@@ -235,7 +235,7 @@ class RoleDAO:
             self.db.execute("UPDATE users SET token_version = token_version + 1 WHERE id = $1", role_id),
         )
 
-    async def get_all_permissions(self, limit: int = 20, cursor: Optional[UUID] = None) -> List[PermissionData]:
+    async def get_all_permissions(self, limit: int = 20, cursor: UUID | None = None) -> list[PermissionData]:
         """
         Retrieve all permissions.
         Args:
@@ -244,7 +244,7 @@ class RoleDAO:
         Returns:
             List[PermissionData]: List of permissions.
         """
-        args: List[Any] = []
+        args: list[Any] = []
         if cursor:
             query = "SELECT * FROM permissions WHERE id < $1 ORDER BY id DESC LIMIT $2"
             args.append(cursor)

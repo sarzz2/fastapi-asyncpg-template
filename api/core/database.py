@@ -7,7 +7,7 @@ import secrets
 import time
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any, AsyncGenerator, ClassVar, Dict, List, Literal, Optional, Type, TypeVar, Union, cast, overload
+from typing import Any, AsyncGenerator, ClassVar, Literal, TypeVar, cast, overload
 
 import asyncpg
 from asyncpg import Connection, Pool, Record, create_pool
@@ -67,7 +67,7 @@ class CustomRecord(Record):
 
         return super().__getattr__(item)
 
-    def dict(self) -> Dict[str, Any]:
+    def dict(self) -> dict[str, Any]:
         """Convert record to a dictionary for Pydantic model construction.
 
         Returns:
@@ -88,14 +88,14 @@ class PoolMeta:
         pool (Pool): The asyncpg connection pool object
         region (str): The geographic region identifier for this pool
         healthy (bool): Flag indicating if the pool is currently healthy (default: True)
-        last_latency (Optional[float]): The last measured latency in seconds for this pool (default: None)
+        last_latency (float | None): The last measured latency in seconds for this pool (default: None)
     """
 
     uri: str
     pool: Pool
     region: str
     healthy: bool = True
-    last_latency: Optional[float] = None
+    last_latency: float | None = None
 
 
 class DataBase(BaseModel):
@@ -106,28 +106,28 @@ class DataBase(BaseModel):
     features like health checking, round-robin load balancing, and region-aware routing.
 
     Class Variables:
-        write_pool (ClassVar[Optional[Pool]]): The primary write connection pool
+        write_pool (ClassVar[Pool | None]): The primary write connection pool
         read_pools_by_region (ClassVar[Dict[str, List[PoolMeta]]]): Mapping of regions to their read pools
     # overall tasks
         _region_priority (ClassVar[List[str]]): Ordered list of region failover priorities
     """
 
-    write_pool: ClassVar[Optional[Pool]] = None
+    write_pool: ClassVar[Pool | None] = None
 
     # maps region -> list[PoolMeta]
-    read_pools_by_region: ClassVar[Dict[str, List[PoolMeta]]] = {}
+    read_pools_by_region: ClassVar[dict[str, list[PoolMeta]]] = {}
     # overall tasks
-    _health_task: ClassVar[Optional[asyncio.Task]] = None
-    _region_priority: ClassVar[List[str]] = []
+    _health_task: ClassVar[asyncio.Task | None] = None
+    _region_priority: ClassVar[list[str]] = []
 
     @classmethod
     async def create_pool(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         cls,
         write_uri: str,
-        read_uris: Optional[Dict[str, Union[str, List[str]]]] = None,
+        read_uris: dict[str, str | list[str | None]] = None,
         min_con: int = settings.MIN_CONNECTION_COUNT,
         max_con: int = settings.MAX_CONNECTION_COUNT,
-        loop: Optional[asyncio.AbstractEventLoop] = None,
+        loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize database connection pools for both write and read operations.
 
@@ -172,7 +172,11 @@ class DataBase(BaseModel):
         if read_uris:
             for region, uris in read_uris.items():
                 cls.read_pools_by_region.setdefault(region, [])
-                for uri in uris:
+                uri_list = uris if isinstance(uris, list) else [uris]
+                for uri in uri_list:
+                    if not isinstance(uri, str):
+                        log.warning("Invalid read URI type: %s", uri)
+                        continue
                     try:
                         pool = await create_pool(
                             uri,
@@ -249,7 +253,7 @@ class DataBase(BaseModel):
                         raise
 
     @classmethod
-    async def _choose_region(cls, client_region: Optional[str] = None) -> Optional[str]:
+    async def _choose_region(cls, client_region: str | None = None) -> str | None:
         """Select the most appropriate database region based on various criteria.
 
         This internal method implements the region selection strategy with the following
@@ -260,10 +264,10 @@ class DataBase(BaseModel):
         4. Any available region as last resort
 
         Args:
-            client_region (Optional[str], default=None): The preferred region based on client location
+            client_region (str | None, default=None): The preferred region based on client location
 
         Returns:
-            Optional[str]: The selected region name, or None if no suitable region is found
+            str | None: The selected region name, or None if no suitable region is found
 
         Note:
             The selection logic prioritizes:
@@ -309,7 +313,7 @@ class DataBase(BaseModel):
         return None
 
     @classmethod
-    def _get_region_for_pool(cls, pool_to_find: Pool) -> Optional[str]:
+    def _get_region_for_pool(cls, pool_to_find: Pool) -> str | None:
         """Find the region name associated with a given database pool.
 
         This internal method searches through all configured regions and their pools
@@ -319,7 +323,7 @@ class DataBase(BaseModel):
             pool_to_find (Pool): The pool object to locate
 
         Returns:
-            Optional[str]: The region name if found, None if the pool isn't in any region
+            str | None: The region name if found, None if the pool isn't in any region
 
         Note:
             This is particularly useful when determining the region for the write pool
@@ -332,7 +336,7 @@ class DataBase(BaseModel):
         return None
 
     @classmethod
-    async def _select_read_pool(cls, client_region: Optional[str] = None) -> tuple[Pool, str]:
+    async def _select_read_pool(cls, client_region: str | None = None) -> tuple[Pool, str]:
         """Select an appropriate read pool based on client region and pool health status.
 
         This internal method implements the read pool selection strategy, considering:
@@ -342,7 +346,7 @@ class DataBase(BaseModel):
         - Fallback mechanisms for handling failures
 
         Args:
-            client_region (Optional[str], default=None): The preferred region based on client location
+            client_region (str | None, default=None): The preferred region based on client location
 
         Returns:
             Tuple[Pool, str]: A tuple containing (selected pool object, region name)
@@ -430,62 +434,62 @@ class DataBase(BaseModel):
     @overload
     @classmethod
     async def fetch(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
-        model: Type[T],
+        model: type[T],
         fetch_row: Literal[True],
         timeout: float = settings.DB_TIMEOUT,
         log_explain: bool = False,
-    ) -> Optional[T]: ...
+    ) -> T | None: ...
 
     @overload
     @classmethod
     async def fetch(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
-        model: Type[T],
+        model: type[T],
         fetch_row: Literal[False],
         timeout: float = settings.DB_TIMEOUT,
         log_explain: bool = False,
-    ) -> List[T]: ...
+    ) -> list[T]: ...
 
     @overload
     @classmethod
     async def fetch(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
         model: None = None,
         fetch_row: Literal[True] = ...,
         timeout: float = settings.DB_TIMEOUT,
         log_explain: bool = False,
-    ) -> Optional[Record]: ...
+    ) -> Record | None: ...
 
     @overload
     @classmethod
     async def fetch(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
         model: None = None,
         fetch_row: Literal[False] = ...,
         timeout: float = settings.DB_TIMEOUT,
         log_explain: bool = False,
-    ) -> List[Record]: ...
+    ) -> list[Record]: ...
 
     @classmethod
     @_db_retry_strategy
     async def fetch(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
-        model: Optional[Type[T]] = None,
+        model: type[T] | None = None,
         fetch_row: bool = False,
         timeout: float = settings.DB_TIMEOUT,
         log_explain: bool = False,
-    ) -> Union[Optional[T], List[T], Optional[Record], List[Record]]:
+    ) -> T | None | list[T] | Record | list[Record]:
         """Execute a read query using read replicas.
 
         Args:
@@ -535,17 +539,17 @@ class DataBase(BaseModel):
     @overload
     @classmethod
     async def write(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
-        model: Type[T],
+        model: type[T],
         timeout: float = settings.DB_TIMEOUT,
     ) -> T: ...
 
     @overload
     @classmethod
     async def write(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
         model: None = None,
@@ -555,12 +559,12 @@ class DataBase(BaseModel):
     @classmethod
     @_db_retry_strategy
     async def write(
-        cls: Type[BM],
+        cls: type[BM],
         query: str,
         *args: Any,
-        model: Optional[Type[T]] = None,
+        model: type[T] | None = None,
         timeout: float = settings.DB_TIMEOUT,
-    ) -> Union[T, Record]:
+    ) -> T | Record | None:
         """Execute a write query using primary pool with results.
 
         Args:
@@ -593,7 +597,7 @@ class DataBase(BaseModel):
         cls,
         query: str,
         *args: Any,
-        con: Optional[Union[Connection, Pool]] = None,
+        con: Connection | Pool | None = None,
         column: int = 0,
         use_primary: bool = False,
         timeout: float = settings.DB_TIMEOUT,
@@ -637,7 +641,7 @@ class DataBase(BaseModel):
         cls,
         query: str,
         *args: Any,
-        con: Optional[Union[Connection, Pool]] = None,
+        con: Connection | Pool | None = None,
         timeout: float = settings.DB_TIMEOUT,
     ) -> str:
         """Execute a query that modifies the database.
@@ -713,7 +717,7 @@ class DataBase(BaseModel):
         log.info("Closed DB connection pools")
 
     @classmethod
-    async def health_check(cls) -> Dict[str, Dict[str, Any]]:
+    async def health_check(cls) -> dict[str, dict[str, Any]]:
         """
         Get health status of all database pools.
         Returns:
@@ -735,7 +739,7 @@ class DataBase(BaseModel):
         return results
 
     @classmethod
-    async def get_pool_stats(cls) -> Dict[str, Any]:
+    async def get_pool_stats(cls) -> dict[str, Any]:
         """
         Get current statistics for all pools.
         Returns:
@@ -746,7 +750,7 @@ class DataBase(BaseModel):
         if not cls.write_pool:
             raise RuntimeError("Database not initialized")
 
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "write_pool": {
                 "size": cls.write_pool.get_size(),
                 "free_size": cls.write_pool.get_free_size(),
@@ -769,7 +773,7 @@ class DataBase(BaseModel):
         return stats
 
 
-async def get_db() -> AsyncGenerator[Type[DataBase], None]:
+async def get_db() -> AsyncGenerator[type[DataBase], None]:
     """FastAPI dependency for database access.
 
     Returns:

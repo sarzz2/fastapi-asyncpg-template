@@ -1,4 +1,4 @@
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from pydantic import BaseModel
 
@@ -10,5 +10,5 @@ class CursorPage(BaseModel, Generic[T]):
     Generic schema for cursor-based pagination.
     """
 
-    items: List[T]
-    next_cursor: Optional[str] = None
+    items: list[T]
+    next_cursor: str | None = None

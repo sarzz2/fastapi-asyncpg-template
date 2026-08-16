@@ -1,6 +1,6 @@
 import logging
 import re
-from typing import Dict, Iterable, Optional
+from typing import Iterable
 
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -31,7 +31,7 @@ class RegionASGIMiddleware:
         self,
         app: ASGIApp,
         header_names: Iterable[str] = ("x-geo-region", "x-cloud-region", "x-country"),
-        mapping: Optional[Dict[str, str]] = None,
+        mapping: dict[str, str | None] = None,
     ):
         """
         RegionASGIMiddleware constructor.
@@ -40,14 +40,14 @@ class RegionASGIMiddleware:
             app (ASGIApp): The ASGI application to wrap.
             header_names (Iterable[str], optional): Header names to check for region info.
                 Defaults to ("x-geo-region", "x-cloud-region", "x-country").
-            mapping (Optional[Dict[str, str]], optional): Mapping of raw header values to
+            mapping (Dict[str, str | None], optional): Mapping of raw header values to
                 canonical region keys. Defaults to DEFAULT_REGION_MAP.
         """
         self.app = app
         self.header_names = tuple(n.lower() for n in header_names)
         self.mapping = {k.lower(): v for k, v in (mapping or DEFAULT_REGION_MAP).items()}
 
-    def _headers_dict(self, scope: Scope) -> Dict[str, str]:
+    def _headers_dict(self, scope: Scope) -> dict[str, str]:
         """
         Parse headers from ASGI scope into a dict.
         Args:
@@ -58,13 +58,13 @@ class RegionASGIMiddleware:
         # convert raw headers (bytes) into a simple dict[str,str]
         return {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
 
-    def _normalize_map(self, raw: str) -> Optional[str]:
+    def _normalize_map(self, raw: str) -> str | None:
         """
         Normalize and map a raw header value to a canonical region key.
         Args:
             raw (str): The raw header value.
         Returns:
-            Optional[str]: The mapped canonical region key, or None if invalid/not mapped.
+            str | None: The mapped canonical region key, or None if invalid/not mapped.
         """
         if not raw:
             return None

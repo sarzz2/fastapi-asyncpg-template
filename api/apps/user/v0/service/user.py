@@ -1,5 +1,4 @@
 import asyncio
-from typing import Optional
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -156,7 +155,7 @@ class UserService:
             await asyncio.gather(*redis_tasks)
 
     async def get_user_sessions(
-        self, user_id: UUID, limit: int = 10, cursor: Optional[UUID] = None
+        self, user_id: UUID, limit: int = 10, cursor: UUID | None = None
     ) -> CursorPage[UserSessionData]:
         """
         Get paginated user sessions.

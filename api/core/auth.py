@@ -1,7 +1,6 @@
 import datetime
 import logging
 from datetime import timedelta
-from typing import Optional
 from uuid import uuid4
 
 import bcrypt
@@ -20,7 +19,7 @@ redis_client = RedisClient()
 log = logging.getLogger("fastapi")
 
 
-def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
+def verify_password(plain_password: str, hashed_password: str | None) -> bool:
     """
     Verify a plain password against a hashed password.
     Args:
@@ -104,13 +103,13 @@ def create_sudo_token(data: dict) -> str:
     return str(token_details["token"])
 
 
-async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "access") -> TokenData:
+async def verify_token(token: str, redis: Redis, token_type: str | None = "access") -> TokenData:
     """
     Verify a JWT token and return the token data.
     Args:
         token (str): The JWT token to verify.
         redis (Redis): The Redis client.
-        token_type (Optional[str]): The expected type of the token ("access", "refresh", "sudo").
+        token_type (str | None): The expected type of the token ("access", "refresh", "sudo").
     Returns:
         TokenData: The data contained in the token.
     Raises:
@@ -118,11 +117,11 @@ async def verify_token(token: str, redis: Redis, token_type: Optional[str] = "ac
     """
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: Optional[str] = payload.get("sub")
-        user_id: Optional[str] = payload.get("id")
-        exp: Optional[int] = payload.get("exp")
-        jti: Optional[str] = payload.get("jti")
-        jwt_token_type: Optional[str] = payload.get("type")
+        username: str | None = payload.get("sub")
+        user_id: str | None = payload.get("id")
+        exp: int | None = payload.get("exp")
+        jti: str | None = payload.get("jti")
+        jwt_token_type: str | None = payload.get("type")
         scopes: list[str] = payload.get("scopes", [])
         token_version: int = payload.get("token_version", 1)
 

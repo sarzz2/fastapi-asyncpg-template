@@ -2,7 +2,7 @@
 Tests for ASGI middlewares, primarily focusing on regional routing and context management.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 from fastapi import FastAPI, Request
@@ -16,7 +16,7 @@ def create_test_app(mapping: dict | None = None, header_names: list | None = Non
     Utility to create a FastAPI application with the Region middleware.
     """
     app = FastAPI()
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
     if mapping:
         kwargs["mapping"] = mapping
     if header_names:
@@ -25,7 +25,7 @@ def create_test_app(mapping: dict | None = None, header_names: list | None = Non
     app.add_middleware(RegionASGIMiddleware, **kwargs)
 
     @app.get("/region")
-    def get_region(request: Request) -> Dict[str, Any]:
+    def get_region(request: Request) -> dict[str, Any]:
         return {
             "context": CLIENT_REGION.get(),
             "state": getattr(request.state, "client_region", None),

@@ -26,7 +26,7 @@ class S3Service:
 
         Args:
             filename (str): The name of the file to upload.
-            content_type (Optional[str]): The content type of the file.
+            content_type (str | None): The content type of the file.
             expiration (int): Time in seconds for the presigned URL to remain valid.
 
         Returns:

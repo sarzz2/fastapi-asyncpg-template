@@ -2,7 +2,7 @@ import asyncio
 import importlib
 import logging
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable
 
 from redis.asyncio.client import PubSub
 
@@ -19,9 +19,9 @@ class EventBus:
     """
 
     def __init__(self) -> None:
-        self._subscribers: Dict[str, List[Callable[[ApplicationEvent], Any]]] = {}
-        self.pubsub: Optional[PubSub] = None
-        self.listener_task: Optional[asyncio.Task] = None
+        self._subscribers: dict[str, list[Callable[[ApplicationEvent], Any]]] = {}
+        self.pubsub: PubSub | None = None
+        self.listener_task: asyncio.Task | None = None
 
     async def start(self) -> None:
         """Starts the Redis Pub/Sub listener."""

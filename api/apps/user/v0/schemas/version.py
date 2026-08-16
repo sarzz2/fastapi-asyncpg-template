@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -10,8 +9,8 @@ class AppVersionCheck(BaseModel):
     """
 
     platform: str
-    app_version: Optional[str] = None
-    app_build: Optional[int] = None
+    app_version: str | None = None
+    app_build: int | None = None
 
 
 class ForceUpdateResponse(BaseModel):
@@ -24,7 +23,7 @@ class ForceUpdateResponse(BaseModel):
     message: str
     latest_build: int
     min_build: int
-    update_url: Optional[str] = None
+    update_url: str | None = None
 
 
 class AppVersionData(BaseModel):
@@ -36,8 +35,8 @@ class AppVersionData(BaseModel):
     min_build: int
     latest_build: int
     force_update: bool
-    update_message: Optional[str] = None
-    update_url: Optional[str] = None
+    update_message: str | None = None
+    update_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -49,8 +48,8 @@ class AppVersionUpdate(BaseModel):
     Schema for app version update request.
     """
 
-    min_build: Optional[int] = None
-    latest_build: Optional[int] = None
-    force_update: Optional[bool] = None
-    update_message: Optional[str] = None
-    update_url: Optional[str] = None
+    min_build: int | None = None
+    latest_build: int | None = None
+    force_update: bool | None = None
+    update_message: str | None = None
+    update_url: str | None = None

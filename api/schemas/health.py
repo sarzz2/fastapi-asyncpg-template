@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 from pydantic import BaseModel
 
 
@@ -14,14 +12,14 @@ class DBRegionStatus(BaseModel):
 
     healthy_pools: int
     total_pools: int
-    avg_latency: Optional[float] = None
+    avg_latency: float | None = None
 
 
 class DBStatus(BaseModel):
     """Database status model."""
 
     status: str
-    regions: Dict[str, DBRegionStatus]
+    regions: dict[str, DBRegionStatus]
 
 
 class HealthResponse(BaseModel):
