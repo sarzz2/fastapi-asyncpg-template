@@ -31,7 +31,7 @@ class RegionASGIMiddleware:
         self,
         app: ASGIApp,
         header_names: Iterable[str] = ("x-geo-region", "x-cloud-region", "x-country"),
-        mapping: dict[str, str | None] = None,
+        mapping: dict[str, str] | None = None,
     ):
         """
         RegionASGIMiddleware constructor.
@@ -40,7 +40,7 @@ class RegionASGIMiddleware:
             app (ASGIApp): The ASGI application to wrap.
             header_names (Iterable[str], optional): Header names to check for region info.
                 Defaults to ("x-geo-region", "x-cloud-region", "x-country").
-            mapping (Dict[str, str | None], optional): Mapping of raw header values to
+            mapping (dict[str, str] | None, optional): Mapping of raw header values to
                 canonical region keys. Defaults to DEFAULT_REGION_MAP.
         """
         self.app = app

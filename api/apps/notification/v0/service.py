@@ -41,7 +41,7 @@ class NotificationService:
         metadata: dict | None = None,
         action_url: str | None = None,
         template_path: str = "email/notification.html",
-        channels: list[str | None] = None,
+        channels: list[str] | None = None,
     ) -> None:
         """
         Send a notification to a user via all registered channels.
@@ -54,7 +54,7 @@ class NotificationService:
             metadata (dict | None): Metadata of the notification.
             action_url (str | None): Action URL of the notification.
             template_path (str): Template path of the notification.
-            channels (List[str | None]): Channels to send the notification to.
+            channels (list[str] | None): Channels to send the notification to.
         """
         notification = NotificationSchema(
             type=notification_type,
@@ -85,7 +85,7 @@ class NotificationService:
         metadata: dict | None = None,
         action_url: str | None = None,
         template_path: str = "email/notification.html",
-        channels: list[str | None] = None,
+        channels: list[str] | None = None,
     ) -> None:
         """
         Broadcast a notification to all users via all registered channels.
@@ -97,7 +97,7 @@ class NotificationService:
             metadata (dict | None): Metadata of the notification.
             action_url (str | None): Action URL of the notification.
             template_path (str): Template path of the notification.
-            channels (List[str | None]): Channels to send the notification to.
+            channels (list[str] | None): Channels to send the notification to.
         """
         notification = NotificationSchema(
             type=notification_type,

@@ -101,9 +101,9 @@ def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-posit
     to_email: str | list[str],
     subject: str,
     html_content: str,
-    cc_emails: list[str | None] = None,
-    bcc_emails: list[str | None] = None,
-    attachments: list[dict | None] = None,
+    cc_emails: list[str] | None = None,
+    bcc_emails: list[str] | None = None,
+    attachments: list[dict] | None = None,
 ) -> None:
     """
     Celery task to send an email using SendGrid in the background.
@@ -140,8 +140,6 @@ def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-posit
     if attachments:
         sg_attachments = []
         for att in attachments:
-            if not isinstance(att, dict):
-                continue
             try:
                 attachment = Attachment()
                 attachment.file_content = FileContent(att.get("content"))

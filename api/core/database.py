@@ -112,7 +112,7 @@ class DataBase(BaseModel):
         _region_priority (ClassVar[List[str]]): Ordered list of region failover priorities
     """
 
-    write_pool: ClassVar[Pool | None] = None
+    write_pool: ClassVar[Pool] = None
 
     # maps region -> list[PoolMeta]
     read_pools_by_region: ClassVar[dict[str, list[PoolMeta]]] = {}
