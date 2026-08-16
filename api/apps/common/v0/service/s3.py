@@ -1,7 +1,6 @@
 import logging
 import mimetypes
 import uuid
-from typing import Optional
 
 from botocore.exceptions import ClientError
 
@@ -21,7 +20,7 @@ class S3Service:
         self.region_name = settings.S3_REGION_NAME
         self.endpoint_url = settings.S3_ENDPOINT_URL
 
-    def generate_presigned_url(self, filename: str, content_type: Optional[str] = None, expiration: int = 300) -> dict:
+    def generate_presigned_url(self, filename: str, content_type: str | None = None, expiration: int = 300) -> dict:
         """
         Generate a presigned URL to share an S3 object.
 

@@ -2,67 +2,67 @@
 name = "fastapi-template"
 version = "0.1.1"
 description = ""
-authors = [
-    { name = "Sarthak singh", email = "sarthaksingh2001@gmail.com" }
-]
+authors = [{ name = "Sarthak singh", email = "sarthaksingh2001@gmail.com" }]
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.141.1",
-    "asyncpg>=0.31.0",
-    "colorlog>=6.12.0",
-    "bcrypt>=5.0.0",
-    "redis>=8.1.0",
-    "pyjwt>=2.13.0",
-    "pre-commit>=4.6.1",
-    "boto3>=1.43.66",
-    "celery>=5.6.3",
-    "asgiref>=3.12.1",
-    "authlib>=1.7.2",
-    "itsdangerous>=2.2.0",
-    "pydantic-settings>=2.15.0",
-    "uvicorn[standard]>=0.52.1",
-    "prometheus-fastapi-instrumentator>=8.1.0",
-    "slowapi>=0.1.10",
-    "python-json-logger>=4.1.0",
-    "sentry-sdk>=2.66.1",
-    "babel>=2.18.0",
-    "flagsmith>=6.2.0",
-    "tenacity>=9.1.4",
-    "werkzeug==3.1.8",
-    "sendgrid>=6.12.5",
-    "jinja2>=3.1.6",
-    "opentelemetry-api>=1.44.0",
-    "opentelemetry-sdk>=1.44.0",
-    "opentelemetry-exporter-otlp>=1.44.0",
-    "opentelemetry-instrumentation-fastapi>=0.65b0",
-    "opentelemetry-instrumentation-asyncpg>=0.65b0",
-    "opentelemetry-instrumentation-redis>=0.65b0",
-    "opentelemetry-instrumentation-celery>=0.65b0",
-    "opentelemetry-instrumentation-httpx>=0.65b0",
-    "opentelemetry-instrumentation-botocore>=0.65b0",
-    "opentelemetry-instrumentation-logging>=0.65b0",
-    "pyroscope-io>=1.2.1",
-    "pyinstrument>=5.1.3",
+  "fastapi>=0.141.1",
+  "asyncpg>=0.31.0",
+  "colorlog>=6.12.0",
+  "bcrypt>=5.0.0",
+  "redis>=8.1.0",
+  "pyjwt>=2.13.0",
+  "pre-commit>=4.6.1",
+  "boto3>=1.43.66",
+  "celery>=5.6.3",
+  "asgiref>=3.12.1",
+  "authlib>=1.7.2",
+  "itsdangerous>=2.2.0",
+  "pydantic-settings>=2.15.0",
+  "email-validator>=2.0.0",
+  "httpx>=0.28.1",
+  "uvicorn[standard]>=0.52.1",
+  "prometheus-fastapi-instrumentator>=8.1.0",
+  "slowapi>=0.1.10",
+  "python-json-logger>=4.1.0",
+  "sentry-sdk>=2.66.1",
+  "babel>=2.18.0",
+  "flagsmith>=6.2.0",
+  "tenacity>=9.1.4",
+  "werkzeug==3.1.8",
+  "sendgrid>=6.12.5",
+  "jinja2>=3.1.6",
+  "opentelemetry-api>=1.44.0",
+  "opentelemetry-sdk>=1.44.0",
+  "opentelemetry-exporter-otlp>=1.44.0",
+  "opentelemetry-instrumentation-fastapi>=0.65b0",
+  "opentelemetry-instrumentation-asyncpg>=0.65b0",
+  "opentelemetry-instrumentation-redis>=0.65b0",
+  "opentelemetry-instrumentation-celery>=0.65b0",
+  "opentelemetry-instrumentation-httpx>=0.65b0",
+  "opentelemetry-instrumentation-botocore>=0.65b0",
+  "opentelemetry-instrumentation-logging>=0.65b0",
+  "pyroscope-io>=1.2.1",
+  "pyinstrument>=5.1.3",
 ]
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.0",
-    "pylint>=4.0.6",
-    "ruff>=0.16.2",
-    "isort>=8.0.1",
-    "bandit>=1.9.4",
-    "pip-audit>=2.10.1",
+  "mypy>=2.3.0",
+  "pylint>=4.0.6",
+  "ruff>=0.16.2",
+  "isort>=8.0.1",
+  "bandit>=1.9.4",
+  "pip-audit>=2.10.1",
 ]
 test = [
-    "pytest>=9.1.1",
-    "httpx>=0.28.1",
-    "pytest-asyncio>=1.4.0",
-    "pytest-cov>=7.1.0",
-    "pytest-xdist>=3.8.0",
-    "httpx-ws>=0.9.0",
-    "fastapi[standard]>=0.141.1",
+  "pytest>=9.1.1",
+  "httpx>=0.28.1",
+  "pytest-asyncio>=1.4.0",
+  "pytest-cov>=7.1.0",
+  "pytest-xdist>=3.8.0",
+  "httpx-ws>=0.9.0",
+  "fastapi[standard]>=0.141.1",
 ]
 
 [build-system]
@@ -107,6 +107,10 @@ module = [
 
 ]
 ignore_missing_imports = true
+
+[tool.pyright]
+typeCheckingMode = "off"
+reportDeprecated = "none"
 
 [tool.ruff]
 line-length = 120

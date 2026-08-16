@@ -5,9 +5,9 @@ import pytest
 from botocore.exceptions import ClientError
 from fastapi import HTTPException, status
 
-from api.apps.s3.v0.routes.s3 import delete_file, generate_upload_url, get_file
-from api.apps.s3.v0.schemas.s3 import S3UploadUrlRequest
-from api.apps.s3.v0.services.s3 import S3Service, get_s3_service
+from api.apps.common.v0.routes.s3 import delete_file, generate_upload_url, get_file
+from api.apps.common.v0.schemas.s3 import S3UploadUrlRequest
+from api.apps.common.v0.service.s3 import S3Service, get_s3_service
 
 
 @pytest.fixture
@@ -22,7 +22,7 @@ def test_generate_presigned_url(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         mock_client.generate_presigned_post.return_value = {
             "url": "http://s3.amazonaws.com/bucket",
             "fields": {"key": "value"},
@@ -42,7 +42,7 @@ def test_generate_presigned_url_error(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         mock_client.generate_presigned_post.side_effect = ClientError({}, "GeneratePresignedPost")
 
         with pytest.raises(ClientError):
@@ -55,7 +55,7 @@ def test_delete_file(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         s3_service.delete_file("test_key")
         mock_client.delete_object.assert_called_once_with(Bucket=s3_service.bucket_name, Key="test_key")
 
@@ -66,7 +66,7 @@ def test_delete_file_error(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         mock_client.delete_object.side_effect = ClientError({}, "DeleteObject")
 
         with pytest.raises(ClientError):
@@ -79,7 +79,7 @@ def test_get_file_url_presigned(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         mock_client.generate_presigned_url.return_value = "http://presigned.url"
 
         url = s3_service.get_file_url("test_key", presigned=True)
@@ -92,7 +92,7 @@ def test_get_file_url_presigned_error(s3_service: S3Service) -> None:
     Args:
         s3_service: S3Service fixture
     """
-    with patch("api.apps.s3.v0.services.s3.s3_client") as mock_client:
+    with patch("api.apps.common.v0.service.s3.s3_client") as mock_client:
         mock_client.generate_presigned_url.side_effect = ClientError({}, "GeneratePresignedUrl")
 
         url = s3_service.get_file_url("test_key", presigned=True)

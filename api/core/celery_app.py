@@ -4,7 +4,6 @@ import os
 from typing import cast
 
 from celery import Celery, Task
-from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
@@ -54,6 +53,7 @@ celery_app = Celery(
     backend=f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB_CELERY_BACKEND}",
     include=autodiscover_tasks(),
 )
+celery_app.loader.import_default_modules()
 
 CeleryInstrumentor().instrument()
 
@@ -64,6 +64,8 @@ celery_app.conf.update(
     result_serializer="json",
     timezone="UTC",
     enable_utc=True,
+    beat_scheduler="api.core.celery_scheduler.DatabaseBeatScheduler",
+    beat_max_loop_interval=5,
 )
 
 
@@ -124,12 +126,3 @@ class AsyncBaseTask(Task):  # pylint: disable=abstract-method
 
 
 celery_app.Task = AsyncBaseTask
-
-
-# Celery Beat Schedule
-celery_app.conf.beat_schedule = {
-    "delete-old-logs": {
-        "task": "api.tasks.delete_old_logs.delete_old_logs",
-        "schedule": crontab(minute=0, hour=0),  # Runs midnight daily
-    },
-}

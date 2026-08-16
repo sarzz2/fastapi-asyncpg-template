@@ -3,7 +3,7 @@ from typing import Annotated, Any, Optional
 
 from pydantic import BeforeValidator
 
-from api.apps.s3.v0.services.s3 import S3Service
+from api.apps.common.v0.service.s3 import S3Service
 
 
 def validate_password_strength(v: Any) -> Any:
