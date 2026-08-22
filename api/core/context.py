@@ -1,8 +1,8 @@
 import contextvars
 
 # Context variables to store client information
-APP_BUILD: contextvars.ContextVar[int] = contextvars.ContextVar("app_build", default=0)
-APP_VERSION: contextvars.ContextVar[str] = contextvars.ContextVar("app_version", default="")
-PLATFORM: contextvars.ContextVar[str] = contextvars.ContextVar("platform", default="")
-DEVICE_ID: contextvars.ContextVar[str] = contextvars.ContextVar("device_id", default="")
-CLIENT_REGION: contextvars.ContextVar[str | None] = contextvars.ContextVar("client_region", default="")
+APP_BUILD: contextvars.ContextVar[int | None] = contextvars.ContextVar("app_build", default=None)
+APP_VERSION: contextvars.ContextVar[str | None] = contextvars.ContextVar("app_version", default=None)
+PLATFORM: contextvars.ContextVar[str | None] = contextvars.ContextVar("platform", default=None)
+DEVICE_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("device_id", default=None)
+CLIENT_REGION: contextvars.ContextVar[str | None] = contextvars.ContextVar("client_region", default=None)
