@@ -33,14 +33,14 @@ repos:
       hooks:
           - id: pylint
             name: pylint
-            entry: uv run pylint
+            entry: uv run --all-groups pylint
             language: system
             types: [python]
             require_serial: true
 
           - id: mypy
             name: mypy
-            entry: uv run mypy
+            entry: uv run --all-groups mypy
             language: system
             types: [python]
             require_serial: true
