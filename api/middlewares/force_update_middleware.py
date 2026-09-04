@@ -23,7 +23,7 @@ class ForceUpdateMiddleware(BaseHTTPMiddleware):
         # Exclude health, docs, and the explicit version check endpoint
         self.skip_paths = skip_paths or ["/health", "/docs", "/redoc", "/openapi.json", "/api/v0/app/check"]
         # Pre-instantiate service (DataBase is a singleton-like class with classmethods)
-        self.version_service = VersionService(version_dao=VersionDAO(db=DataBase))
+        self.version_service = VersionService(version_dao=VersionDAO(db=DataBase()))
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Skip paths that don't need version checking

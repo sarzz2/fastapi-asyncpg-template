@@ -9,7 +9,7 @@ from api.shared.redis_keys import RedisKeys
 class VersionDAO:
     """Data Access Object for app version-related database operations."""
 
-    def __init__(self, db: type[DataBase]):
+    def __init__(self, db: DataBase):
         """Initialize the VersionDAO with a database connection."""
         self.db = db
 
@@ -60,6 +60,6 @@ class VersionDAO:
         )
 
 
-async def get_version_dao(db: type[DataBase] = Depends(get_db)) -> VersionDAO:
+async def get_version_dao(db: DataBase = Depends(get_db)) -> VersionDAO:
     """Dependency to get VersionDAO."""
     return VersionDAO(db=db)

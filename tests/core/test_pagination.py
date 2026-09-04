@@ -3,7 +3,7 @@
 
 import pytest
 
-from api.core.pagination import PaginationParams, apply_cursor_pagination, decode_cursor, encode_cursor
+from api.utils.pagination import PaginationParams, apply_cursor_pagination, decode_cursor, encode_cursor
 
 
 def test_decode_cursor_valid() -> None:

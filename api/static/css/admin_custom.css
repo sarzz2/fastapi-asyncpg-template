@@ -1,0 +1,15 @@
+/* Global custom styles for Starlette-Admin portal */
+
+/* Restrict row height and scroll multi-item badge lists (e.g. permissions tags) */
+.table td .badges-list {
+    max-height: 52px;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Ensure table cells align vertically and do not exceed reasonable line height */
+.table td, .table th {
+    vertical-align: middle;
+}

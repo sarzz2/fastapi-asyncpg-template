@@ -1024,6 +1024,7 @@ dependencies = [
     { name = "sendgrid" },
     { name = "sentry-sdk" },
     { name = "slowapi" },
+    { name = "starlette-admin" },
     { name = "tenacity" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "werkzeug" },
@@ -1085,6 +1086,7 @@ requires-dist = [
     { name = "sendgrid", specifier = ">=6.12.5" },
     { name = "sentry-sdk", specifier = ">=2.68.0" },
     { name = "slowapi", specifier = ">=0.1.10" },
+    { name = "starlette-admin", specifier = ">=1.0.1" },
     { name = "tenacity", specifier = ">=9.1.4" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.52.3" },
     { name = "werkzeug", specifier = "==3.1.8" },
@@ -3173,6 +3175,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b5/b4/205b0d5241d934e8add0c38aa924c4f9fb7330834ff11e5444db964ec3f9/starlette-1.6.0.tar.gz", hash = "sha256:d4e3ac5e546444960c710297a3c9fc3f7ebae1b7e963f3d36173b49da535be9b", size = 2716969, upload-time = "2026-08-08T18:27:57.512Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c8/cb/6a6a47d5b464bd08695d254f3da6e7986cc70c9fa5d778eda57538edfe56/starlette-1.6.0-py3-none-any.whl", hash = "sha256:a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c", size = 75969, upload-time = "2026-08-08T18:27:56.196Z" },
+]
+
+[[package]]
+name = "starlette-admin"
+version = "1.0.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "itsdangerous" },
+    { name = "jinja2" },
+    { name = "python-multipart" },
+    { name = "starlette" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/d5/c17af70c83c252195e5daa3e33a6884533c62a1cd4069c511da98c02225f/starlette_admin-1.0.1.tar.gz", hash = "sha256:0a818db92cbf5a2e24b3f1640028d6468d905228b20b8f6621d0ce97841122f8", size = 1260648, upload-time = "2026-08-25T02:59:17.282Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/cf/fec1c43aaaa6e5a328f2f13b5eb049c393ea7c6d6f19c6aa772d2f11b364/starlette_admin-1.0.1-py3-none-any.whl", hash = "sha256:846b97e7a08b6bc453a91ce4ea64d1fe241de3b4555a0207c39c520874dd2ae7", size = 1388032, upload-time = "2026-08-25T02:59:15.951Z" },
 ]
 
 [[package]]

@@ -7,7 +7,7 @@ from api.apps.user.v0.schemas.role import PermissionData, RoleCreate, RoleData, 
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.role import RoleService, get_role_service
 from api.core.dependencies import get_current_user
-from api.core.pagination import Page, PaginationParams, apply_cursor_pagination
+from api.utils.pagination import Page, PaginationParams, apply_cursor_pagination
 
 router = APIRouter()
 

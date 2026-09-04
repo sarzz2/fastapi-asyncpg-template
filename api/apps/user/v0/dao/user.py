@@ -53,6 +53,80 @@ class UserDAO:
         record = await self.db.fetch(query, *args, fetch_row=True)
         return UserData.model_validate(dict(record)) if record else None
 
+    async def get_all_paginated(self, limit: int = 100, skip: int = 0) -> list[UserData]:
+        """
+        Retrieve paginated list of users with associated roles.
+
+        Args:
+            limit (int): Maximum records to return. Defaults to 100.
+            skip (int): Offset records count. Defaults to 0.
+
+        Returns:
+            list[UserData]: List of user objects with loaded roles.
+        """
+        query = """
+            SELECT
+                u.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', r.id,
+                            'name', r.name,
+                            'description', r.description,
+                            'created_at', r.created_at,
+                            'updated_at', r.updated_at
+                        )
+                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
+                ) as roles
+            FROM users u
+            LEFT JOIN user_roles ur ON u.id = ur.user_id
+            LEFT JOIN roles r ON ur.role_id = r.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+            LIMIT $1 OFFSET $2
+        """
+        records = await self.db.fetch(query, limit, skip, fetch_row=False)
+        if not records:
+            return []
+        return [UserData.model_validate(dict(r)) for r in records]
+
+    async def get_by_ids(self, pks: list[UUID]) -> list[UserData]:
+        """
+        Retrieve multiple users by primary key list.
+
+        Args:
+            pks (list[UUID]): List of user UUID primary keys.
+
+        Returns:
+            list[UserData]: List of matching user objects.
+        """
+        if not pks:
+            return []
+        query = """
+            SELECT
+                u.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', r.id,
+                            'name', r.name,
+                            'description', r.description,
+                            'created_at', r.created_at,
+                            'updated_at', r.updated_at
+                        )
+                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
+                ) as roles
+            FROM users u
+            LEFT JOIN user_roles ur ON u.id = ur.user_id
+            LEFT JOIN roles r ON ur.role_id = r.id
+            WHERE u.id = ANY($1::uuid[])
+            GROUP BY u.id
+        """
+        records = await self.db.fetch(query, pks, fetch_row=False)
+        if not records:
+            return []
+        return [UserData.model_validate(dict(r)) for r in records]
+
     async def get_by_google_sub(self, sub: str) -> UserData | None:
         """
         Retrieve a user by Google OAuth subject (sub).

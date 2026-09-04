@@ -100,6 +100,42 @@ class RoleDAO:
         """
         return await self._get_role_by_id(role_id)
 
+    async def get_by_ids(self, pks: list[UUID]) -> list[RoleData]:
+        """
+        Retrieve multiple roles by primary key list.
+
+        Args:
+            pks (list[UUID]): List of role UUID primary keys.
+
+        Returns:
+            list[RoleData]: List of matching role objects.
+        """
+        if not pks:
+            return []
+        query = """
+            SELECT
+                r.*,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'id', p.id,
+                            'name', p.name,
+                            'description', p.description,
+                            'created_at', p.created_at
+                        )
+                    ) FILTER (WHERE p.id IS NOT NULL), '[]'
+                ) as permissions
+            FROM roles r
+            LEFT JOIN role_permissions rp ON r.id = rp.role_id
+            LEFT JOIN permissions p ON rp.permission_id = p.id
+            WHERE r.id = ANY($1::uuid[])
+            GROUP BY r.id
+        """
+        records = await self.db.fetch(query, pks, fetch_row=False)
+        if not records:
+            return []
+        return [RoleData.model_validate(dict(r)) for r in records]
+
     async def get_role_by_name(self, name: str) -> RoleData | None:
         """
         Get a role by name.

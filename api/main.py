@@ -26,6 +26,7 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from api.apps.api import api_router
 from api.apps.notification.v0.channels.websocket import connection_manager
 from api.constants import Environments
+from api.core.admin import setup_admin
 from api.core.config import settings
 from api.core.context import APP_BUILD, APP_VERSION, DEVICE_ID, PLATFORM
 from api.core.database import DataBase
@@ -266,6 +267,7 @@ if settings.ENV in [Environments.PROD.value, Environments.STAGING.value]:
 
 
 app.include_router(api_router)
+setup_admin(app)
 
 
 # Initialize Sentry
