@@ -7,7 +7,7 @@ from botocore.exceptions import ClientError
 from api.core.aws_localstack import s3_client
 from api.core.config import settings
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 class S3Service:
@@ -73,7 +73,7 @@ class S3Service:
                 "expires_in": expiration,
             }
         except ClientError as e:
-            log.error("Error generating presigned POST: %s", e)
+            logger.error("Error generating presigned POST: %s", e)
             raise e
 
     def delete_file(self, key: str) -> None:
@@ -88,9 +88,9 @@ class S3Service:
         """
         try:
             s3_client.delete_object(Bucket=self.bucket_name, Key=key)
-            log.info("Deleted file: %s", key)
+            logger.info("Deleted file: %s", key)
         except ClientError as e:
-            log.error("Error deleting file %s: %s", key, e)
+            logger.error("Error deleting file %s: %s", key, e)
             raise e
 
     def get_file_url(self, key: str, presigned: bool = True, expiration: int = 3600) -> str:
@@ -115,7 +115,7 @@ class S3Service:
                 )
                 return str(url)
             except ClientError as e:
-                log.error("Error generating presigned get URL: %s", e)
+                logger.error("Error generating presigned get URL: %s", e)
                 return ""
         else:
             if "localhost" in self.endpoint_url:

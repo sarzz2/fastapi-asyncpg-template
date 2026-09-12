@@ -10,7 +10,7 @@ from api.apps.common.v0.schemas.periodic_task import PeriodicTaskCreate, Periodi
 from api.core.celery_app import celery_app
 from api.core.redis import get_redis
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 class PeriodicTaskService:
@@ -38,7 +38,7 @@ class PeriodicTaskService:
             HTTPException: If the task is not registered in Celery.
         """
         if task_name not in celery_app.tasks:
-            log.warning("Validation failed: Task '%s' is not registered in Celery tasks.", task_name)
+            logger.warning("Validation failed: Task '%s' is not registered in Celery tasks.", task_name)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Task '{task_name}' is not a registered Celery task",
@@ -50,7 +50,7 @@ class PeriodicTaskService:
             pipe.delete(CeleryRedisKeys.SCHEDULE_DATA.value)
             pipe.incr(CeleryRedisKeys.SCHEDULE_VERSION.value)
             await pipe.execute()
-        log.info("PeriodicTaskService: Invalidated schedule cache and incremented version.")
+        logger.info("PeriodicTaskService: Invalidated schedule cache and incremented version.")
 
     async def list_registered_celery_tasks(self) -> list[str]:
         """
@@ -112,6 +112,7 @@ class PeriodicTaskService:
             )
 
         task = await self._dao.create_task(task_in)
+        logger.info("PeriodicTaskService: Created periodic task '%s' (ID: %s)", task.name, task.id)
         await self._notify_schedule_changed()
         return task
 
@@ -134,8 +135,10 @@ class PeriodicTaskService:
 
         task = await self._dao.update_task(task_id, task_in)
         if not task:
+            logger.warning("PeriodicTaskService: Task not found for update (ID: %s)", task_id)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periodic task not found")
 
+        logger.info("PeriodicTaskService: Updated periodic task '%s' (ID: %s)", task.name, task.id)
         await self._notify_schedule_changed()
         return task
 
@@ -154,8 +157,10 @@ class PeriodicTaskService:
         """
         deleted = await self._dao.delete_task(task_id)
         if not deleted:
+            logger.warning("PeriodicTaskService: Task not found for deletion (ID: %s)", task_id)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Periodic task not found")
 
+        logger.info("PeriodicTaskService: Deleted periodic task (ID: %s)", task_id)
         await self._notify_schedule_changed()
         return True
 
@@ -177,10 +182,10 @@ class PeriodicTaskService:
         self._validate_task_exists(task_name)
         try:
             async_result = celery_app.send_task(task_name, args=args, kwargs=kwargs)
-            log.info("PeriodicTaskService: Manually triggered task '%s' (Task ID: %s)", task_name, async_result.id)
+            logger.info("PeriodicTaskService: Manually triggered task '%s' (Task ID: %s)", task_name, async_result.id)
             return str(async_result.id)
         except Exception as err:
-            log.error("PeriodicTaskService: Failed to trigger task '%s': %s", task_name, err)
+            logger.error("PeriodicTaskService: Failed to trigger task '%s': %s", task_name, err)
             raise
 
 

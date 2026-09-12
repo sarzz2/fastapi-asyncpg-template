@@ -5,7 +5,7 @@ from flagsmith import Flagsmith
 
 from api.core.config import settings
 
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 class FeatureFlagService:
@@ -39,7 +39,7 @@ class FeatureFlagService:
                 flags = self.client.get_environment_flags()
             return flags.is_feature_enabled(feature_name)
         except Exception as e:  # pylint: disable=broad-except
-            log.error("Flagsmith check failed for feature '%s': %s", feature_name, e)
+            logger.error("Flagsmith check failed for feature '%s': %s", feature_name, e)
             return False
 
 

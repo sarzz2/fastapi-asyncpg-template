@@ -16,7 +16,7 @@ from .redis import RedisClient
 
 # We use settings directly to allow dynamic overrides (e.g. in tests)
 redis_client = RedisClient()
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 def verify_password(plain_password: str, hashed_password: str | None) -> bool:
@@ -58,6 +58,7 @@ def _create_token(data: dict, expire: datetime.datetime, token_type: str) -> dic
     jti = str(uuid4())
     to_encode.update({"exp": expire, "type": token_type, "jti": jti})
     encoded_token = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    logger.debug("Created %s token with jti: %s", token_type, jti)
     return {
         "token": encoded_token,
         "expires_at": expire,
@@ -160,7 +161,7 @@ async def verify_token(token: str, redis: Redis, token_type: str | None = "acces
             token_version=token_version,
         )
     except jwt.PyJWTError as exc:
-        log.warning("JWT verification failed for token type '%s': %s", token_type, exc)
+        logger.warning("JWT verification failed for token type '%s': %s", token_type, exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -5,6 +6,8 @@ from fastapi import Depends, HTTPException, status
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.schemas.role import PermissionData, RoleCreate, RoleData, RoleUpdate
 from api.core.i18n import trans
+
+logger = logging.getLogger("fastapi")
 
 
 class RoleService:
@@ -36,6 +39,7 @@ class RoleService:
         """
         role = await self.role_dao.get_role_by_id(role_id)
         if not role:
+            logger.warning("RoleService: Role not found: %s", role_id)
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("role.not_found"))
         return role
 
@@ -51,8 +55,11 @@ class RoleService:
         """
         existing_role = await self.role_dao.get_role_by_name(role_create.name)
         if existing_role:
+            logger.warning("RoleService: Role already exists with name: %s", role_create.name)
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=trans("role.exists"))
-        return await self.role_dao.create_role(role_create)
+        role = await self.role_dao.create_role(role_create)
+        logger.info("RoleService: Created role '%s' (ID: %s)", role.name, role.id)
+        return role
 
     async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> RoleData:
         """
@@ -71,11 +78,13 @@ class RoleService:
         if role_update.name:
             existing_role = await self.role_dao.get_role_by_name(role_update.name)
             if existing_role and existing_role.id != role_id:
+                logger.warning("RoleService: Role update conflict on name '%s' for role %s", role_update.name, role_id)
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=trans("role.exists"))
 
         updated_role = await self.role_dao.update_role(role_id, role_update)
         if not updated_role:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=trans("role.not_found"))
+        logger.info("RoleService: Updated role '%s' (ID: %s)", updated_role.name, role_id)
         return updated_role
 
     async def delete_role(self, role_id: UUID) -> None:
@@ -88,6 +97,7 @@ class RoleService:
         """
         await self.get_role_by_id(role_id)
         await self.role_dao.delete_role(role_id)
+        logger.info("RoleService: Deleted role %s", role_id)
 
     async def get_all_permissions(self, limit: int = 20, cursor: UUID | None = None) -> list[PermissionData]:
         """

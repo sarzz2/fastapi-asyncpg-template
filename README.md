@@ -331,7 +331,7 @@ from typing import Any, List
 from api.apps.user.v0.dao.user import UserDAO
 from api.core.celery_app import celery_app
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(bind=True)
@@ -345,10 +345,10 @@ def list_all_users(self) -> List[dict[str, Any]]:
     # self.db and self.loop come from the AsyncBaseTask in celery_app.py
     user_dao = UserDAO(db=self.db)
 
-    log.info("Executing task: list_all_users")
+    logger.info("Executing task: list_all_users")
     # Use the task's event loop to run the async DAO method.
     records = self.loop.run_until_complete(user_dao.get_all_users())
-    log.info("Fetched %d users from the database.", len(records))
+    logger.info("Fetched %d users from the database.", len(records))
     return [user.model_dump() for user in records]
 ```
 

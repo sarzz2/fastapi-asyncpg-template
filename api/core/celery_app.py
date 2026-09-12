@@ -19,7 +19,7 @@ from api.core.database import DataBase
 from api.core.redis import RedisClient
 from api.utils.serialization import json_serialize_safe
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def autodiscover_tasks() -> list[str]:
@@ -52,7 +52,7 @@ def autodiscover_tasks() -> list[str]:
                 module_name = filename[:-3]  # remove .py extension
                 task_modules.append(f"api.tasks.{module_name}")
 
-    log.info("Discovered Celery tasks in: %s", task_modules)
+    logger.info("Discovered Celery tasks in: %s", task_modules)
     return task_modules
 
 
@@ -94,7 +94,7 @@ def init_worker_process(**_kwargs: dict[str, Any]) -> None:
     Args:
         **_kwargs (dict[str, Any]): Additional signal parameters.
     """
-    log.info("Initializing worker process resources...")
+    logger.info("Initializing worker process resources...")
 
     main_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(main_loop)
@@ -114,7 +114,7 @@ def init_worker_process(**_kwargs: dict[str, Any]) -> None:
     main_loop.run_until_complete(redis_instance.connect())
     celery_app.redis_instance = redis_instance
 
-    log.info("Worker process resources initialized.")
+    logger.info("Worker process resources initialized.")
 
 
 @worker_process_shutdown.connect
@@ -125,7 +125,7 @@ def shutdown_worker_process(**_kwargs: dict[str, Any]) -> None:
     Args:
         **_kwargs (dict[str, Any]): Additional signal parameters.
     """
-    log.info("Shutting down worker process resources...")
+    logger.info("Shutting down worker process resources...")
     main_loop = celery_app.main_loop
     db_instance = celery_app.db_instance
     redis_instance = celery_app.redis_instance
@@ -135,7 +135,7 @@ def shutdown_worker_process(**_kwargs: dict[str, Any]) -> None:
     if main_loop and redis_instance:
         main_loop.run_until_complete(redis_instance.close())
 
-    log.info("Worker process resources shut down.")
+    logger.info("Worker process resources shut down.")
 
 
 class AsyncBaseTask(Task):  # pylint: disable=abstract-method
@@ -248,13 +248,13 @@ async def _save_dead_letter_task(db_instance: DataBase, payload: dict[str, Any])
             payload["traceback"],
             payload["retry_count"],
         )
-        log.info(
+        logger.info(
             "Successfully saved task failure to DLQ for task_id=%s (name=%s)",
             payload["task_id"],
             payload["task_name"],
         )
     except Exception as exc:  # pylint: disable=broad-except
-        log.exception("Failed to write task %s failure to DLQ: %s", payload["task_id"], exc)
+        logger.exception("Failed to write task %s failure to DLQ: %s", payload["task_id"], exc)
 
 
 @task_failure.connect
@@ -284,17 +284,19 @@ def handle_task_failure(
         **_extra (Any): Additional signal keyword arguments.
     """
     if not sender or not task_id:
-        log.warning("Task failure signal ignored: missing sender or task_id (sender=%s, task_id=%s).", sender, task_id)
+        logger.warning(
+            "Task failure signal ignored: missing sender or task_id (sender=%s, task_id=%s).", sender, task_id
+        )
         return
 
     task_name = sender.name if hasattr(sender, "name") else str(sender)
     if task_name in DLQConstants.EXCLUDED_TASKS:
-        log.debug("Task failure signal ignored for excluded DLQ task '%s'.", task_name)
+        logger.debug("Task failure signal ignored for excluded DLQ task '%s'.", task_name)
         return
 
     db_instance = celery_app.db_instance
     if not db_instance:
-        log.warning("Celery DLQ cannot record failure: db_instance not initialized.")
+        logger.warning("Celery DLQ cannot record failure: db_instance not initialized.")
         return
 
     req = getattr(sender, "request", None)

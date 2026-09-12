@@ -6,7 +6,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from api.core.context import CLIENT_REGION
 
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 # default mapping (country code or short name -> your canonical region key)
 DEFAULT_REGION_MAP = {
@@ -70,7 +70,7 @@ class RegionASGIMiddleware:
             return None
         v = raw.strip().lower()
         if not _WHITELIST_RE.match(v):
-            log.debug("Region header value failed whitelist: %r", raw)
+            logger.debug("Region header value failed whitelist: %r", raw)
             return None
         return self.mapping.get(v, v)
 
@@ -94,11 +94,11 @@ class RegionASGIMiddleware:
         if chosen_raw:
             region = self._normalize_map(chosen_raw)
             if region:
-                log.debug("Region header accepted: raw=%s -> region=%s", chosen_raw, region)
+                logger.debug("Region header accepted: raw=%s -> region=%s", chosen_raw, region)
             else:
-                log.debug("Region header present but not mapped/valid: %s", chosen_raw)
+                logger.debug("Region header present but not mapped/valid: %s", chosen_raw)
         else:
-            log.debug("No region header found in headers %s", self.header_names)
+            logger.debug("No region header found in headers %s", self.header_names)
 
         token = CLIENT_REGION.set(region)
         scope.setdefault("state", {})["client_region"] = region

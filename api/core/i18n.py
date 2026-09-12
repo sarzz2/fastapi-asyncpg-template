@@ -16,7 +16,7 @@ _locale_ctx_var: ContextVar[str] = ContextVar("locale", default=settings.DEFAULT
 
 # Simple in-memory cache for loaded translations
 _translations_cache: dict[str, dict[str, Any]] = {}
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 class I18nMiddleware(BaseHTTPMiddleware):
@@ -54,11 +54,11 @@ class I18nMiddleware(BaseHTTPMiddleware):
                 # Take the first preferred language
                 locale_code = accept_language.split(",")[0].split(";")[0].strip()
             except Exception as e:  # pylint: disable=broad-except
-                log.warning("Could not parse Accept-Language header '%s': %s", accept_language, e)
+                logger.warning("Could not parse Accept-Language header '%s': %s", accept_language, e)
                 locale_code = self.default_locale
 
         _locale_ctx_var.set(locale_code)
-        log.debug("Request locale set to: %s", locale_code)
+        logger.debug("Request locale set to: %s", locale_code)
         response = await call_next(request)
         return response
 
@@ -91,7 +91,7 @@ def load_translations(locale: str) -> dict[str, Any]:
             _translations_cache[locale] = data
             return data
     except Exception as e:  # pylint: disable=broad-except
-        log.error("Failed to load translation file for locale '%s' at %s: %s", locale, file_path, e)
+        logger.error("Failed to load translation file for locale '%s' at %s: %s", locale, file_path, e)
         return {}
 
 
@@ -125,14 +125,14 @@ def trans(message: str, **kwargs: Any) -> str:
             translated = str(value)
 
     except Exception as e:  # pylint: disable=broad-except
-        log.warning("Failed to translate message key '%s' for locale '%s': %s", message, locale_code, e)
+        logger.warning("Failed to translate message key '%s' for locale '%s': %s", message, locale_code, e)
         translated = message
 
     if kwargs:
         try:
             return translated.format(**kwargs)
         except KeyError as e:
-            log.warning("Missing format key %s in translation for '%s' (locale: %s)", e, message, locale_code)
+            logger.warning("Missing format key %s in translation for '%s' (locale: %s)", e, message, locale_code)
             return translated
 
     return translated

@@ -12,7 +12,7 @@ from celery.schedules import crontab, schedule
 from api.apps.common.constants import CeleryRedisKeys, IntervalPeriod, ScheduleType
 from api.core.config import settings
 
-log = logging.getLogger("celery.beat")
+logger = logging.getLogger("celery.beat")
 
 
 def parse_schedule(task_row: dict[str, Any]) -> Any:
@@ -78,7 +78,7 @@ class DatabaseBeatScheduler(Scheduler):
 
     def setup_schedule(self) -> None:
         """Initialize schedule entries on startup."""
-        log.info("DatabaseBeatScheduler: Initializing beat schedule...")
+        logger.info("DatabaseBeatScheduler: Initializing beat schedule...")
         self.install_default_entries(self.schedule)
         self.reload_schedule()
 
@@ -114,7 +114,7 @@ class DatabaseBeatScheduler(Scheduler):
         try:
             return asyncio.run(_async_fetch())
         except Exception as err:  # pylint: disable=broad-except
-            log.error("DatabaseBeatScheduler: Error fetching periodic tasks from DB: %s", err)
+            logger.error("DatabaseBeatScheduler: Error fetching periodic tasks from DB: %s", err)
             return []
 
     def reload_schedule(self) -> None:
@@ -126,17 +126,17 @@ class DatabaseBeatScheduler(Scheduler):
             cached_json = r.get(CeleryRedisKeys.SCHEDULE_DATA.value)
             if cached_json:
                 tasks_data = json.loads(cached_json)
-                log.info("DatabaseBeatScheduler: Loaded %d periodic tasks from Redis cache.", len(tasks_data))
+                logger.info("DatabaseBeatScheduler: Loaded %d periodic tasks from Redis cache.", len(tasks_data))
             else:
                 tasks_data = self.fetch_tasks_from_db()
                 if tasks_data:
                     r.set(CeleryRedisKeys.SCHEDULE_DATA.value, json.dumps(tasks_data), ex=3600)
-                log.info("DatabaseBeatScheduler: Loaded %d periodic tasks from PostgreSQL.", len(tasks_data))
+                logger.info("DatabaseBeatScheduler: Loaded %d periodic tasks from PostgreSQL.", len(tasks_data))
 
             raw_ver = r.get(CeleryRedisKeys.SCHEDULE_VERSION.value)
             self._last_version = raw_ver.decode("utf-8") if isinstance(raw_ver, bytes) else raw_ver
         except Exception as err:  # pylint: disable=broad-except
-            log.warning("DatabaseBeatScheduler: Redis read error (%s), falling back to DB.", err)
+            logger.warning("DatabaseBeatScheduler: Redis read error (%s), falling back to DB.", err)
             tasks_data = self.fetch_tasks_from_db()
 
         # Update self.schedule entries
@@ -155,11 +155,11 @@ class DatabaseBeatScheduler(Scheduler):
                 )
                 new_schedule[name] = entry
             except Exception as parse_err:  # pylint: disable=broad-except
-                log.error("DatabaseBeatScheduler: Failed to parse schedule for task '%s': %s", name, parse_err)
+                logger.error("DatabaseBeatScheduler: Failed to parse schedule for task '%s': %s", name, parse_err)
 
         self.schedule.clear()
         self.schedule.update(new_schedule)
-        log.info("DatabaseBeatScheduler: Active schedule updated with %d tasks.", len(self.schedule))
+        logger.info("DatabaseBeatScheduler: Active schedule updated with %d tasks.", len(self.schedule))
 
     def tick(self, *args: Any, **kwargs: Any) -> float:  # pylint: disable=arguments-differ
         """
@@ -172,13 +172,13 @@ class DatabaseBeatScheduler(Scheduler):
         try:
             current_version = self.redis_client.get(CeleryRedisKeys.SCHEDULE_VERSION.value)
             if current_version != self._last_version:
-                log.info(
+                logger.info(
                     "DatabaseBeatScheduler: Schedule version change detected (%s -> %s). Reloading...",
                     self._last_version,
                     current_version,
                 )
                 self.reload_schedule()
         except Exception as err:  # pylint: disable=broad-except
-            log.warning("DatabaseBeatScheduler: Check version failed: %s", err)
+            logger.warning("DatabaseBeatScheduler: Check version failed: %s", err)
 
         return float(super().tick(*args, **kwargs))

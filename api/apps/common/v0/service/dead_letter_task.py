@@ -24,7 +24,7 @@ from api.apps.common.v0.schemas.dead_letter_task import (
 from api.constants import ExportFormat
 from api.core.celery_app import celery_app
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 class DeadLetterTaskService:
@@ -104,6 +104,7 @@ class DeadLetterTaskService:
             DLQActionResponse: Summary model of updated records.
         """
         count = await self.dao.update_task_payload(payload=payload, task_id=task_id)
+        logger.info("DeadLetterTaskService: Updated payload for %d task(s) (task_id=%s)", count, task_id)
         return DLQActionResponse(
             message=f"Successfully updated {count} task(s).",
             affected_count=count,
@@ -155,9 +156,10 @@ class DeadLetterTaskService:
                 )
                 retriggered_count += 1
             except Exception as exc:  # pylint: disable=broad-except
-                log.error("Failed to send retrigger task %s: %s", dlq_task.id, exc)
+                logger.error("Failed to send retrigger task %s: %s", dlq_task.id, exc)
                 raise
 
+        logger.info("DeadLetterTaskService: Successfully retriggered %d task(s)", retriggered_count)
         return DLQActionResponse(
             message=f"Successfully retriggered {retriggered_count} task(s).",
             affected_count=retriggered_count,
@@ -187,6 +189,7 @@ class DeadLetterTaskService:
             task_ids=ids,
             task_name=task_name,
         )
+        logger.info("DeadLetterTaskService: Deleted %d DLQ task record(s)", count)
         return DLQActionResponse(
             message=f"Successfully deleted {count} task record(s).",
             affected_count=count,

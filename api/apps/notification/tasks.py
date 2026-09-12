@@ -28,7 +28,7 @@ from api.core.config import settings
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["SSL_CERT_DIR"] = certifi.where()
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="send_notification_task", bind=True)
@@ -43,7 +43,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
     """
     Celery task to send a notification background.
     """
-    log.info("Executing task: send_notification_task for user %s", user_id_str)
+    logger.info("Executing task: send_notification_task for user %s", user_id_str)
     user_id = UUID(user_id_str)
     type_enum = NotificationType(notification_type)
 
@@ -62,7 +62,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
         self.loop.run_until_complete(coro)
     except Exception as e:  # pylint: disable=broad-except
         coro.close()
-        log.error("Error sending background notification to user %s: %s", user_id, e)
+        logger.error("Error sending background notification to user %s: %s", user_id, e)
 
 
 @celery_app.task(name="broadcast_notification_task", bind=True)
@@ -76,7 +76,7 @@ def broadcast_notification_task(
     """
     Celery task to broadcast a notification in background.
     """
-    log.info("Executing task: broadcast_notification_task")
+    logger.info("Executing task: broadcast_notification_task")
     type_enum = NotificationType(notification_type)
 
     async def _broadcast() -> None:
@@ -92,7 +92,7 @@ def broadcast_notification_task(
         self.loop.run_until_complete(coro)
     except Exception as e:  # pylint: disable=broad-except
         coro.close()
-        log.error("Error broadcasting background notification: %s", e)
+        logger.error("Error broadcasting background notification: %s", e)
 
 
 @celery_app.task(name="send_email_worker_task", bind=True)
@@ -110,10 +110,10 @@ def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-posit
     Supports multiple recipients, cc, bcc, and attachments.
     """
     if not settings.SENDGRID_API_KEY or not settings.EMAILS_FROM_EMAIL:
-        log.warning("SendGrid API Key or From Email not configured. Skipping email.")
+        logger.warning("SendGrid API Key or From Email not configured. Skipping email.")
         return
 
-    log.info("Executing task: send_email_worker_task to %s", to_email)
+    logger.info("Executing task: send_email_worker_task to %s", to_email)
 
     # Build primary To list
     if isinstance(to_email, str):
@@ -148,14 +148,14 @@ def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-posit
                 attachment.disposition = Disposition(att.get("disposition", "attachment"))
                 sg_attachments.append(attachment)
             except Exception as e:  # pylint: disable=broad-except
-                log.error("Failed to parse attachment %s: %s", att.get("filename"), e)
+                logger.error("Failed to parse attachment %s: %s", att.get("filename"), e)
         if sg_attachments:
             message.attachment = sg_attachments
 
     try:
         sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
         response = sg.send(message)
-        log.info("SendGrid email sent. Status code: %s", response.status_code)
+        logger.info("SendGrid email sent. Status code: %s", response.status_code)
     except Exception as e:  # pylint: disable=broad-exception-caught
-        log.error("Failed to send email to %s: %s", to_email, str(e))
+        logger.error("Failed to send email to %s: %s", to_email, str(e))
         raise e

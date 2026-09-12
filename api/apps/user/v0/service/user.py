@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -11,6 +12,8 @@ from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
 from api.schemas.pagination import CursorPage
+
+logger = logging.getLogger("fastapi")
 
 
 class UserService:
@@ -38,6 +41,8 @@ class UserService:
             raise ValueError("Password is required for user creation")
         hashed_password = get_password_hash(user_in.password)
         user_db = await self._user_dao.create_user(user_in, hashed_password)
+
+        logger.info("UserService: Created user %s (ID: %s)", user_db.username, user_db.id)
 
         # Dispatch welcome email asynchronously
         await event_bus.publish(
@@ -116,6 +121,7 @@ class UserService:
         """
         ttl = await self._user_dao.revoke_user_session(current_user_id, jti)
         if ttl is None:
+            logger.warning("UserService: Session not found for revocation: user_id=%s, jti=%s", current_user_id, jti)
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=trans("session.not_found"),
@@ -124,6 +130,7 @@ class UserService:
             self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
         )
+        logger.info("UserService: Revoked session for user_id=%s (jti=%s)", current_user_id, jti)
 
     async def revoke_all_user_sessions(self, current_user_id: UUID) -> None:
         """
@@ -153,6 +160,7 @@ class UserService:
 
         if redis_tasks:
             await asyncio.gather(*redis_tasks)
+        logger.info("UserService: Revoked all sessions (%d) for user_id=%s", len(revoked_sessions), current_user_id)
 
     async def get_user_sessions(
         self, user_id: UUID, limit: int = 10, cursor: UUID | None = None
@@ -190,6 +198,7 @@ class UserService:
             role_ids: List of Role IDs.
         """
         await self._user_dao.assign_roles(user_id, role_ids)
+        logger.info("UserService: Assigned %d role(s) to user_id=%s", len(role_ids), user_id)
 
 
 async def get_user_service(user_dao: UserDAO = Depends(get_user_dao), redis: Redis = Depends(get_redis)) -> UserService:

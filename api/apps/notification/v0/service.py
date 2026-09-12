@@ -6,7 +6,7 @@ from api.apps.notification.v0.channels.email import email_channel
 from api.apps.notification.v0.channels.websocket import websocket_channel
 from api.apps.notification.v0.schemas import NotificationSchema, NotificationType
 
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 class NotificationService:
@@ -56,6 +56,7 @@ class NotificationService:
             template_path (str): Template path of the notification.
             channels (list[str] | None): Channels to send the notification to.
         """
+        logger.debug("Dispatching notification to user %s (type=%s)", user_id, notification_type.value)
         notification = NotificationSchema(
             type=notification_type,
             message=message,
@@ -75,7 +76,7 @@ class NotificationService:
             try:
                 await channel.send(user_id, notification)
             except Exception:  # pylint: disable=broad-except
-                log.exception("Failed to send notification to channel %s", channel)
+                logger.exception("Failed to send notification to channel %s", channel)
 
     async def broadcast_all(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
@@ -99,6 +100,7 @@ class NotificationService:
             template_path (str): Template path of the notification.
             channels (list[str] | None): Channels to send the notification to.
         """
+        logger.debug("Broadcasting notification (type=%s)", notification_type.value)
         notification = NotificationSchema(
             type=notification_type,
             message=message,
@@ -118,7 +120,7 @@ class NotificationService:
             try:
                 await channel.broadcast(notification)
             except Exception:  # pylint: disable=broad-except
-                log.exception("Failed to broadcast notification to channel %s", channel)
+                logger.exception("Failed to broadcast notification to channel %s", channel)
 
 
 notification_service = NotificationService()

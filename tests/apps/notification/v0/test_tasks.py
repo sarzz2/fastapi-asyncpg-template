@@ -61,7 +61,7 @@ def test_send_notification_task_error() -> None:
 
         with (
             patch("api.apps.notification.tasks.notification_service"),
-            patch("api.apps.notification.tasks.log") as mock_log,
+            patch("api.apps.notification.tasks.logger") as mock_log,
         ):
             mock_self = MagicMock()
             mock_self.loop.run_until_complete.side_effect = Exception("Boom")
@@ -118,7 +118,7 @@ def test_broadcast_notification_task_error() -> None:
 
         with (
             patch("api.apps.notification.tasks.notification_service"),
-            patch("api.apps.notification.tasks.log") as mock_log,
+            patch("api.apps.notification.tasks.logger") as mock_log,
         ):
             mock_self = MagicMock()
             mock_self.loop.run_until_complete.side_effect = Exception("Boom")

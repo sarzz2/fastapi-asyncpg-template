@@ -9,7 +9,7 @@ from api.core.auth import verify_token
 from api.core.redis import get_redis
 
 router = APIRouter()
-log = logging.getLogger(__name__)
+logger = logging.getLogger("fastapi")
 
 
 @router.websocket("/ws")
@@ -50,5 +50,5 @@ async def websocket_endpoint(
 
     except Exception:  # pylint: disable=broad-except
         # If any auth fails
-        log.exception("WebSocket connection failed due to authentication or other error")
+        logger.exception("WebSocket connection failed due to authentication or other error")
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

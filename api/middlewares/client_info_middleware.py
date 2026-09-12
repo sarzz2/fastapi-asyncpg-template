@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from api.constants import RequestHeaders
 from api.core.context import APP_BUILD, APP_VERSION, DEVICE_ID, PLATFORM
+
+logger = logging.getLogger("fastapi")
 
 
 class ClientInfoMiddleware(BaseHTTPMiddleware):
@@ -21,13 +25,22 @@ class ClientInfoMiddleware(BaseHTTPMiddleware):
             try:
                 app_build = int(app_build_raw)
             except ValueError:
-                pass
+                logger.debug("Failed to parse app_build integer from header value: %s", app_build_raw)
 
         # Set context variables
         av_token = APP_VERSION.set(app_version)
         ab_token = APP_BUILD.set(app_build)
         p_token = PLATFORM.set(platform)
         di_token = DEVICE_ID.set(device_id)
+
+        if app_version or platform or device_id:
+            logger.debug(
+                "Client info context set: platform=%s, app_version=%s, app_build=%s, device_id=%s",
+                platform,
+                app_version,
+                app_build,
+                device_id,
+            )
 
         try:
             response = await call_next(request)

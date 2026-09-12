@@ -6,7 +6,7 @@ from redis.asyncio.client import PubSub
 
 from api.core.config import settings
 
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 class RedisClient:
@@ -28,20 +28,22 @@ class RedisClient:
             if not pong:
                 raise RuntimeError("Redis ping returned falsy response")
 
-            log.info("Connected to Redis successfully.")
+            logger.info("Connected to Redis successfully.")
         except Exception as exc:
-            log.critical("Failed to connect to Redis: %s", exc)
+            logger.critical("Failed to connect to Redis: %s", exc)
             raise RuntimeError("Redis connection failed") from exc
 
     async def close(self) -> None:
         """Close the connection to the Redis server."""
         await self.client.aclose()
+        logger.info("Closed Redis connection.")
 
     async def health_check(self) -> bool:
         """Check the health of the Redis connection."""
         try:
             return await self.client.ping()
-        except Exception:  # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("Redis health check failed: %s", exc)
             return False
 
 

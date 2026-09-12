@@ -38,6 +38,12 @@ class VersionService:
         force_update = version_info.force_update
 
         if build_num < min_build:
+            logger.warning(
+                "VersionService: Force update required for platform=%s, build=%s (min_build=%s)",
+                platform,
+                build_num,
+                min_build,
+            )
             return ForceUpdateResponse(
                 update_required=True,
                 force=True,
@@ -48,6 +54,13 @@ class VersionService:
             )
 
         if build_num < latest_build:
+            logger.info(
+                "VersionService: Optional update available for platform=%s, build=%s (latest_build=%s, force=%s)",
+                platform,
+                build_num,
+                latest_build,
+                force_update,
+            )
             return ForceUpdateResponse(
                 update_required=True,
                 force=force_update,
@@ -69,7 +82,10 @@ class VersionService:
         """
         Update version info for a platform.
         """
-        return await self.version_dao.update_version_info(platform, update_data)
+        updated = await self.version_dao.update_version_info(platform, update_data)
+        if updated:
+            logger.info("VersionService: Updated version configuration for platform=%s", platform)
+        return updated
 
 
 async def get_version_service(version_dao: VersionDAO = Depends(get_version_dao)) -> VersionService:

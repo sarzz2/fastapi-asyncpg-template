@@ -24,7 +24,7 @@ from api.core.metrics import (
 from api.middlewares.region_middleware import CLIENT_REGION
 
 BM = TypeVar("BM", bound="DataBase")
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -165,7 +165,7 @@ class DataBase(BaseModel):
             record_class=CustomRecord,
             init=init_connection,
         )
-        log.info("Established Write DB pool with %s - %s connections", min_con, max_con)
+        logger.info("Established Write DB pool with %s - %s connections", min_con, max_con)
 
         # create pools per region
         cls.read_pools_by_region = {}
@@ -175,7 +175,7 @@ class DataBase(BaseModel):
                 uri_list = uris if isinstance(uris, list) else [uris]
                 for uri in uri_list:
                     if not isinstance(uri, str):
-                        log.warning("Invalid read URI type: %s", uri)
+                        logger.warning("Invalid read URI type: %s", uri)
                         continue
                     try:
                         pool = await create_pool(
@@ -187,14 +187,14 @@ class DataBase(BaseModel):
                             init=init_connection,
                         )
                         cls.read_pools_by_region[region].append(PoolMeta(uri=uri, pool=pool, region=region))
-                        log.info("Established Read DB pool for region=%s", region)
+                        logger.info("Established Read DB pool for region=%s", region)
                     except (asyncpg.PostgresError, OSError) as e:
-                        log.error("Failed to create read pool for %s (region=%s): %s; skipping.", uri, region, e)
+                        logger.error("Failed to create read pool for %s (region=%s): %s; skipping.", uri, region, e)
 
         # fallback: if no read pools at all, use write pool under "global"
         if not cls.read_pools_by_region:
             cls.read_pools_by_region = {"global": [PoolMeta(uri=write_uri, pool=cls.write_pool, region="global")]}
-            log.info("No read replicas configured — using write pool for reads (global).")
+            logger.info("No read replicas configured — using write pool for reads (global).")
 
         # save region_priority on class so selection can use it
         cls._region_priority = list(settings.REGION_PRIORITY or list(cls.read_pools_by_region.keys()))
@@ -247,9 +247,9 @@ class DataBase(BaseModel):
                         meta.last_latency = latency
                     except (asyncpg.PostgresError, OSError) as e:
                         meta.healthy = False
-                        log.warning("Health check failed for %s: %s", meta.uri, e)
+                        logger.warning("Health check failed for %s: %s", meta.uri, e)
                     except asyncio.CancelledError:
-                        log.info("Health check loop cancelled.")
+                        logger.info("Health check loop cancelled.")
                         raise
 
     @classmethod
@@ -280,14 +280,14 @@ class DataBase(BaseModel):
         if client_region:
             if client_region in cls.read_pools_by_region:
                 if any(m.healthy for m in cls.read_pools_by_region[client_region]):
-                    log.debug("Region choice: client region match '%s'", client_region)
+                    logger.debug("Region choice: client region match '%s'", client_region)
                     return client_region
 
         # region_priority fallback
         for r in cls._region_priority:
             metas = cls.read_pools_by_region.get(r)
             if metas and any(m.healthy for m in metas):
-                log.debug("Region choice: priority list fallback '%s'", r)
+                logger.debug("Region choice: priority list fallback '%s'", r)
                 return r
 
         # pick by lowest avg latency
@@ -302,13 +302,13 @@ class DataBase(BaseModel):
                 best_latency = avg
                 best_region = r
         if best_region:
-            log.debug("Region choice: lowest latency fallback '%s'", best_region)
+            logger.debug("Region choice: lowest latency fallback '%s'", best_region)
             return best_region
 
         # last resort: any region with at least one pool
         for r, metas in cls.read_pools_by_region.items():
             if metas:
-                log.debug("Region choice: last resort, first available '%s'", r)
+                logger.debug("Region choice: last resort, first available '%s'", r)
                 return r
         return None
 
@@ -508,15 +508,15 @@ class DataBase(BaseModel):
         if log_explain:
             try:
                 explain_res = await pool.fetch(f"EXPLAIN {query}", *args, timeout=timeout)
-                log.info("EXPLAIN %s: %s", cls.clean_query(query), explain_res)
+                logger.info("EXPLAIN %s: %s", cls.clean_query(query), explain_res)
             except Exception as e:  # pylint: disable=broad-except
-                log.warning("Failed to EXPLAIN query: %s", e)
+                logger.warning("Failed to EXPLAIN query: %s", e)
 
         start_time = time.perf_counter()
         if fetch_row:
             record = await pool.fetchrow(query, *args, timeout=timeout)
             duration = time.perf_counter() - start_time
-            log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+            logger.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
 
             DB_QUERY_TOTAL.labels(type="read").inc()
             DB_QUERY_DURATION_SECONDS.labels(type="read").observe(duration)
@@ -527,7 +527,7 @@ class DataBase(BaseModel):
 
         records = await pool.fetch(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
-        log.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+        logger.debug("Read query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
 
         DB_QUERY_TOTAL.labels(type="read").inc()
         DB_QUERY_DURATION_SECONDS.labels(type="read").observe(duration)
@@ -580,7 +580,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         record = await pool.fetchrow(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
-        log.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
+        logger.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
 
         DB_QUERY_TOTAL.labels(type="write").inc()
         DB_QUERY_DURATION_SECONDS.labels(type="write").observe(duration)
@@ -632,7 +632,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         value = await con.fetchval(query, *args, column=column, timeout=timeout)
         duration = time.perf_counter() - start_time
-        log.debug("Running query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
+        logger.debug("Running query: %s args=%s dur=%.6fs, region=%s", cls.clean_query(query), args, duration, region)
         return value
 
     @classmethod
@@ -675,7 +675,7 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         result = await con.execute(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
-        log.debug("Running query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
+        logger.debug("Running query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
         return str(result)
 
     @classmethod
@@ -706,15 +706,15 @@ class DataBase(BaseModel):
                     if m.pool and not getattr(m.pool, "_closed", False):
                         await asyncio.wait_for(m.pool.close(), timeout=5.0)
                 except (asyncpg.PostgresError, asyncio.TimeoutError) as e:
-                    log.error("Error closing read pool for %s: %s", m.uri, e)
+                    logger.error("Error closing read pool for %s: %s", m.uri, e)
         if cls.write_pool and not getattr(cls.write_pool, "_closed", False):
             try:
                 await asyncio.wait_for(cls.write_pool.close(), timeout=5.0)
             except (asyncpg.PostgresError, asyncio.TimeoutError) as e:
-                log.error("Error closing write pool: %s", e)
+                logger.error("Error closing write pool: %s", e)
         cls.read_pools_by_region = {}
         cls.write_pool = None
-        log.info("Closed DB connection pools")
+        logger.info("Closed DB connection pools")
 
     @classmethod
     async def health_check(cls) -> dict[str, dict[str, Any]]:

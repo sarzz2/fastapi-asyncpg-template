@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 import secrets
 import string
@@ -26,6 +27,8 @@ from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
 from api.utils.date import get_utc_now
+
+logger = logging.getLogger("fastapi")
 
 
 class AuthService:
@@ -113,6 +116,7 @@ class AuthService:
             is_active=True,
         )
         user = await self._user_dao.create_user_oauth(user_create, user_info)
+        logger.info("Created new user via Google OAuth: username=%s (user_id=%s)", user.username, user.id)
         return user
 
     async def _get_user_scopes(self, roles: list[RoleData]) -> list[str]:
@@ -155,6 +159,7 @@ class AuthService:
                 user_agent=request.headers.get("user-agent"),
             )
         )
+        logger.info("Authenticated OAuth user: %s (ID: %s)", user.username, user.id)
         return LoginResponse(
             token=Token(access_token=access_token_details["token"], refresh_token=refresh_token),
             user=UserData.model_validate(user),
@@ -174,6 +179,7 @@ class AuthService:
         """
         user = await self._user_dao.get_by_username(username)
         if not user or not verify_password(password, user.hashed_password):
+            logger.warning("Failed login attempt for username: %s", username)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=trans("auth.invalid_credentials"),
@@ -199,6 +205,7 @@ class AuthService:
                 user_agent=request.headers.get("user-agent"),
             )
         )
+        logger.info("User logged in successfully: %s (ID: %s)", user.username, user.id)
         return LoginResponse(
             token=Token(access_token=access_token_details["token"], refresh_token=refresh_token),
             user=UserData.model_validate(user),
@@ -256,6 +263,7 @@ class AuthService:
             )
         )
 
+        logger.info("Refreshed access token for user: %s (ID: %s)", user.username, user.id)
         return LoginResponse(
             token=Token(access_token=access_token_details["token"], refresh_token=new_refresh_token),
             user=UserData.model_validate(user),
@@ -314,11 +322,13 @@ class AuthService:
         """
         ttl = await self._user_dao.revoke_user_session(user_id, jti)
         if ttl is None:
+            logger.warning("Session not found for revocation: user_id=%s, jti=%s", user_id, jti)
             raise HTTPException(status_code=404, detail=trans("user.session_not_found"))
         await asyncio.gather(
             self._redis.set(f"blacklist:access:{jti}", 1, ex=ttl),
             self._redis.set(f"blacklist:refresh:{jti}", 1, ex=ttl),
         )
+        logger.info("Revoked session for user_id=%s (jti=%s)", user_id, jti)
 
     async def update_password(self, user_id: UUID, password: str) -> None:
         """
@@ -330,6 +340,7 @@ class AuthService:
         """
         hashed_password = get_password_hash(password)
         await self._user_dao.update_password(user_id, hashed_password)
+        logger.info("Password updated for user_id=%s", user_id)
 
         user = await self._user_dao.get_by_id(user_id)
         if user:

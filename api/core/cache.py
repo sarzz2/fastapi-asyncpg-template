@@ -15,7 +15,7 @@ from api.core.metrics import (
 )
 from api.core.redis import redis_client
 
-log = logging.getLogger("fastapi")
+logger = logging.getLogger("fastapi")
 
 # Pre-bind metrics for performance
 CACHE_GET_REQUESTS = CACHE_REQUESTS_TOTAL.labels(operation="get")
@@ -59,7 +59,7 @@ async def _get_from_cache(key: str, hash_key: str | None, model: type[BaseModel]
 
         if cached_value:
             CACHE_HIT.inc()
-            log.debug("Cache hit for key: %s%s", f"[{hash_key}] " if hash_key else "", key)
+            logger.debug("Cache hit for key: %s%s", f"[{hash_key}] " if hash_key else "", key)
             data = json.loads(cached_value)
             if model:
                 if isinstance(data, list):
@@ -70,7 +70,7 @@ async def _get_from_cache(key: str, hash_key: str | None, model: type[BaseModel]
         CACHE_MISS.inc()
     except Exception as e:  # pylint: disable=broad-except
         REDIS_GET_ERRORS.inc()
-        log.warning("Error reading from cache for key %s: %s", key, e)
+        logger.warning("Error reading from cache for key %s: %s", key, e)
     return None
 
 
@@ -101,7 +101,7 @@ async def _save_to_cache(key: str, hash_key: str | None, value: Any, expire: int
                 else:
                     await redis_client.client.set(key, serialized_data)
 
-            log.debug(
+            logger.debug(
                 "Cache set for key: %s%s (expire=%s)",
                 f"[{hash_key}] " if hash_key else "",
                 key,
@@ -112,7 +112,7 @@ async def _save_to_cache(key: str, hash_key: str | None, value: Any, expire: int
             CACHE_SET_DURATION.observe(duration)
     except Exception as e:  # pylint: disable=broad-except
         REDIS_SET_ERRORS.inc()
-        log.warning("Error writing to cache for key %s: %s", key, e)
+        logger.warning("Error writing to cache for key %s: %s", key, e)
 
 
 def cache(
@@ -141,7 +141,7 @@ def cache(
             try:
                 key = _generate_key(key_pattern, func, args, kwargs)
             except ValueError as e:
-                log.error(str(e))
+                logger.error(str(e))
                 return await func(*args, **kwargs)
 
             # 2. Try to get from Redis
@@ -192,18 +192,18 @@ def cache_invalidate(
                         k = _generate_key(pattern, func, args, kwargs)
                         keys_to_delete.append(k)
                     except ValueError as e:
-                        log.error(str(e))
+                        logger.error(str(e))
 
                 if keys_to_delete:
                     if hash_key:
                         await redis_client.client.hdel(hash_key, *keys_to_delete)
-                        log.debug("Invalidated hash fields %s in %s", keys_to_delete, hash_key)
+                        logger.debug("Invalidated hash fields %s in %s", keys_to_delete, hash_key)
                     else:
                         await redis_client.client.delete(*keys_to_delete)
-                        log.debug("Invalidated keys %s", keys_to_delete)
+                        logger.debug("Invalidated keys %s", keys_to_delete)
 
             except Exception as e:  # pylint: disable=broad-except
-                log.warning("Error invalidating cache: %s", e)
+                logger.warning("Error invalidating cache: %s", e)
 
             return result
 
