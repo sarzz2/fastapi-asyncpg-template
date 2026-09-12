@@ -120,3 +120,25 @@ async def test_periodic_task_admin_view_list_route() -> None:
             response = await client.get("/admin/periodic_task/list")
             assert response.status_code == 200
             assert "Periodic Tasks" in response.text
+
+
+@pytest.mark.asyncio
+async def test_dead_letter_task_admin_view_list_route() -> None:
+    """Verify that the Dead Letter Queue admin view list endpoint renders successfully."""
+    with (
+        patch("api.core.admin.AdminAuthProvider.authenticate", new_callable=AsyncMock) as mock_auth,
+        patch(
+            "api.apps.common.admin_views.dead_letter_task.DeadLetterTaskAdminView.count", new_callable=AsyncMock
+        ) as mock_count,
+        patch(
+            "api.apps.common.admin_views.dead_letter_task.DeadLetterTaskAdminView.find_all", new_callable=AsyncMock
+        ) as mock_find_all,
+    ):
+        mock_auth.return_value = AdminUser(username="Super Admin")
+        mock_count.return_value = 0
+        mock_find_all.return_value = []
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/admin/dead_letter_task/list")
+            assert response.status_code == 200
+            assert "Dead Letter Queue" in response.text

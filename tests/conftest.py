@@ -211,3 +211,18 @@ def sync_client() -> Generator[TestClient, None, None]:
     finally:
         settings.PRIMARY_DATABASE_URL = original_primary_url
         settings.REPLICA_DATABASE_URL = original_replica_url
+
+
+@pytest.fixture(scope="function")
+async def db_session() -> AsyncGenerator[DataBase, None]:
+    """Fixture providing an initialized DataBase instance connected to the test database."""
+    db_instance = DataBase()
+    await db_instance.create_pool(
+        write_uri=settings.TEST_DATABASE_URL,
+        read_uris={"global": [settings.TEST_DATABASE_URL]},
+        loop=asyncio.get_running_loop(),
+    )
+    try:
+        yield db_instance
+    finally:
+        await db_instance.close_pool()

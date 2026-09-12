@@ -22,3 +22,17 @@ class CeleryRedisKeys(str, Enum):
 
     SCHEDULE_DATA = "celery:beat_schedule_data"
     SCHEDULE_VERSION = "celery:schedule_version"
+
+
+class DLQConstants:
+    """Dead Letter Queue configuration constants."""
+
+    DEFAULT_RETENTION_DAYS = 30
+    EXCLUDED_TASKS = {
+        "celery.ping",
+        "celery.backend_cleanup",
+        "celery.chain",
+        "celery.group",
+        "celery.chord",
+        "dlq_tasks.clean_old_dlq_tasks",
+    }

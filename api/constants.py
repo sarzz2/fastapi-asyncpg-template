@@ -26,6 +26,13 @@ class OAuthProviders(Enum):
     GITHUB = "github"
 
 
+class ExportFormat(str, Enum):
+    """File Export Formats Enum."""
+
+    CSV = "csv"
+    JSON = "json"
+
+
 class RequestHeaders(Enum):
     """Common Request Headers"""
 
