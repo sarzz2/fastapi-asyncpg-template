@@ -2,8 +2,8 @@ import logging
 
 from fastapi import Depends
 
-from api.apps.user.v0.dao.version import VersionDAO, get_version_dao
-from api.apps.user.v0.schemas.version import AppVersionData, AppVersionUpdate, ForceUpdateResponse
+from api.apps.common.v0.dao.version import VersionDAO, get_version_dao
+from api.apps.common.v0.schemas.version import AppVersionData, AppVersionUpdate, ForceUpdateResponse
 
 logger = logging.getLogger("fastapi")
 

@@ -39,7 +39,6 @@ from api.core.rate_limit import limiter
 from api.core.redis import redis_client, redis_event_bus, redis_socket
 from api.core.telemetry import setup_telemetry
 from api.middlewares.client_info_middleware import ClientInfoMiddleware
-from api.middlewares.force_update_middleware import ForceUpdateMiddleware
 from api.middlewares.region_middleware import RegionASGIMiddleware
 from api.schemas.health import DBRegionStatus, DBStatus, HealthResponse, RedisStatus
 from migrate import check_all_migrations_applied
@@ -247,7 +246,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(GZipMiddleware, minimum_size=1500, compresslevel=5)
-app.add_middleware(ForceUpdateMiddleware)
 app.add_middleware(ClientInfoMiddleware)
 app.add_middleware(RegionASGIMiddleware)
 app.add_middleware(I18nMiddleware)

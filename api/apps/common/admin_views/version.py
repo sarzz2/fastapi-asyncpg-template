@@ -19,8 +19,8 @@ from starlette_admin.fields import (
 )
 from starlette_admin.filters import FilterGroup
 
-from api.apps.user.v0.dao.version import VersionDAO
-from api.apps.user.v0.schemas.version import AppVersionData, AppVersionUpdate
+from api.apps.common.v0.dao.version import VersionDAO
+from api.apps.common.v0.schemas.version import AppVersionData, AppVersionUpdate
 from api.core.database import DataBase
 from api.utils.admin_view import BaseAppAdminView
 

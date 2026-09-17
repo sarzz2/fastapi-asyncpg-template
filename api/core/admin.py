@@ -11,9 +11,9 @@ from starlette_admin.i18n import I18nConfig, TimezoneConfig
 from api.apps.common.admin_views.dashboard import DashboardView
 from api.apps.common.admin_views.dead_letter_task import DeadLetterTaskAdminView
 from api.apps.common.admin_views.periodic_task import PeriodicTaskAdminView
+from api.apps.common.admin_views.version import AppVersionAdminView
 from api.apps.user.admin_views.role import RoleAdminView
 from api.apps.user.admin_views.user import UserAdminView
-from api.apps.user.admin_views.version import AppVersionAdminView
 from api.apps.user.v0.dao.user import UserDAO
 from api.constants import AdminConstants
 from api.core.auth import verify_password

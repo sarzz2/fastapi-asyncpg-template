@@ -1,6 +1,6 @@
 from fastapi import Depends
 
-from api.apps.user.v0.schemas.version import AppVersionData, AppVersionUpdate
+from api.apps.common.v0.schemas.version import AppVersionData, AppVersionUpdate
 from api.core.cache import cache, cache_invalidate
 from api.core.database import DataBase, get_db
 from api.shared.redis_keys import RedisKeys

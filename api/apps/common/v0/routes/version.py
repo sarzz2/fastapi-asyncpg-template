@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Response, Security, status
 
+from api.apps.common.v0.schemas.version import AppVersionData, AppVersionUpdate, ForceUpdateResponse
+from api.apps.common.v0.service.version import VersionService, get_version_service
 from api.apps.user.v0.schemas.user import UserData
-from api.apps.user.v0.schemas.version import AppVersionData, AppVersionUpdate, ForceUpdateResponse
-from api.apps.user.v0.service.version import VersionService, get_version_service
 from api.core.dependencies import get_current_user
 
 router = APIRouter()
