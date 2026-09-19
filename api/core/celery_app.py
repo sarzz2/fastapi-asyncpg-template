@@ -15,6 +15,7 @@ from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
 from api.apps.common.constants import DLQConstants
 from api.core.config import settings
+from api.core.container import TaskContainer
 from api.core.database import DataBase
 from api.core.redis import RedisClient
 from api.utils.serialization import json_serialize_safe
@@ -68,8 +69,7 @@ celery_app = Celery(
 celery_app.main_loop = None
 celery_app.db_instance = None
 celery_app.redis_instance = None
-
-celery_app.loader.import_default_modules()
+celery_app.container = None
 
 CeleryInstrumentor().instrument()
 
@@ -113,6 +113,8 @@ def init_worker_process(**_kwargs: dict[str, Any]) -> None:
     redis_instance = RedisClient()
     main_loop.run_until_complete(redis_instance.connect())
     celery_app.redis_instance = redis_instance
+
+    celery_app.container = TaskContainer(db=db_instance, redis=redis_instance)
 
     logger.info("Worker process resources initialized.")
 
@@ -198,8 +200,26 @@ class AsyncBaseTask(Task):  # pylint: disable=abstract-method
             raise RuntimeError("Redis instance not initialized for worker process.")
         return cast(RedisClient, redis_instance)
 
+    @property
+    def container(self) -> TaskContainer:
+        """
+        Provides the shared dependency injection container for the worker.
+
+        Returns:
+            TaskContainer: Shared container instance.
+
+        Raises:
+            RuntimeError: If container is not initialized.
+        """
+        container_instance = self.app.container
+        if not container_instance:
+            raise RuntimeError("TaskContainer not initialized for worker process.")
+        return cast(TaskContainer, container_instance)
+
 
 celery_app.Task = AsyncBaseTask
+
+celery_app.loader.import_default_modules()
 
 
 # ==============================================================================

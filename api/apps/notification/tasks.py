@@ -3,7 +3,6 @@ import os
 from uuid import UUID
 
 import certifi
-from celery import Task
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (
     Attachment,
@@ -20,8 +19,7 @@ from sendgrid.helpers.mail import (
 )
 
 from api.apps.notification.v0.schemas import NotificationType
-from api.apps.notification.v0.service import notification_service
-from api.core.celery_app import celery_app
+from api.core.celery_app import AsyncBaseTask, celery_app
 from api.core.config import settings
 
 # Fix for macOS local development SSL certificate errors:
@@ -33,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 @celery_app.task(name="send_notification_task", bind=True)
 def send_notification_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    self: Task,
+    self: AsyncBaseTask,
     user_id_str: str,
     message: str,
     notification_type: str = NotificationType.INFO.value,
@@ -48,7 +46,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
     type_enum = NotificationType(notification_type)
 
     async def _send() -> None:
-        await notification_service.notify(
+        await self.container.notification_service.notify(
             user_id=user_id,
             message=message,
             notification_type=type_enum,
@@ -67,7 +65,7 @@ def send_notification_task(  # pylint: disable=too-many-arguments,too-many-posit
 
 @celery_app.task(name="broadcast_notification_task", bind=True)
 def broadcast_notification_task(
-    self: Task,
+    self: AsyncBaseTask,
     message: str,
     notification_type: str = NotificationType.INFO.value,
     subject: str | None = None,
@@ -80,7 +78,7 @@ def broadcast_notification_task(
     type_enum = NotificationType(notification_type)
 
     async def _broadcast() -> None:
-        await notification_service.broadcast_all(
+        await self.container.notification_service.broadcast_all(
             message=message,
             notification_type=type_enum,
             subject=subject,
@@ -97,7 +95,7 @@ def broadcast_notification_task(
 
 @celery_app.task(name="send_email_worker_task", bind=True)
 def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    _self: Task,
+    _self: AsyncBaseTask,
     to_email: str | list[str],
     subject: str,
     html_content: str,
