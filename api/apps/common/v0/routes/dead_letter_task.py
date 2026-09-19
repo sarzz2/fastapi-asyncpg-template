@@ -21,9 +21,10 @@ from api.apps.common.v0.service.dead_letter_task import DeadLetterTaskService, g
 from api.apps.user.v0.schemas.user import UserData
 from api.constants import ExportFormat
 from api.core.dependencies import get_current_user
+from api.core.idempotency import IdempotentRoute
 from api.utils.pagination import Page, PaginationParams, apply_cursor_pagination
 
-router = APIRouter()
+router = APIRouter(route_class=IdempotentRoute)
 
 
 @router.get("", response_model=Page[DLQTaskResponse], summary="List Dead Letter Queue tasks")

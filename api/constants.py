@@ -57,3 +57,7 @@ class AdminConstants:
         "Europe/London",
         "Asia/Tokyo",
     ]
+
+
+# Default TTL for idempotency keys is 24 hours
+IDEMPOTENCY_TTL = 60 * 60 * 24

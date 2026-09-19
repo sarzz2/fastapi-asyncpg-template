@@ -13,3 +13,7 @@ class RedisKeys:
     # App Version Cache (String)
     APP_VERSION_CACHE = "app_version:{platform}"
     APP_VERSIONS_ALL_CACHE = "app_versions:all"
+
+    # Idempotency Layer
+    IDEMPOTENCY_LOCK = "idempotency:lock:{key}"
+    IDEMPOTENCY_RESPONSE = "idempotency:response:{key}"
