@@ -5,7 +5,7 @@ REST API endpoints for Celery Dead Letter Queue (DLQ) Management.
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Security
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Security
 from fastapi.responses import StreamingResponse
 
 from api.apps.common.v0.schemas.dead_letter_task import (
@@ -19,7 +19,8 @@ from api.apps.common.v0.schemas.dead_letter_task import (
 )
 from api.apps.common.v0.service.dead_letter_task import DeadLetterTaskService, get_dead_letter_task_service
 from api.apps.user.v0.schemas.user import UserData
-from api.constants import ExportFormat
+from api.constants import AuditActions, AuditResources, ExportFormat
+from api.core.audit import AuditLogger
 from api.core.dependencies import get_current_user
 from api.core.idempotency import IdempotentRoute
 from api.utils.pagination import Page, PaginationParams, apply_cursor_pagination
@@ -114,7 +115,7 @@ async def get_dlq_task(
 
 
 @router.patch("", response_model=DLQActionResponse, summary="Edit DLQ task payload(s)")
-async def update_dlq_tasks(
+async def update_dlq_task(
     payload: DLQUpdatePayload,
     service: DeadLetterTaskService = Depends(get_dead_letter_task_service),
     _current_user: UserData = Security(get_current_user, scopes=["dlq:update"]),
@@ -137,7 +138,9 @@ async def update_dlq_tasks(
 
 @router.post("/retrigger", response_model=DLQActionResponse, summary="Retrigger DLQ task(s)")
 async def retrigger_dlq_tasks(
-    request: DLQRetriggerRequest = DLQRetriggerRequest(),
+    http_request: Request,
+    background_tasks: BackgroundTasks,
+    payload: DLQRetriggerRequest = DLQRetriggerRequest(),
     service: DeadLetterTaskService = Depends(get_dead_letter_task_service),
     _current_user: UserData = Security(get_current_user, scopes=["dlq:retrigger"]),
 ) -> DLQActionResponse:
@@ -148,13 +151,29 @@ async def retrigger_dlq_tasks(
     If neither is passed, retriggers all tasks.
 
     Args:
-        request (DLQRetriggerRequest): Retrigger specifications.
+        http_request (Request): HTTP request.
+        background_tasks (BackgroundTasks): Background tasks runner.
+        payload (DLQRetriggerRequest): Retrigger specifications.
         service (DeadLetterTaskService): DLQ service instance.
+        current_user (UserData): Authenticated user.
 
     Returns:
         DLQActionResponse: Summary model of retriggered tasks count.
     """
-    return await service.retrigger_tasks(request=request)
+    res = await service.retrigger_tasks(request=payload)
+    resource_id = ",".join(str(tid) for tid in payload.task_ids) if payload.task_ids else (payload.task_name or "all")
+    AuditLogger.log(
+        action=AuditActions.DLQ_TASK_TRIGGER,
+        resource=AuditResources.DLQ_TASK,
+        resource_id=resource_id,
+        details={
+            "request": payload.model_dump(mode="json"),
+            "result": res.model_dump(mode="json"),
+        },
+        background_tasks=background_tasks,
+        request=http_request,
+    )
+    return res
 
 
 @router.delete("", response_model=DLQActionResponse, summary="Delete DLQ tasks")

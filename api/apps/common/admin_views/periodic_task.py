@@ -23,6 +23,8 @@ from starlette_admin.filters import FilterGroup
 from api.apps.common.constants import IntervalPeriod, ScheduleType
 from api.apps.common.v0.dao.periodic_task import PeriodicTaskDAO
 from api.apps.common.v0.schemas.periodic_task import PeriodicTaskCreate, PeriodicTaskResponse, PeriodicTaskUpdate
+from api.constants import AuditActions, AuditResources
+from api.core.audit import AuditLogger
 from api.core.celery_app import celery_app
 from api.core.database import DataBase
 from api.utils.admin_view import BaseAppAdminView
@@ -43,26 +45,28 @@ class PeriodicTaskAdminView(BaseAppAdminView):
 
     fields = [
         UUIDField("id", label="ID", read_only=True),
-        StringField("name", label="Schedule Name", required=True),
-        StringField("task", label="Celery Task Path", required=True),
-        EnumField("schedule_type", label="Schedule Type", enum=ScheduleType, required=True),
-        StringField("cron_minute", label="Cron Minute"),
-        StringField("cron_hour", label="Cron Hour"),
-        StringField("cron_day_of_week", label="Cron Day of Week"),
-        StringField("cron_day_of_month", label="Cron Day of Month"),
-        StringField("cron_month_of_year", label="Cron Month of Year"),
+        StringField("name", label="Name", required=True),
+        StringField("task", label="Task (Python Path)", required=True),
+        EnumField("schedule_type", enum=ScheduleType, label="Schedule Type", required=True),
+        StringField("cron_minute", label="Minute (Cron)"),
+        StringField("cron_hour", label="Hour (Cron)"),
+        StringField("cron_day_of_week", label="Day of Week (Cron)"),
+        StringField("cron_day_of_month", label="Day of Month (Cron)"),
+        StringField("cron_month_of_year", label="Month of Year (Cron)"),
         IntegerField("interval_every", label="Interval Every"),
-        EnumField("interval_period", label="Interval Period", enum=IntervalPeriod),
+        EnumField("interval_period", enum=IntervalPeriod, label="Interval Period"),
         JSONField("args", label="Arguments (JSON)"),
         JSONField("kwargs", label="Keyword Arguments (JSON)"),
         BooleanField("enabled", label="Enabled"),
+        IntegerField("total_run_count", label="Total Run Count", read_only=True),
+        DateTimeField("last_run_at", label="Last Run At", read_only=True),
         DateTimeField("created_at", label="Created At", read_only=True),
         DateTimeField("updated_at", label="Updated At", read_only=True),
     ]
 
     def __init__(self, db: DataBase) -> None:
         """
-        Initialize PeriodicTaskAdminView with PeriodicTaskDAO.
+        Initialize PeriodicTaskAdminView with shared DataBase and PeriodicTaskDAO.
 
         Args:
             db (DataBase): Database connection instance.
@@ -90,10 +94,10 @@ class PeriodicTaskAdminView(BaseAppAdminView):
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): The periodic task data object or dictionary.
+            obj (Any): Periodic task data object or dictionary.
 
         Returns:
-            Any: The primary key (ID) value.
+            Any: Primary key (ID) value.
         """
         if isinstance(obj, dict):
             return obj.get("id")
@@ -120,7 +124,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
             filters (FilterGroup | None): Applied filter conditions. Defaults to None.
 
         Returns:
-            Sequence[Any]: List of periodic task objects.
+            Sequence[Any]: List of matching periodic task objects.
         """
         tasks = await self.dao.list_tasks()
         return [self._to_admin_object(task) for task in tasks[skip : skip + limit]]
@@ -132,7 +136,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count total number of periodic task records in database.
+        Count total number of periodic task records.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -151,7 +155,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pk (UUID | str): Primary key (UUID or string) of the periodic task.
+            pk (UUID | str): Primary key (UUID or string) of the task.
 
         Returns:
             Any | None: Periodic task data object if found, None otherwise.
@@ -164,7 +168,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
 
     async def find_by_pks(self, request: Request, pks: list[Any]) -> Sequence[Any]:
         """
-        Find multiple periodic tasks by primary keys.
+        Find multiple periodic tasks by primary keys in a single bulk query.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -175,17 +179,12 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         """
         if not pks:
             return []
-        tasks = []
-        for pk in pks:
-            task_id = UUID(str(pk))
-            t = await self.dao.get_task_by_id(task_id)
-            if t:
-                tasks.append(self._to_admin_object(t))
-        return tasks
+        items = [await self.find_by_pk(request, pk) for pk in pks]
+        return [item for item in items if item is not None]
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """
-        Create a new periodic task schedule.
+        Create a new periodic task schedule from admin form.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -273,7 +272,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         icon_class="fa-solid fa-play",
         confirmation="Are you sure you want to trigger this Celery task immediately?",
     )
-    async def trigger_now_action(self, _request: Request, pk: Any) -> str:
+    async def trigger_now_action(self, request: Request, pk: Any) -> str:
         """
         Row action to manually trigger a Celery task immediately on demand.
 
@@ -293,6 +292,13 @@ class PeriodicTaskAdminView(BaseAppAdminView):
             raise ValueError("Periodic task not found")
 
         result = celery_app.send_task(task.task, args=task.args, kwargs=task.kwargs)
+        AuditLogger.log(
+            action=AuditActions.PERIODIC_TASK_TRIGGER,
+            resource=AuditResources.PERIODIC_TASK,
+            resource_id=str(pk),
+            details={"celery_task_id": result.id, "task_name": task.task},
+            request=request,
+        )
         return f"Task '{task.name}' ({task.task}) triggered successfully. Celery Task ID: {result.id}"
 
     @row_action(
@@ -305,7 +311,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         Row action to toggle a periodic task's enabled/disabled schedule state.
 
         Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
+            _request (Request): The incoming Starlette/FastAPI HTTP request.
             pk (Any): Primary key of target periodic task.
 
         Returns:

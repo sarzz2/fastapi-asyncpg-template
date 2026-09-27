@@ -9,6 +9,7 @@ from starlette import status
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.auth import verify_token
+from api.core.context import CURRENT_ACTOR_ID
 from api.core.redis import get_redis
 
 oauth2_scheme = HTTPBearer()
@@ -62,6 +63,7 @@ async def get_current_user(
             user.token_version,
         )
         raise credentials_exception
+    CURRENT_ACTOR_ID.set(str(user.id))
     return user
 
 
@@ -93,6 +95,7 @@ async def get_sudo_user(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Sudo access required",
             )
+        CURRENT_ACTOR_ID.set(str(user.id))
         return user
     except jwt.PyJWTError as exc:
         logger.warning("JWT error during sudo verification: %s", exc)

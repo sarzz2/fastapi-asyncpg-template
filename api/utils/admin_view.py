@@ -6,10 +6,11 @@ from collections.abc import Sequence
 from typing import Any
 
 from starlette.requests import Request
-from starlette_admin.filters import FilterGroup
+from starlette_admin.filters import FilterGroup, FilterRegistry
 from starlette_admin.views import BaseModelView
 
 from api.constants import AdminConstants
+from api.utils.admin_filters import DEFAULT_FILTER_REGISTRY
 
 
 class BaseAppAdminView(BaseModelView):
@@ -96,3 +97,9 @@ class BaseAppAdminView(BaseModelView):
         pk = await self.get_pk_value(request, obj)
         view_name = getattr(self, "name", None) or getattr(self, "identity", "Item")
         return f"{view_name} ({pk})"
+
+    def get_filter_registry(self) -> FilterRegistry:
+        """
+        Return the global FilterRegistry populated with date and text filters for UI filter builder.
+        """
+        return DEFAULT_FILTER_REGISTRY

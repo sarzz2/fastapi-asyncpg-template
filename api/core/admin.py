@@ -8,6 +8,7 @@ from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.exceptions import LoginFailed
 from starlette_admin.i18n import I18nConfig, TimezoneConfig
 
+from api.apps.common.admin_views.audit_log import AuditLogAdminView
 from api.apps.common.admin_views.dashboard import DashboardView
 from api.apps.common.admin_views.dead_letter_task import DeadLetterTaskAdminView
 from api.apps.common.admin_views.periodic_task import PeriodicTaskAdminView
@@ -18,6 +19,7 @@ from api.apps.user.v0.dao.user import UserDAO
 from api.constants import AdminConstants
 from api.core.auth import verify_password
 from api.core.config import settings
+from api.core.context import CURRENT_ACTOR_ID
 from api.core.database import DataBase
 
 logger = logging.getLogger("fastapi")
@@ -119,6 +121,9 @@ class AdminAuthProvider(AuthProvider):
         """
         admin_data = request.session.get("admin_user")
         if admin_data and isinstance(admin_data, dict):
+            actor_id = admin_data.get("id")
+            if actor_id:
+                CURRENT_ACTOR_ID.set(str(actor_id))
             name = admin_data.get("full_name") or admin_data.get("username") or admin_data.get("email") or "Admin"
             return AdminUser(username=str(name))
         return None
@@ -160,6 +165,7 @@ def setup_admin(app: FastAPI) -> BaseAdmin:
     admin.add_view(AppVersionAdminView(db=db))
     admin.add_view(PeriodicTaskAdminView(db=db))
     admin.add_view(DeadLetterTaskAdminView(db=db))
+    admin.add_view(AuditLogAdminView(db=db))
     admin.mount_to(app)
 
     logger.info("Starlette-Admin portal mounted successfully at /admin")

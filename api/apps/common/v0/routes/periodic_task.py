@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Security, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Security, status
 
 from api.apps.common.v0.schemas.periodic_task import (
     ManualTaskTriggerRequest,
@@ -11,6 +11,8 @@ from api.apps.common.v0.schemas.periodic_task import (
 )
 from api.apps.common.v0.service.periodic_task import PeriodicTaskService, get_periodic_task_service
 from api.apps.user.v0.schemas.user import UserData
+from api.constants import AuditActions, AuditResources
+from api.core.audit import AuditLogger
 from api.core.dependencies import get_current_user
 
 router = APIRouter()
@@ -25,17 +27,17 @@ async def list_registered_celery_tasks(
     return await service.list_registered_celery_tasks()
 
 
-@router.get("", response_model=list[PeriodicTaskResponse], summary="List all periodic tasks")
+@router.get("/", response_model=list[PeriodicTaskResponse], summary="List all periodic tasks")
 async def list_periodic_tasks(
     service: PeriodicTaskService = Depends(get_periodic_task_service),
     _current_user: UserData = Security(get_current_user, scopes=["periodic_tasks:read"]),
 ) -> list[PeriodicTaskResponse]:
-    """Retrieve all configured periodic tasks."""
+    """List all configured dynamic periodic tasks."""
     return await service.list_tasks()
 
 
 @router.post(
-    "",
+    "/",
     response_model=PeriodicTaskResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a periodic task schedule",
@@ -87,6 +89,8 @@ async def delete_periodic_task(
 )
 async def trigger_periodic_task_manually(
     task_id: UUID,
+    http_request: Request,
+    background_tasks: BackgroundTasks,
     service: PeriodicTaskService = Depends(get_periodic_task_service),
     _current_user: UserData = Security(get_current_user, scopes=["periodic_tasks:trigger"]),
 ) -> ManualTaskTriggerResponse:
@@ -96,6 +100,14 @@ async def trigger_periodic_task_manually(
         task_name=task_detail.task,
         args=task_detail.args,
         kwargs=task_detail.kwargs,
+    )
+    AuditLogger.log(
+        action=AuditActions.PERIODIC_TASK_TRIGGER,
+        resource=AuditResources.PERIODIC_TASK,
+        resource_id=str(task_id),
+        details={"celery_task_id": celery_task_id, "task_name": task_detail.task},
+        background_tasks=background_tasks,
+        request=http_request,
     )
     return ManualTaskTriggerResponse(
         message=f"Task '{task_detail.name}' dispatched successfully",
@@ -110,18 +122,28 @@ async def trigger_periodic_task_manually(
     summary="Trigger any task manually by name",
 )
 async def trigger_task_by_name(
-    request: ManualTaskTriggerRequest,
+    payload: ManualTaskTriggerRequest,
+    http_request: Request,
+    background_tasks: BackgroundTasks,
     service: PeriodicTaskService = Depends(get_periodic_task_service),
     _current_user: UserData = Security(get_current_user, scopes=["periodic_tasks:trigger"]),
 ) -> ManualTaskTriggerResponse:
     """Manually trigger any registered Celery task by full python path name."""
     celery_task_id = await service.trigger_task_manually(
-        task_name=request.task_name,
-        args=request.args,
-        kwargs=request.kwargs,
+        task_name=payload.task_name,
+        args=payload.args,
+        kwargs=payload.kwargs,
+    )
+    AuditLogger.log(
+        action=AuditActions.PERIODIC_TASK_TRIGGER,
+        resource=AuditResources.PERIODIC_TASK,
+        resource_id=payload.task_name,
+        details={"celery_task_id": celery_task_id, "task_name": payload.task_name},
+        background_tasks=background_tasks,
+        request=http_request,
     )
     return ManualTaskTriggerResponse(
-        message=f"Task '{request.task_name}' dispatched successfully",
+        message=f"Task '{payload.task_name}' dispatched successfully",
         task_id=celery_task_id,
-        task_name=request.task_name,
+        task_name=payload.task_name,
     )

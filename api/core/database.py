@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from api.core.config import settings
+from api.core.context import CLIENT_IP, CURRENT_ACTOR_ID
 from api.core.metrics import (
     DB_POOL_CONNECTIONS_IN_USE,
     DB_QUERY_DURATION_SECONDS,
@@ -422,8 +423,19 @@ class DataBase(BaseModel):
     async def transaction(cls, use_primary: bool = True) -> AsyncGenerator[Connection, None]:
         """Context manager for database transactions."""
         pool, _ = await cls.get_pool(use_primary)
+        actor_id = CURRENT_ACTOR_ID.get() or ""
+        client_ip = CLIENT_IP.get() or ""
         async with pool.acquire() as conn:
             async with conn.transaction():
+                if actor_id or client_ip:
+                    try:
+                        await conn.execute(
+                            "SELECT set_config('app.actor_id', $1, true), set_config('app.client_ip', $2, true)",
+                            actor_id,
+                            client_ip,
+                        )
+                    except Exception as exc:  # pylint: disable=broad-except
+                        logger.debug("Could not set transaction settings for audit: %s", exc)
                 yield conn
 
     @staticmethod
@@ -578,7 +590,23 @@ class DataBase(BaseModel):
         """
         pool, _ = await cls.get_pool(use_primary=True)
         start_time = time.perf_counter()
-        record = await pool.fetchrow(query, *args, timeout=timeout)
+        actor_id = CURRENT_ACTOR_ID.get() or ""
+        client_ip = CLIENT_IP.get() or ""
+        if isinstance(pool, asyncpg.Pool):
+            async with pool.acquire() as conn:
+                if actor_id or client_ip:
+                    try:
+                        await conn.execute(
+                            "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                            actor_id,
+                            client_ip,
+                        )
+                    except Exception as exc:  # pylint: disable=broad-except
+                        logger.debug("Could not set session settings for audit: %s", exc)
+
+                record = await conn.fetchrow(query, *args, timeout=timeout)
+        else:
+            record = await pool.fetchrow(query, *args, timeout=timeout)
         duration = time.perf_counter() - start_time
         logger.debug("Write query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
 
@@ -667,13 +695,35 @@ class DataBase(BaseModel):
             - Logs query execution details including duration
             - Returns a string indicating the operation result
         """
-        if con is None:
-            if cls.write_pool is None:
-                raise RuntimeError("No write pool available")
-            con = cls.write_pool
-
         start_time = time.perf_counter()
-        result = await con.execute(query, *args, timeout=timeout)
+        actor_id = CURRENT_ACTOR_ID.get() or ""
+        client_ip = CLIENT_IP.get() or ""
+
+        target = cls.write_pool if con is None else con
+        if isinstance(target, asyncpg.Pool):
+            async with target.acquire() as connection:
+                if actor_id or client_ip:
+                    try:
+                        await connection.execute(
+                            "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                            actor_id,
+                            client_ip,
+                        )
+                    except Exception as exc:  # pylint: disable=broad-except
+                        logger.debug("Could not set session settings for audit: %s", exc)
+                result = await connection.execute(query, *args, timeout=timeout)
+        else:
+            if actor_id or client_ip:
+                try:
+                    await target.execute(
+                        "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                        actor_id,
+                        client_ip,
+                    )
+                except Exception as exc:  # pylint: disable=broad-except
+                    logger.debug("Could not set session settings for audit: %s", exc)
+            result = await target.execute(query, *args, timeout=timeout)
+
         duration = time.perf_counter() - start_time
         logger.debug("Running query: %s args=%s dur=%.6fs", cls.clean_query(query), args, duration)
         return str(result)

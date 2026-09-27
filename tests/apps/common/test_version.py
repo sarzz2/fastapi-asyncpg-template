@@ -137,6 +137,9 @@ async def test_version_routes_crud(sample_version_data: AppVersionData) -> None:
 
     update_data = AppVersionUpdate(latest_build=25)
     updated = await update_version_config(
-        platform="ios", update_data=update_data, svc=service, _current_user=MagicMock()
+        platform="ios",
+        update_data=update_data,
+        svc=service,
+        _current_user=MagicMock(),
     )
     assert updated.platform == "ios"
