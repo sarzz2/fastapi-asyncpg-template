@@ -79,12 +79,8 @@ BEGIN
         END IF;
     END IF;
 
-    IF new_json ? 'password_hash' THEN
-        new_json := new_json - 'password_hash';
-    END IF;
-    IF old_json ? 'password_hash' THEN
-        old_json := old_json - 'password_hash';
-    END IF;
+    new_json := new_json - ARRAY['password_hash', 'hashed_password'];
+    old_json := old_json - ARRAY['password_hash', 'hashed_password'];
 
     CASE
         WHEN TG_TABLE_NAME = 'users' THEN
