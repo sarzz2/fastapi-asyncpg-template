@@ -58,7 +58,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         JSONField("args", label="Arguments (JSON)"),
         JSONField("kwargs", label="Keyword Arguments (JSON)"),
         BooleanField("enabled", label="Enabled"),
-        DateTimeField("total_run_count", label="Total Run Count", read_only=True),
+        IntegerField("total_run_count", label="Total Run Count", read_only=True),
         DateTimeField("last_run_at", label="Last Run At", read_only=True),
         DateTimeField("created_at", label="Created At", read_only=True),
         DateTimeField("updated_at", label="Updated At", read_only=True),
