@@ -21,13 +21,15 @@ from api.apps.common.v0.schemas.dead_letter_task import (
     DLQUpdatePayload,
 )
 from api.apps.common.v0.service.dead_letter_task import DeadLetterTaskService
+from api.constants import AuditActions, AuditResources
+from api.core.audit import AuditLogger
 from api.core.database import DataBase
 from api.utils.admin_view import BaseAppAdminView
 
 
 class DeadLetterTaskAdminView(BaseAppAdminView):
     """
-    Custom Starlette-Admin view for inspecting, editing payloads, and retriggering DLQ tasks.
+    Custom Starlette-Admin view for managing Dead Letter Queue (DLQ) failed tasks.
     """
 
     key = "dead_letter_task"
@@ -39,17 +41,17 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
     pk_attr = "id"
 
     fields = [
-        UUIDField("id", label="ID", read_only=True),
-        StringField("task_id", label="Celery Task ID", read_only=True),
+        UUIDField("id", label="Task ID", read_only=True),
         StringField("task_name", label="Task Name", required=True),
-        StringField("queue", label="Queue"),
-        JSONField("args", label="Arguments (JSON)"),
-        JSONField("kwargs", label="Keyword Arguments (JSON)"),
-        StringField("exception_type", label="Exception Type", read_only=True),
-        StringField("exception_message", label="Exception Message", read_only=True),
-        TextAreaField("traceback", label="Traceback", read_only=True),
         IntegerField("retry_count", label="Retry Count", read_only=True),
+        StringField("queue", label="Queue"),
+        JSONField("args", label="Args"),
+        JSONField("kwargs", label="Kwargs"),
+        TextAreaField("exception", label="Exception", read_only=True),
+        TextAreaField("traceback", label="Traceback", read_only=True),
         DateTimeField("failed_at", label="Failed At", read_only=True),
+        DateTimeField("created_at", label="Created At", read_only=True),
+        DateTimeField("updated_at", label="Updated At", read_only=True),
     ]
 
     def can_create(self, request: Request) -> bool:
@@ -66,7 +68,7 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
 
     def __init__(self, db: DataBase) -> None:
         """
-        Initialize DeadLetterTaskAdminView with DeadLetterTaskDAO.
+        Initialize DeadLetterTaskAdminView with shared DataBase and DeadLetterTaskDAO.
 
         Args:
             db (DataBase): Database connection instance.
@@ -78,10 +80,10 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
     @staticmethod
     def _to_admin_object(task: DLQTaskResponse) -> SimpleNamespace:
         """
-        Convert DLQTaskResponse Pydantic model into a Starlette-Admin compatible object.
+        Convert a DLQTaskResponse Pydantic model into a Starlette-Admin compatible object.
 
         Args:
-            task (DLQTaskResponse): DLQTaskResponse Pydantic model instance.
+            task (DLQTaskResponse): The DLQ task response model.
 
         Returns:
             SimpleNamespace: Admin-compatible object with dynamically mapped fields.
@@ -90,14 +92,14 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
 
     async def get_pk_value(self, request: Request, obj: Any) -> Any:
         """
-        Extract primary key (ID) from DLQ task object or dictionary.
+        Extract primary key value from task object or dictionary.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): The DLQ task data object or dictionary.
+            obj (Any): DLQ task data object or dictionary.
 
         Returns:
-            Any: The primary key (ID) value.
+            Any: Primary key (ID) value.
         """
         if isinstance(obj, dict):
             return obj.get("id")
@@ -113,18 +115,18 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> Sequence[Any]:
         """
-        Find all records matching criteria.
+        Retrieve paginated list of failed DLQ tasks.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            skip (int): Number of records to skip for pagination. Defaults to 0.
+            skip (int): Number of records to skip. Defaults to 0.
             limit (int): Maximum number of records to return. Defaults to 100.
-            q (str | None): Optional search query string. Defaults to None.
+            q (str | None): Optional search query. Defaults to None.
             sorts (Sequence[tuple[str, str]] | None): Sort fields and directions. Defaults to None.
             filters (FilterGroup | None): Applied filter conditions. Defaults to None.
 
         Returns:
-            Sequence[Any]: List of matching DLQ task objects.
+            Sequence[Any]: List of DLQ task objects.
         """
         filter_opts = DLQTaskFilter(search=q)
         actual_limit = limit if limit > 0 else None
@@ -151,26 +153,24 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         filter_opts = DLQTaskFilter(search=q)
         return await self.dao.count_tasks(filters=filter_opts)
 
-    async def find_by_pk(self, request: Request, pk: Any) -> Any | None:
+    async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
         """
         Find a single DLQ task by primary key.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pk (Any): Primary key of the DLQ task.
+            pk (UUID | str): Primary key (UUID or string) of the task.
 
         Returns:
-            Any | None: DLQ task data object if found, None otherwise.
+            Any | None: DLQ task object if found, None otherwise.
         """
-        try:
-            task = await self.dao.get_task_by_id(UUID(str(pk)))
-            return self._to_admin_object(task) if task else None
-        except (ValueError, TypeError):
-            return None
+        task_uuid = UUID(str(pk))
+        dlq_task = await self.dao.get_task_by_id(task_uuid)
+        return self._to_admin_object(dlq_task) if dlq_task else None
 
     async def find_by_pks(self, request: Request, pks: list[Any]) -> Sequence[Any]:
         """
-        Find multiple DLQ tasks by primary keys.
+        Batch retrieve failed DLQ task records by IDs.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -181,25 +181,21 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         """
         if not pks:
             return []
-        task_list: list[Any] = []
-        for pk in pks:
-            obj = await self.find_by_pk(request, pk)
-            if obj is not None:
-                task_list.append(obj)
-        return task_list
+        items = [await self.find_by_pk(request, pk) for pk in pks]
+        return [item for item in items if item is not None]
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """
-        Create is disabled for Dead Letter Queue tasks.
+        Direct creation of DLQ tasks from admin is not supported.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            data (dict[str, Any]): Input record payload dictionary.
+            data (dict[str, Any]): Form data.
 
         Raises:
-            NotImplementedError: Always, as DLQ entries can only be generated by failed tasks.
+            NotImplementedError: Always raised since DLQ tasks are created automatically on task failures.
         """
-        raise NotImplementedError("Manual creation of Dead Letter Queue tasks is not permitted.")
+        raise NotImplementedError("DLQ tasks cannot be manually created via the admin interface.")
 
     async def repr(self, obj: Any, request: Request) -> str:
         """
@@ -218,17 +214,20 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
             return f"{task_name} ({pk})"
         return f"DLQ Task ({pk})"
 
-    async def edit(self, request: Request, pk: Any, data: dict[str, Any]) -> Any:
+    async def edit(self, request: Request, pk: UUID | str, data: dict[str, Any]) -> Any:
         """
-        Edit an existing DLQ task's payload args, kwargs, or queue.
+        Update the payload (args, kwargs, queue) of a failed DLQ task before retriggering.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pk (Any): Primary key of target task.
-            data (dict[str, Any]): Dictionary containing field updates.
+            pk (UUID | str): Primary key of the task to update.
+            data (dict[str, Any]): Updated field values submitted from form.
 
         Returns:
-            Any: Updated DLQ task data object.
+            Any: Updated DLQ task object.
+
+        Raises:
+            ValueError: If DLQ task with given PK does not exist.
         """
         task_id = UUID(str(pk))
         payload = DLQUpdatePayload(
@@ -239,7 +238,8 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         count = await self.dao.update_task_payload(payload=payload, task_id=task_id)
         if count == 0:
             raise ValueError(f"DLQ task with ID '{pk}' not found.")
-        return await self.find_by_pk(request, pk)
+        new_task = await self.dao.get_task_by_id(task_id)
+        return self._to_admin_object(new_task) if new_task else None
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
@@ -275,6 +275,16 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         task_uuids = [UUID(str(pk)) for pk in pks]
         service = DeadLetterTaskService(dao=self.dao)
         res = await service.retrigger_tasks(DLQRetriggerRequest(task_ids=task_uuids))
+        AuditLogger.log(
+            action=AuditActions.DLQ_TASK_TRIGGER,
+            resource=AuditResources.DLQ_TASK,
+            resource_id=",".join(str(pk) for pk in pks),
+            details={
+                "task_ids": [str(pk) for pk in pks],
+                "message": res.message,
+            },
+            request=request,
+        )
         flash(request, res.message, "success")
         return res.message
 
@@ -298,6 +308,16 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
             task_uuid = UUID(str(pk))
             service = DeadLetterTaskService(dao=self.dao)
             res = await service.retrigger_tasks(task_id=task_uuid)
+            AuditLogger.log(
+                action=AuditActions.DLQ_TASK_TRIGGER,
+                resource=AuditResources.DLQ_TASK,
+                resource_id=str(pk),
+                details={
+                    "task_id": str(pk),
+                    "message": res.message,
+                },
+                request=request,
+            )
             flash(request, res.message, "success")
             return res.message
         except Exception as exc:

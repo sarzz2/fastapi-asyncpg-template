@@ -59,5 +59,19 @@ class AdminConstants:
     ]
 
 
+class AuditActions(str, Enum):
+    """Audit log operational action types (for manual service-level logging)."""
+
+    DLQ_TASK_TRIGGER = "DLQ_TASK_TRIGGER"
+    PERIODIC_TASK_TRIGGER = "PERIODIC_TASK_TRIGGER"
+
+
+class AuditResources(str, Enum):
+    """Audit log operational resource types."""
+
+    DLQ_TASK = "dlq_task"
+    PERIODIC_TASK = "periodic_task"
+
+
 # Default TTL for idempotency keys is 24 hours
 IDEMPOTENCY_TTL = 60 * 60 * 24

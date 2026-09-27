@@ -6,3 +6,5 @@ APP_VERSION: contextvars.ContextVar[str | None] = contextvars.ContextVar("app_ve
 PLATFORM: contextvars.ContextVar[str | None] = contextvars.ContextVar("platform", default=None)
 DEVICE_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("device_id", default=None)
 CLIENT_REGION: contextvars.ContextVar[str | None] = contextvars.ContextVar("client_region", default=None)
+CURRENT_ACTOR_ID: contextvars.ContextVar[str | None] = contextvars.ContextVar("current_actor_id", default=None)
+CLIENT_IP: contextvars.ContextVar[str | None] = contextvars.ContextVar("client_ip", default=None)

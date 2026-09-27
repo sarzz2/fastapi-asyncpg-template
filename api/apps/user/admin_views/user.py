@@ -202,6 +202,7 @@ class UserAdminView(BaseAppAdminView):
         user = await self.dao.update_user(user_id, user_update)
         if not user:
             raise ValueError(f"User with ID {pk} not found")
+
         return self._to_admin_object(user)
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
@@ -234,7 +235,7 @@ class UserAdminView(BaseAppAdminView):
         Row action to toggle a user's active status between active and inactive.
 
         Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
+            _request (Request): The incoming Starlette/FastAPI HTTP request.
             pk (Any): Primary key of target user.
 
         Returns:
@@ -249,5 +250,6 @@ class UserAdminView(BaseAppAdminView):
             raise ValueError("User not found")
         new_status = not user.is_active
         await self.dao.update_user(user_id, UserUpdate(is_active=new_status))
+
         status_text = "activated" if new_status else "deactivated"
         return f"User '{user.email}' has been successfully {status_text}."

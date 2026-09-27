@@ -5,18 +5,9 @@ Admin views for App Version configuration.
 from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any
-from uuid import UUID
 
 from starlette.requests import Request
-from starlette_admin.fields import (
-    BooleanField,
-    DateTimeField,
-    IntegerField,
-    StringField,
-    TextAreaField,
-    URLField,
-    UUIDField,
-)
+from starlette_admin.fields import BooleanField, DateTimeField, IntegerField, StringField, TextAreaField, URLField
 from starlette_admin.filters import FilterGroup
 
 from api.apps.common.v0.dao.version import VersionDAO
@@ -36,10 +27,9 @@ class AppVersionAdminView(BaseAppAdminView):
     label = "App Versions"
     menu_label = "App Versions"
     icon = "fa-solid fa-mobile-screen-button"
-    pk_attr = "id"
+    pk_attr = "platform"
 
     fields = [
-        UUIDField("id", label="ID", read_only=True),
         StringField("platform", label="Platform", required=True),
         IntegerField("min_build", label="Min Build", required=True),
         IntegerField("latest_build", label="Latest Build", required=True),
@@ -76,18 +66,18 @@ class AppVersionAdminView(BaseAppAdminView):
 
     async def get_pk_value(self, request: Request, obj: Any) -> Any:
         """
-        Extract primary key (ID) from app version object or dictionary.
+        Extract primary key (platform) from app version object or dictionary.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
             obj (Any): The app version data object or dictionary.
 
         Returns:
-            Any: The primary key (ID) value.
+            Any: The primary key (platform) value.
         """
         if isinstance(obj, dict):
-            return obj.get("id")
-        return getattr(obj, "id", None)
+            return obj.get("platform")
+        return getattr(obj, "platform", None)
 
     async def find_all(
         self,
@@ -139,41 +129,39 @@ class AppVersionAdminView(BaseAppAdminView):
         record = await self.db.fetch("SELECT COUNT(*) as cnt FROM app_versions", fetch_row=True)
         return int(record["cnt"]) if record else 0
 
-    async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
+    async def find_by_pk(self, request: Request, pk: Any) -> Any | None:
         """
-        Find a single app version by primary key.
+        Find a single app version by primary key (platform).
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pk (UUID | str): Primary key (UUID or string) of the app version.
+            pk (Any): Primary key (platform string) of the app version.
 
         Returns:
             Any | None: App version data object if found, None otherwise.
         """
-        version_id = UUID(str(pk))
-        query = "SELECT * FROM app_versions WHERE id = $1"
-        record = await self.db.fetch(query, version_id, fetch_row=True)
-        if not record:
+        platform = str(pk).lower()
+        version = await self.dao.get_version_info(platform=platform)
+        if not version:
             return None
-        version = AppVersionData.model_validate(dict(record))
         return self._to_admin_object(version)
 
     async def find_by_pks(self, request: Request, pks: list[Any]) -> Sequence[Any]:
         """
-        Find multiple app versions by primary keys in a single bulk SQL query.
+        Find multiple app versions by primary keys (platforms) in a single bulk SQL query.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pks (list[Any]): List of primary keys (UUIDs or strings).
+            pks (list[Any]): List of primary keys (platform strings).
 
         Returns:
             Sequence[Any]: List of matching app version objects.
         """
         if not pks:
             return []
-        uuid_pks = [UUID(str(pk)) for pk in pks]
-        query = "SELECT * FROM app_versions WHERE id = ANY($1::uuid[])"
-        records = await self.db.fetch(query, uuid_pks, fetch_row=False)
+        platforms = [str(pk).lower() for pk in pks]
+        query = "SELECT * FROM app_versions WHERE platform = ANY($1::varchar[])"
+        records = await self.db.fetch(query, platforms, fetch_row=False)
         if not records:
             return []
         versions = [AppVersionData.model_validate(dict(r)) for r in records]
@@ -207,13 +195,13 @@ class AppVersionAdminView(BaseAppAdminView):
         version = AppVersionData.model_validate(dict(record))
         return self._to_admin_object(version)
 
-    async def edit(self, request: Request, pk: UUID | str, data: dict[str, Any]) -> Any:
+    async def edit(self, request: Request, pk: Any, data: dict[str, Any]) -> Any:
         """
         Update an existing app version's build numbers and flags via VersionDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pk (UUID | str): Primary key (UUID or string) of app version to update.
+            pk (Any): Primary key (platform string) of app version to update.
             data (dict[str, Any]): Updated field values submitted from form.
 
         Returns:
@@ -222,16 +210,7 @@ class AppVersionAdminView(BaseAppAdminView):
         Raises:
             ValueError: If target app version record is not found.
         """
-        platform = data.get("platform")
-        if not platform:
-            version_id = UUID(str(pk))
-            existing = await self.db.fetch(
-                "SELECT platform FROM app_versions WHERE id = $1", version_id, fetch_row=True
-            )
-            if not existing:
-                raise ValueError(f"App version with ID {pk} not found")
-            platform = existing["platform"]
-
+        platform = str(data.get("platform") or pk).lower()
         update_data = AppVersionUpdate(
             min_build=data.get("min_build"),
             latest_build=data.get("latest_build"),
@@ -242,24 +221,25 @@ class AppVersionAdminView(BaseAppAdminView):
         version = await self.dao.update_version_info(platform, update_data)
         if not version:
             raise ValueError(f"App version for platform {platform} not found")
+
         return self._to_admin_object(version)
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete app version configurations by primary keys.
+        Delete app version configurations by primary keys (platforms).
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
-            pks (list[Any]): List of primary keys of records to delete.
+            pks (list[Any]): List of primary keys (platform strings) of records to delete.
 
         Returns:
             int: Number of deleted app version records.
         """
         count_deleted = 0
         for pk in pks:
-            version_id = UUID(str(pk))
-            query = "DELETE FROM app_versions WHERE id = $1 RETURNING id;"
-            row = await self.db.fetch(query, version_id, fetch_row=True)
+            platform = str(pk).lower()
+            query = "DELETE FROM app_versions WHERE platform = $1 RETURNING platform;"
+            row = await self.db.fetch(query, platform, fetch_row=True)
             if row:
                 count_deleted += 1
         return count_deleted

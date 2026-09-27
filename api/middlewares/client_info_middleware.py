@@ -4,7 +4,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from api.constants import RequestHeaders
-from api.core.context import APP_BUILD, APP_VERSION, DEVICE_ID, PLATFORM
+from api.core.context import APP_BUILD, APP_VERSION, CLIENT_IP, DEVICE_ID, PLATFORM
 
 logger = logging.getLogger("fastapi")
 
@@ -19,6 +19,7 @@ class ClientInfoMiddleware(BaseHTTPMiddleware):
         app_build_raw = request.headers.get(RequestHeaders.APP_BUILD.value)
         platform = request.headers.get(RequestHeaders.PLATFORM.value)
         device_id = request.headers.get(RequestHeaders.DEVICE_ID.value)
+        client_ip = request.client.host if request.client else None
 
         app_build = None
         if app_build_raw:
@@ -32,6 +33,7 @@ class ClientInfoMiddleware(BaseHTTPMiddleware):
         ab_token = APP_BUILD.set(app_build)
         p_token = PLATFORM.set(platform)
         di_token = DEVICE_ID.set(device_id)
+        ip_token = CLIENT_IP.set(client_ip)
 
         if app_version or platform or device_id:
             logger.debug(
@@ -56,3 +58,4 @@ class ClientInfoMiddleware(BaseHTTPMiddleware):
             APP_BUILD.reset(ab_token)
             PLATFORM.reset(p_token)
             DEVICE_ID.reset(di_token)
+            CLIENT_IP.reset(ip_token)
