@@ -15,12 +15,18 @@ from api.apps.user.v0.schemas.auth import (
     RefreshTokenRequest,
     SudoTokenRequest,
     SudoTokenResponse,
+    TwoFactorChallengeResponse,
+    TwoFactorConfirmRequest,
+    TwoFactorConfirmResponse,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+    TwoFactorVerifyRequest,
     UserLogin,
 )
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.core.config import settings
-from api.core.dependencies import get_sudo_user
+from api.core.dependencies import get_current_user, get_sudo_user
 from api.core.i18n import trans
 from api.core.rate_limit import limiter
 from api.core.redis import get_redis
@@ -135,24 +141,112 @@ async def google_callback(
     return await svc.authenticate_oauth_user(user, request)
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse | TwoFactorChallengeResponse)
 @limiter.limit("5/minute")
 async def login(
     request: Request,
     login_data: UserLogin,
     svc: AuthService = Depends(get_auth_service),
-) -> LoginResponse:
+) -> LoginResponse | TwoFactorChallengeResponse:
     """
-    Authenticate user and return access token.
+    Authenticate user and return access token or 2FA challenge.
 
     Args:
         request: FastAPI request object
         login_data: User login credentials
         svc: Auth service dependency
     Returns:
-        LoginResponse: Authentication token and user data
+        LoginResponse | TwoFactorChallengeResponse: Authentication token and user data, or 2FA challenge
     """
     return await svc.authenticate_user(login_data.username, login_data.password, request)
+
+
+@router.get("/2fa", response_model=TwoFactorStatusResponse)
+async def get_two_factor_status(
+    current_user: UserData = Depends(get_current_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> TwoFactorStatusResponse:
+    """
+    Get 2FA activation status and count of remaining backup codes.
+    """
+    return await svc.get_two_factor_status(current_user.id)
+
+
+@router.post("/2fa/setup", response_model=TwoFactorSetupResponse)
+@limiter.limit("5/minute")
+async def setup_two_factor(
+    request: Request,  # pylint: disable=unused-argument
+    current_user: UserData = Depends(get_current_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> TwoFactorSetupResponse:
+    """
+    Initiate 2FA setup. Generates a TOTP secret and QR code for scanning.
+    """
+    return await svc.initiate_two_factor_setup(current_user)
+
+
+@router.post("/2fa/confirm", response_model=TwoFactorConfirmResponse)
+@limiter.limit("5/minute")
+async def confirm_two_factor(
+    request: Request,  # pylint: disable=unused-argument
+    confirm_data: TwoFactorConfirmRequest,
+    current_user: UserData = Depends(get_current_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> TwoFactorConfirmResponse:
+    """
+    Confirm 2FA setup by providing code from authenticator app.
+    Activates 2FA and returns single-use backup recovery codes.
+    """
+    return await svc.confirm_two_factor_setup(current_user, confirm_data.code)
+
+
+@router.post("/2fa/verify", response_model=LoginResponse)
+@limiter.limit("5/minute")
+async def verify_two_factor(
+    request: Request,
+    verify_data: TwoFactorVerifyRequest,
+    svc: AuthService = Depends(get_auth_service),
+) -> LoginResponse:
+    """
+    Verify 2FA challenge using TOTP code or recovery backup code and return access token.
+
+    Args:
+        request: FastAPI request object
+        verify_data: Challenge token and OTP or backup code
+        svc: AuthService dependency
+    Returns:
+        LoginResponse: Authentication tokens and user data
+    """
+    return await svc.verify_two_factor_challenge(
+        two_factor_token=verify_data.two_factor_token,
+        code=verify_data.code,
+        request=request,
+    )
+
+
+@router.post("/2fa/disable", status_code=status.HTTP_204_NO_CONTENT)
+async def disable_two_factor(
+    confirm_data: TwoFactorConfirmRequest,
+    current_user: UserData = Depends(get_sudo_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> None:
+    """
+    Disable 2FA on account. Requires sudo token and current OTP or backup code.
+    """
+    await svc.disable_two_factor(current_user, confirm_data.code)
+
+
+@router.post("/2fa/backup-codes", response_model=list[str])
+async def regenerate_backup_codes(
+    confirm_data: TwoFactorConfirmRequest,
+    current_user: UserData = Depends(get_sudo_user),
+    svc: AuthService = Depends(get_auth_service),
+) -> list[str]:
+    """
+    Regenerate single-use backup recovery codes. Requires sudo token and current OTP or backup code.
+    Invalidates previous unused backup codes.
+    """
+    return await svc.regenerate_two_factor_backup_codes(current_user, confirm_data.code)
 
 
 @router.post("/refresh", response_model=LoginResponse)

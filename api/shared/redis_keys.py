@@ -17,3 +17,8 @@ class RedisKeys:
     # Idempotency Layer
     IDEMPOTENCY_LOCK = "idempotency:lock:{key}"
     IDEMPOTENCY_RESPONSE = "idempotency:response:{key}"
+
+    # Two-Factor Authentication
+    TWO_FACTOR_SETUP = "2fa:setup:{user_id}"
+    TWO_FACTOR_CHALLENGE = "2fa:challenge:{token}"
+    TWO_FACTOR_REPLAY = "2fa:replay:{user_id}:{timestamp_slice}"

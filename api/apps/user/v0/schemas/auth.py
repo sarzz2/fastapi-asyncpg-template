@@ -70,3 +70,46 @@ class PasswordUpdateRequest(BaseModel):
     """Schema for password update request."""
 
     password: StrongPassword
+
+
+class TwoFactorSetupResponse(BaseModel):
+    """Response returned when initiating 2FA setup."""
+
+    secret: str
+    qr_code: str
+    otpauth_url: str
+
+
+class TwoFactorConfirmRequest(BaseModel):
+    """Request payload to confirm and activate 2FA."""
+
+    code: str
+
+
+class TwoFactorConfirmResponse(BaseModel):
+    """Response returned upon successfully activating 2FA."""
+
+    status: str = "enabled"
+    backup_codes: list[str]
+
+
+class TwoFactorStatusResponse(BaseModel):
+    """Response showing current 2FA state for a user."""
+
+    is_enabled: bool
+    backup_codes_remaining: int
+
+
+class TwoFactorChallengeResponse(BaseModel):
+    """Response returned when user password is correct but 2FA is required."""
+
+    requires_2fa: bool = True
+    two_factor_token: str
+    token_type: str = "Bearer"
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    """Request payload to complete 2FA login challenge."""
+
+    two_factor_token: str
+    code: str

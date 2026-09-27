@@ -3,14 +3,25 @@ import logging
 import re
 import secrets
 import string
-from uuid import UUID
+import time
+from typing import Any
+from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
-from api.apps.user.v0.schemas.auth import LoginResponse, SudoTokenResponse, Token, TokenData
+from api.apps.user.v0.schemas.auth import (
+    LoginResponse,
+    SudoTokenResponse,
+    Token,
+    TokenData,
+    TwoFactorChallengeResponse,
+    TwoFactorConfirmResponse,
+    TwoFactorSetupResponse,
+    TwoFactorStatusResponse,
+)
 from api.apps.user.v0.schemas.role import RoleData
 from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate
 from api.constants import TokenTypes
@@ -26,7 +37,18 @@ from api.core.config import settings
 from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
+from api.shared.redis_keys import RedisKeys
 from api.utils.date import get_utc_now
+from api.utils.totp import (
+    decrypt_secret,
+    encrypt_secret,
+    generate_backup_codes,
+    generate_provisioning_uri,
+    generate_qr_code_svg,
+    generate_totp_secret,
+    verify_and_consume_backup_code,
+    verify_totp,
+)
 
 logger = logging.getLogger("fastapi")
 
@@ -34,7 +56,7 @@ logger = logging.getLogger("fastapi")
 class AuthService:
     """Service layer for authentication operations.
 
-    This class handles login, OAuth, token refresh, and session management.
+    This class handles login, OAuth, token refresh, session management, and two-factor authentication.
     """
 
     def __init__(self, user_dao: UserDAO, role_dao: RoleDAO, redis: Redis):
@@ -130,12 +152,12 @@ class AuthService:
 
         return list(scopes)
 
-    async def authenticate_oauth_user(self, user: UserData, request: Request) -> LoginResponse:
+    async def issue_tokens_and_session(self, user: UserData, request: Request) -> LoginResponse:
         """
-        Issue access and refresh tokens for OAuth user.
+        Issue access and refresh tokens, create session in database, and return LoginResponse.
 
         Args:
-            user (UserData): The user data.
+            user (UserData): User data.
             request (Request): FastAPI request object.
         Returns:
             LoginResponse: Access and refresh tokens, user data.
@@ -159,13 +181,28 @@ class AuthService:
                 user_agent=request.headers.get("user-agent"),
             )
         )
-        logger.info("Authenticated OAuth user: %s (ID: %s)", user.username, user.id)
         return LoginResponse(
             token=Token(access_token=access_token_details["token"], refresh_token=refresh_token),
             user=UserData.model_validate(user),
         )
 
-    async def authenticate_user(self, username: str, password: str, request: Request) -> LoginResponse:
+    async def authenticate_oauth_user(self, user: UserData, request: Request) -> LoginResponse:
+        """
+        Issue access and refresh tokens for OAuth user.
+
+        Args:
+            user (UserData): The user data.
+            request (Request): FastAPI request object.
+        Returns:
+            LoginResponse: Access and refresh tokens, user data.
+        """
+        response = await self.issue_tokens_and_session(user, request)
+        logger.info("Authenticated OAuth user: %s (ID: %s)", user.username, user.id)
+        return response
+
+    async def authenticate_user(
+        self, username: str, password: str, request: Request
+    ) -> LoginResponse | TwoFactorChallengeResponse:
         """
         Authenticate user with username and password.
 
@@ -175,7 +212,7 @@ class AuthService:
             request: FastAPI request object
 
         Returns:
-            LoginResponse: Access and refresh tokens, user data
+            LoginResponse | TwoFactorChallengeResponse: Token and user data, or 2FA challenge if enabled.
         """
         user = await self._user_dao.get_by_username(username)
         if not user or not verify_password(password, user.hashed_password):
@@ -186,30 +223,21 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        scopes = await self._get_user_scopes(user.roles)
-        token_data = {
-            "sub": user.username,
-            "id": str(user.id),
-            "scopes": scopes,
-            "token_version": user.token_version,
-        }
-        access_token_details = create_access_token(token_data)
-        refresh_token = create_refresh_token(token_data)
-        await self._user_dao.upsert_user_session(
-            user_session_data=UserSessionCreate(
-                jti=access_token_details["jti"],
-                user_id=user.id,
-                issued_at=get_utc_now(),
-                expires_at=access_token_details["expires_at"],
-                ip_address=request.client.host if request.client is not None else None,
-                user_agent=request.headers.get("user-agent"),
+        two_factor_data = await self._user_dao.get_two_factor(user.id)
+        if two_factor_data and two_factor_data.get("is_enabled", False):
+            challenge_token = uuid4().hex
+            challenge_key = RedisKeys.TWO_FACTOR_CHALLENGE.format(token=challenge_token)
+            await self._redis.set(
+                challenge_key,
+                str(user.id),
+                ex=settings.TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES * 60,
             )
-        )
+            logger.info("2FA required for user: %s (ID: %s)", user.username, user.id)
+            return TwoFactorChallengeResponse(two_factor_token=challenge_token)
+
+        response = await self.issue_tokens_and_session(user, request)
         logger.info("User logged in successfully: %s (ID: %s)", user.username, user.id)
-        return LoginResponse(
-            token=Token(access_token=access_token_details["token"], refresh_token=refresh_token),
-            user=UserData.model_validate(user),
-        )
+        return response
 
     async def refresh_token(self, refresh_token: str, request: Request) -> LoginResponse:
         """
@@ -355,6 +383,249 @@ class AuthService:
                     },
                 )
             )
+
+    async def get_two_factor_status(self, user_id: UUID) -> TwoFactorStatusResponse:
+        """
+        Get current 2FA status for the user including remaining unused backup codes.
+
+        Args:
+            user_id (UUID): The user id
+
+        Returns:
+            TwoFactorStatusResponse: 2FA status response
+        """
+        record = await self._user_dao.get_two_factor(user_id)
+        if not record or not record.get("is_enabled", False):
+            return TwoFactorStatusResponse(is_enabled=False, backup_codes_remaining=0)
+
+        backup_codes = record.get("backup_codes", [])
+        remaining = sum(1 for c in backup_codes if not c.get("used", False))
+        return TwoFactorStatusResponse(is_enabled=True, backup_codes_remaining=remaining)
+
+    async def initiate_two_factor_setup(self, user: UserData) -> TwoFactorSetupResponse:
+        """
+        Initiate 2FA setup by generating a TOTP secret and QR code.
+        Secret is temporarily cached in Redis until confirmed.
+
+        Args:
+            user (UserData): The user data
+
+        Returns:
+            TwoFactorSetupResponse: 2FA setup response
+        """
+        secret = generate_totp_secret()
+        uri = generate_provisioning_uri(secret, name=user.email, issuer_name=settings.TWO_FACTOR_ISSUER_NAME)
+        qr_code = generate_qr_code_svg(uri)
+
+        encrypted = encrypt_secret(secret)
+        setup_key = RedisKeys.TWO_FACTOR_SETUP.format(user_id=str(user.id))
+        await self._redis.set(setup_key, encrypted, ex=600)
+
+        logger.info("2FA setup initiated for user: %s (ID: %s)", user.username, user.id)
+        return TwoFactorSetupResponse(
+            secret=secret,
+            qr_code=qr_code,
+            otpauth_url=uri,
+        )
+
+    async def confirm_two_factor_setup(self, user: UserData, code: str) -> TwoFactorConfirmResponse:
+        """
+        Confirm 2FA setup with user-supplied OTP code.
+        Generates and stores backup codes, activates 2FA in DB.
+
+        Args:
+            user (UserData): The user data
+            code (str): The OTP code
+
+        Returns:
+            TwoFactorConfirmResponse: 2FA confirm response
+        """
+        setup_key = RedisKeys.TWO_FACTOR_SETUP.format(user_id=str(user.id))
+        encrypted_secret = await self._redis.get(setup_key)
+        if not encrypted_secret:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_setup_expired"),
+            )
+
+        if isinstance(encrypted_secret, bytes):
+            encrypted_secret = encrypted_secret.decode("utf-8")
+
+        secret = decrypt_secret(encrypted_secret)
+        if not verify_totp(secret, code):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_invalid_code"),
+            )
+
+        plaintext_codes, hashed_records = generate_backup_codes(count=10)
+
+        await self._user_dao.upsert_two_factor(
+            user_id=user.id,
+            secret_encrypted=encrypted_secret,
+            backup_codes=hashed_records,
+            is_enabled=True,
+        )
+
+        await self._redis.delete(setup_key)
+
+        await event_bus.publish(
+            ApplicationEvent(
+                event_name=EventNames.USER_2FA_ENABLED,
+                payload={
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "username": user.username,
+                },
+            )
+        )
+
+        logger.info("2FA successfully enabled for user: %s (ID: %s)", user.username, user.id)
+        return TwoFactorConfirmResponse(status="enabled", backup_codes=plaintext_codes)
+
+    async def disable_two_factor(self, user: UserData, code: str) -> None:
+        """
+        Disable two-factor authentication for user. Requires code verification.
+
+        Args:
+            user (UserData): The user data
+            code (str): Current OTP or backup recovery code
+
+        Returns:
+            None
+        """
+        record = await self._user_dao.get_two_factor(user.id)
+        if not record or not record.get("is_enabled", False):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_not_enabled"),
+            )
+
+        cleaned_code = code.strip()
+        secret = decrypt_secret(record["secret_encrypted"])
+        if not verify_totp(secret, cleaned_code):
+            backup_codes = record.get("backup_codes", [])
+            valid_backup, _ = verify_and_consume_backup_code(backup_codes, cleaned_code)
+            if not valid_backup:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=trans("auth.two_factor_invalid_code_or_backup"),
+                )
+
+        await self._user_dao.disable_two_factor(user.id)
+        await event_bus.publish(
+            ApplicationEvent(
+                event_name=EventNames.USER_2FA_DISABLED,
+                payload={
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "username": user.username,
+                },
+            )
+        )
+        logger.info("2FA disabled for user: %s (ID: %s)", user.username, user.id)
+
+    async def regenerate_two_factor_backup_codes(self, user: UserData, code: str) -> list[str]:
+        """
+        Regenerate a fresh set of backup recovery codes. Requires code verification.
+
+        Args:
+            user (UserData): The user data
+            code (str): Current OTP or backup recovery code
+
+        Returns:
+            list[str]: List of new backup codes
+        """
+        record = await self._user_dao.get_two_factor(user.id)
+        if not record or not record.get("is_enabled", False):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_not_enabled"),
+            )
+
+        cleaned_code = code.strip()
+        secret = decrypt_secret(record["secret_encrypted"])
+        if not verify_totp(secret, cleaned_code):
+            backup_codes = record.get("backup_codes", [])
+            valid_backup, _ = verify_and_consume_backup_code(backup_codes, cleaned_code)
+            if not valid_backup:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=trans("auth.two_factor_invalid_code_or_backup"),
+                )
+
+        plaintext_codes, hashed_records = generate_backup_codes(count=10)
+        await self._user_dao.update_two_factor_backup_codes(user.id, hashed_records)
+        logger.info("Backup codes regenerated for user: %s (ID: %s)", user.username, user.id)
+        return plaintext_codes
+
+    async def _verify_2fa_code_or_backup(
+        self, user_id: UUID, two_factor_data: dict[str, Any], cleaned_code: str
+    ) -> None:
+        """Verify 2FA code via TOTP with replay prevention, or consume a valid backup code."""
+        secret = decrypt_secret(two_factor_data["secret_encrypted"])
+        if verify_totp(secret, cleaned_code):
+            slice_idx = int(time.time() // 30)
+            replay_key = RedisKeys.TWO_FACTOR_REPLAY.format(user_id=str(user_id), timestamp_slice=slice_idx)
+            if await self._redis.get(replay_key):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=trans("auth.two_factor_replay_detected"),
+                )
+            await self._redis.set(replay_key, "1", ex=60)
+            return
+
+        valid_backup, updated_codes = verify_and_consume_backup_code(
+            two_factor_data.get("backup_codes", []), cleaned_code
+        )
+        if not valid_backup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_invalid_code_or_backup"),
+            )
+        await self._user_dao.update_two_factor_backup_codes(user_id, updated_codes)
+
+    async def verify_two_factor_challenge(self, two_factor_token: str, code: str, request: Request) -> LoginResponse:
+        """
+        Verify 2FA login challenge using either TOTP code or backup code.
+        On success, issues access & refresh tokens and user session.
+
+        Args:
+            two_factor_token (str): The two factor token
+            code (str): The OTP code
+            request (Request): FastAPI request object
+
+        Returns:
+            LoginResponse: Login response
+        """
+        challenge_key = RedisKeys.TWO_FACTOR_CHALLENGE.format(token=two_factor_token)
+        user_id_raw = await self._redis.get(challenge_key)
+        if not user_id_raw:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=trans("auth.two_factor_challenge_expired"),
+            )
+
+        user_id = UUID(user_id_raw.decode("utf-8") if isinstance(user_id_raw, bytes) else str(user_id_raw))
+
+        two_factor_data = await self._user_dao.get_two_factor(user_id)
+        if not two_factor_data or not two_factor_data.get("is_enabled", False):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.two_factor_not_enabled"),
+            )
+
+        await self._verify_2fa_code_or_backup(user_id, two_factor_data, code.strip())
+        await self._redis.delete(challenge_key)
+
+        user = await self._user_dao.get_by_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=trans("user.not_found"),
+            )
+
+        return await self.issue_tokens_and_session(user, request)
 
 
 async def get_auth_service(

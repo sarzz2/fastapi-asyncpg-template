@@ -9,7 +9,13 @@
         "invalid_state": "Invalid or expired state",
         "token_exchange_failed": "Token exchange failed: {error}",
         "no_access_token": "No access token in token response",
-        "userinfo_failed": "Failed to fetch userinfo from provider"
+        "userinfo_failed": "Failed to fetch userinfo from provider",
+        "two_factor_setup_expired": "2FA setup session expired or not found. Please restart setup.",
+        "two_factor_invalid_code": "Invalid verification code",
+        "two_factor_challenge_expired": "Two-factor authentication challenge has expired or is invalid",
+        "two_factor_not_enabled": "Two-factor authentication is not enabled for this account",
+        "two_factor_replay_detected": "Verification code has already been used. Please wait for the next code.",
+        "two_factor_invalid_code_or_backup": "Invalid verification code or backup code"
     },
     "user": {
         "not_found": "User not found",

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 336
     REFRESH_TOKEN_EXPIRE_DAYS: int = 21
     SUDO_TOKEN_EXPIRE_MINUTES: int = 60
+    TWO_FACTOR_ENCRYPTION_KEY: str = "49a1f8bbde9313ea8a885e67e6cfb7e254d375836460e55b180663a73e0d930f"
+    TWO_FACTOR_ISSUER_NAME: str = "FastAPI Template"
+    TWO_FACTOR_CHALLENGE_EXPIRE_MINUTES: int = 5
 
     PRIMARY_DATABASE_URL: str = "postgresql://user:password@localhost/fastapi_template"
     REPLICA_DATABASE_URL: str = "postgresql://user:password@localhost/fastapi_template"

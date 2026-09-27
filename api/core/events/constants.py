@@ -11,3 +11,5 @@ class EventNames(str, Enum):
     USER_CREATED = "user.created"
     USER_PASSWORD_CHANGED = "user.password.changed"  # nosec B105
     USER_ROLE_ASSIGNED = "user.role.assigned"
+    USER_2FA_ENABLED = "user.2fa.enabled"
+    USER_2FA_DISABLED = "user.2fa.disabled"

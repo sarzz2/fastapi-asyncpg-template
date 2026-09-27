@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Any
 from uuid import UUID
 
@@ -468,6 +469,85 @@ class UserDAO:
                     },
                 )
             )
+
+    async def get_two_factor(self, user_id: UUID) -> dict[str, Any] | None:
+        """
+        Fetch two-factor authentication configuration for a user.
+        """
+        query = "SELECT * FROM user_two_factor WHERE user_id = $1"
+        record = await self.db.fetch(query, user_id, fetch_row=True)
+        if not record:
+            return None
+        data = dict(record)
+        if isinstance(data.get("backup_codes"), str):
+            data["backup_codes"] = json.loads(data["backup_codes"])
+        return data
+
+    async def upsert_two_factor(
+        self,
+        user_id: UUID,
+        secret_encrypted: str,
+        backup_codes: list[dict[str, Any]],
+        is_enabled: bool = True,
+    ) -> None:
+        """
+        Create or update two-factor configuration for a user.
+
+        Args:
+            user_id (UUID): The user ID
+            secret_encrypted (str): The encrypted TOTP secret
+            backup_codes (list[dict[str, Any]]): The list of hashed backup codes
+            is_enabled (bool): Whether two-factor authentication is enabled
+
+        Returns:
+            None
+        """
+        query = """
+        INSERT INTO user_two_factor (user_id, secret_encrypted, backup_codes, is_enabled)
+        VALUES ($1, $2, $3::jsonb, $4)
+        ON CONFLICT (user_id) DO UPDATE SET
+            secret_encrypted = EXCLUDED.secret_encrypted,
+            backup_codes = EXCLUDED.backup_codes,
+            is_enabled = EXCLUDED.is_enabled
+        """
+        await self.db.execute(query, user_id, secret_encrypted, json.dumps(backup_codes), is_enabled)
+
+    async def disable_two_factor(self, user_id: UUID) -> None:
+        """
+        Disable two-factor authentication and wipe the secret.
+
+        Args:
+            user_id (UUID): The user ID
+
+        Returns:
+            None
+        """
+        query = """
+        UPDATE user_two_factor
+        SET is_enabled = FALSE,
+            secret_encrypted = '',
+            backup_codes = '[]'::jsonb
+        WHERE user_id = $1
+        """
+        await self.db.execute(query, user_id)
+
+    async def update_two_factor_backup_codes(self, user_id: UUID, backup_codes: list[dict[str, Any]]) -> None:
+        """
+        Update the backup recovery codes for a user.
+
+        Args:
+            user_id (UUID): The user ID
+            backup_codes (list[dict[str, Any]]): The list of hashed backup codes
+
+        Returns:
+            None
+        """
+        query = """
+        UPDATE user_two_factor
+        SET backup_codes = $2::jsonb
+        WHERE user_id = $1
+        """
+        await self.db.execute(query, user_id, json.dumps(backup_codes))
 
 
 async def get_user_dao(db: DataBase = Depends(get_db)) -> UserDAO:
