@@ -200,6 +200,17 @@ def sync_client() -> Generator[TestClient, None, None]:
     settings.REPLICA_DATABASE_URL = settings.TEST_DATABASE_URL
 
     try:
+        # Reset global Redis clients to ensure fresh instances for TestClient
+        redis_client.client = Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+        )
+        redis_socket.client = Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB_SOCKET, decode_responses=True
+        )
+        redis_event_bus.client = Redis(
+            host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB_EVENT_BUS, decode_responses=True
+        )
+
         app.dependency_overrides[get_redis] = lambda: Redis(
             host=settings.REDIS_HOST, port=settings.REDIS_PORT, decode_responses=True
         )

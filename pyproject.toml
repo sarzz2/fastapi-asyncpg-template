@@ -80,6 +80,7 @@ entrypoint = "api.main:app"
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
+exclude = ["^venv/"]
 
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
