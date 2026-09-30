@@ -1,4 +1,6 @@
 from api.apps.common.v0.dao.dead_letter_task import DeadLetterTaskDAO
+from api.apps.common.v0.dao.webhook import WebhookDAO
+from api.apps.common.v0.dao.webhook_log import WebhookLogDAO
 from api.apps.notification.v0.service import NotificationService
 from api.core.database import DataBase
 from api.core.redis import RedisClient
@@ -16,6 +18,8 @@ class TaskContainer:
 
         # Initialize DAOs
         self.dead_letter_task_dao = DeadLetterTaskDAO(db=self.db)
+        self.webhook_dao = WebhookDAO(db=self.db)
+        self.webhook_log_dao = WebhookLogDAO(db=self.db)
 
         # Initialize Services
         self.notification_service = NotificationService()

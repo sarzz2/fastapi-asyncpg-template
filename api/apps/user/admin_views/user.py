@@ -70,21 +70,6 @@ class UserAdminView(BaseAppAdminView):
             data["roles"] = [r.get("name") if isinstance(r, dict) else r for r in data["roles"]]
         return SimpleNamespace(**data)
 
-    async def get_pk_value(self, request: Request, obj: Any) -> Any:
-        """
-        Extract the primary key value from a user object or dictionary.
-
-        Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): The user data object or dictionary.
-
-        Returns:
-            Any: The primary key (ID) value.
-        """
-        if isinstance(obj, dict):
-            return obj.get("id")
-        return getattr(obj, "id", None)
-
     async def find_all(
         self,
         request: Request,

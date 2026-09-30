@@ -88,21 +88,6 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         """
         return SimpleNamespace(**task.model_dump())
 
-    async def get_pk_value(self, request: Request, obj: Any) -> Any:
-        """
-        Extract primary key (ID) from periodic task object or dictionary.
-
-        Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): Periodic task data object or dictionary.
-
-        Returns:
-            Any: Primary key (ID) value.
-        """
-        if isinstance(obj, dict):
-            return obj.get("id")
-        return getattr(obj, "id", None)
-
     async def find_all(
         self,
         request: Request,
@@ -179,8 +164,10 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         """
         if not pks:
             return []
-        items = [await self.find_by_pk(request, pk) for pk in pks]
-        return [item for item in items if item is not None]
+        task_ids = [UUID(str(pk)) for pk in pks]
+        query = "SELECT * FROM periodic_tasks WHERE id = ANY($1::uuid[]) ORDER BY created_at DESC;"
+        records = await self.db.fetch(query, task_ids, model=PeriodicTaskResponse, fetch_row=False)
+        return [self._to_admin_object(r) for r in records]
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """
@@ -249,7 +236,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete periodic task schedules by primary keys.
+        Delete periodic task schedules by primary keys in a single bulk query.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -258,13 +245,12 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted periodic task records.
         """
-        count_deleted = 0
-        for pk in pks:
-            task_id = UUID(str(pk))
-            deleted = await self.dao.delete_task(task_id)
-            if deleted:
-                count_deleted += 1
-        return count_deleted
+        if not pks:
+            return 0
+        task_ids = [UUID(str(pk)) for pk in pks]
+        query = "DELETE FROM periodic_tasks WHERE id = ANY($1::uuid[]) RETURNING id;"
+        rows = await self.db.fetch(query, task_ids, fetch_row=False)
+        return len(rows) if rows else 0
 
     @row_action(
         name="trigger_now",

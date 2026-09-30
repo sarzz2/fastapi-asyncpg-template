@@ -50,7 +50,7 @@ class PeriodicTaskBase(BaseModel):
                     day_of_month=self.cron_day_of_month or "*",
                     month_of_year=self.cron_month_of_year or "*",
                 )
-            except Exception as err:
+            except (ValueError, TypeError, KeyError) as err:
                 raise ValueError(f"Invalid crontab expression: {err}") from err
         return self
 
@@ -107,7 +107,7 @@ class PeriodicTaskUpdate(BaseModel):
                     day_of_month=self.cron_day_of_month or "*",
                     month_of_year=self.cron_month_of_year or "*",
                 )
-            except Exception as err:
+            except (ValueError, TypeError, KeyError) as err:
                 raise ValueError(f"Invalid crontab expression: {err}") from err
         return self
 

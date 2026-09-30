@@ -1,11 +1,13 @@
 import logging
 
 import jwt
-from fastapi import Depends, HTTPException
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, SecurityScopes
+from fastapi import Depends, HTTPException, Security
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer, SecurityScopes
 from redis.asyncio import Redis
 from starlette import status
 
+from api.apps.common.v0.schemas.api_key import ApiKeyData
+from api.apps.common.v0.service.api_key import ApiKeyService, get_api_key_service
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.auth import verify_token
@@ -100,3 +102,46 @@ async def get_sudo_user(
     except jwt.PyJWTError as exc:
         logger.warning("JWT error during sudo verification: %s", exc)
         raise credentials_exception from exc
+
+
+api_key_header_scheme = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def get_api_key(
+    security_scopes: SecurityScopes,
+    raw_key: str | None = Security(api_key_header_scheme),
+    service: ApiKeyService = Depends(get_api_key_service),
+) -> ApiKeyData:
+    """
+    Dedicated dependency to validate programmatic API Keys via the X-API-Key header.
+    Validates cryptographic hash against Redis cache (or DB fallback), expiration,
+    is_active status, and required security scopes.
+    Args:
+        raw_key (str | None): The raw API key from the request header.
+        service (ApiKeyService): The ApiKeyService instance.
+    Returns:
+        ApiKeyData: The API key data.
+    """
+    if not raw_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing API Key header (X-API-Key)",
+        )
+
+    api_key_data = await service.verify_api_key(raw_key)
+    if not api_key_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid, expired, or inactive API key",
+        )
+
+    for scope in security_scopes.scopes:
+        if scope not in api_key_data.scopes:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Not enough permissions: scope '{scope}' required",
+            )
+
+    actor_id = api_key_data.created_by or api_key_data.id
+    CURRENT_ACTOR_ID.set(str(actor_id))
+    return api_key_data

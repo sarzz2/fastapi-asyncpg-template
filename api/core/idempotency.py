@@ -4,7 +4,7 @@ from typing import Any, Callable, Coroutine
 from fastapi import HTTPException, Request, Response, status
 from fastapi.routing import APIRoute
 
-from api.constants import IDEMPOTENCY_TTL
+from api.constants import IDEMPOTENCY_LOCK_TTL, IDEMPOTENCY_TTL
 from api.core.redis import get_redis
 from api.shared.redis_keys import RedisKeys
 
@@ -23,8 +23,15 @@ class IdempotencyManager:
         redis = await get_redis()
         # SETNX returns True if key was set, False if it already exists
         lock_key = RedisKeys.IDEMPOTENCY_LOCK.format(key=key)
-        acquired = await redis.set(lock_key, "in-progress", ex=IDEMPOTENCY_TTL, nx=True)
+        acquired = await redis.set(lock_key, "in-progress", ex=IDEMPOTENCY_LOCK_TTL, nx=True)
         return bool(acquired)
+
+    @staticmethod
+    async def release_lock(key: str) -> None:
+        """Release the in-progress lock for the given key."""
+        redis = await get_redis()
+        lock_key = RedisKeys.IDEMPOTENCY_LOCK.format(key=key)
+        await redis.delete(lock_key)
 
     @staticmethod
     async def get_cached_response(key: str) -> Response | None:
@@ -97,14 +104,18 @@ class IdempotentRoute(APIRoute):
                     detail="A request with this Idempotency-Key is currently being processed.",
                 )
 
-            # Process the original request
-            response = await original_route_handler(request)
+            try:
+                # Process the original request
+                response = await original_route_handler(request)
 
-            # Cache the response
-            # Only cache successful responses and deterministic errors (like 400 Bad Request)
-            if 200 <= response.status_code < 500:
-                await IdempotencyManager.cache_response(idempotency_key, response)
+                # Cache the response
+                # Only cache successful responses and deterministic errors (like 400 Bad Request)
+                if 200 <= response.status_code < 500:
+                    await IdempotencyManager.cache_response(idempotency_key, response)
 
-            return response
+                return response
+            finally:
+                # Release the in-progress lock
+                await IdempotencyManager.release_lock(idempotency_key)
 
         return custom_route_handler

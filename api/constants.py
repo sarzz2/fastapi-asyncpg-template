@@ -48,7 +48,7 @@ class AdminConstants:
     DEFAULT_PAGE_SIZE = 50
     DEFAULT_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 200]
     DEFAULT_ADDITIONAL_CSS_LINKS = ["/admin/static/css/admin_custom.css"]
-    DEFAULT_DISPLAY_KEYS = ("name", "title", "label", "username", "email")
+    DEFAULT_DISPLAY_KEYS = ("name", "title", "label", "username", "email", "task_name")
     SUPPORTED_LANGUAGES = ["en", "es", "fr", "de", "ja"]
     SUPPORTED_TIMEZONES = [
         "UTC",
@@ -75,3 +75,5 @@ class AuditResources(str, Enum):
 
 # Default TTL for idempotency keys is 24 hours
 IDEMPOTENCY_TTL = 60 * 60 * 24
+# In-flight lock expiration (60 seconds) to prevent permanent deadlocks
+IDEMPOTENCY_LOCK_TTL = 60

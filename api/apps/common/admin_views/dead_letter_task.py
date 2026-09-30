@@ -58,14 +58,6 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         """Disable creation of Dead Letter Queue tasks from admin UI."""
         return False
 
-    def can_edit(self, request: Request) -> bool:
-        """Allow editing Dead Letter Queue task payloads."""
-        return True
-
-    def can_delete(self, request: Request) -> bool:
-        """Allow deleting Dead Letter Queue tasks."""
-        return True
-
     def __init__(self, db: DataBase) -> None:
         """
         Initialize DeadLetterTaskAdminView with shared DataBase and DeadLetterTaskDAO.
@@ -89,21 +81,6 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
             SimpleNamespace: Admin-compatible object with dynamically mapped fields.
         """
         return SimpleNamespace(**task.model_dump())
-
-    async def get_pk_value(self, request: Request, obj: Any) -> Any:
-        """
-        Extract primary key value from task object or dictionary.
-
-        Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): DLQ task data object or dictionary.
-
-        Returns:
-            Any: Primary key (ID) value.
-        """
-        if isinstance(obj, dict):
-            return obj.get("id")
-        return getattr(obj, "id", None)
 
     async def find_all(
         self,
@@ -208,7 +185,9 @@ class DeadLetterTaskAdminView(BaseAppAdminView):
         Returns:
             str: Human-readable display string.
         """
-        task_name = getattr(obj, "task_name", None) or (obj.get("task_name") if isinstance(obj, dict) else None)
+        task_name = (
+            obj.get("task_name") if isinstance(obj, dict) else (obj.task_name if hasattr(obj, "task_name") else None)
+        )
         pk = await self.get_pk_value(request, obj)
         if task_name:
             return f"{task_name} ({pk})"

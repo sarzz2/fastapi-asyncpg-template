@@ -226,7 +226,7 @@ class AppVersionAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete app version configurations by primary keys (platforms).
+        Delete app version configurations by primary keys (platforms) in a single bulk query.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -235,11 +235,9 @@ class AppVersionAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted app version records.
         """
-        count_deleted = 0
-        for pk in pks:
-            platform = str(pk).lower()
-            query = "DELETE FROM app_versions WHERE platform = $1 RETURNING platform;"
-            row = await self.db.fetch(query, platform, fetch_row=True)
-            if row:
-                count_deleted += 1
-        return count_deleted
+        if not pks:
+            return 0
+        platforms = [str(pk).lower() for pk in pks]
+        query = "DELETE FROM app_versions WHERE platform = ANY($1::varchar[]) RETURNING platform;"
+        rows = await self.db.fetch(query, platforms, fetch_row=False)
+        return len(rows) if rows else 0

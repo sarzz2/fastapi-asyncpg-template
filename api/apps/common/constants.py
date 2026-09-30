@@ -36,3 +36,31 @@ class DLQConstants:
         "celery.chord",
         "dlq_tasks.clean_old_dlq_tasks",
     }
+
+
+class WebhookDirection(str, Enum):
+    """Direction of webhook traffic."""
+
+    INBOUND = "INBOUND"
+    OUTBOUND = "OUTBOUND"
+
+
+class WebhookStatus(str, Enum):
+    """Execution status for webhook logs."""
+
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    RETRYING = "RETRYING"
+
+
+class WebhookEvents(str, Enum):
+    """Supported outbound webhook event types."""
+
+    USER_CREATED = "user.created"
+    USER_UPDATED = "user.updated"
+    USER_DELETED = "user.deleted"
+
+
+# API Key Configuration Constants
+API_KEY_CACHE_TTL_SECONDS = 30 * 24 * 3600  # 30 days
+API_KEY_LAST_USED_THROTTLE_SECONDS = 300  # 5 minutes

@@ -8,8 +8,10 @@ import json
 import logging
 from uuid import UUID
 
+from celery.exceptions import CeleryError
 from fastapi import Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from kombu.exceptions import KombuError  # type: ignore[import-untyped]
 
 from api.apps.common.v0.dao.dead_letter_task import DeadLetterTaskDAO, get_dead_letter_task_dao
 from api.apps.common.v0.schemas.dead_letter_task import (
@@ -155,7 +157,7 @@ class DeadLetterTaskService:
                     queue=dlq_task.queue,
                 )
                 retriggered_count += 1
-            except Exception as exc:  # pylint: disable=broad-except
+            except (CeleryError, KombuError, OSError) as exc:
                 logger.error("Failed to send retrigger task %s: %s", dlq_task.id, exc)
                 raise
 

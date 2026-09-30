@@ -8,11 +8,14 @@ from starlette_admin.auth import AdminUser, AuthProvider
 from starlette_admin.exceptions import LoginFailed
 from starlette_admin.i18n import I18nConfig, TimezoneConfig
 
+from api.apps.common.admin_views.api_key import ApiKeyAdminView
 from api.apps.common.admin_views.audit_log import AuditLogAdminView
 from api.apps.common.admin_views.dashboard import DashboardView
 from api.apps.common.admin_views.dead_letter_task import DeadLetterTaskAdminView
 from api.apps.common.admin_views.periodic_task import PeriodicTaskAdminView
 from api.apps.common.admin_views.version import AppVersionAdminView
+from api.apps.common.admin_views.webhook import WebhookEndpointAdminView
+from api.apps.common.admin_views.webhook_log import WebhookLogAdminView
 from api.apps.user.admin_views.role import RoleAdminView
 from api.apps.user.admin_views.user import UserAdminView
 from api.apps.user.v0.dao.user import UserDAO
@@ -166,6 +169,9 @@ def setup_admin(app: FastAPI) -> BaseAdmin:
     admin.add_view(PeriodicTaskAdminView(db=db))
     admin.add_view(DeadLetterTaskAdminView(db=db))
     admin.add_view(AuditLogAdminView(db=db))
+    admin.add_view(ApiKeyAdminView(db=db))
+    admin.add_view(WebhookEndpointAdminView(db=db))
+    admin.add_view(WebhookLogAdminView(db=db))
     admin.mount_to(app)
 
     logger.info("Starlette-Admin portal mounted successfully at /admin")

@@ -1,7 +1,9 @@
 import logging
 from uuid import UUID
 
+from celery.exceptions import CeleryError
 from fastapi import Depends, HTTPException, status
+from kombu.exceptions import KombuError  # type: ignore[import-untyped]
 from redis.asyncio import Redis
 
 from api.apps.common.constants import CeleryRedisKeys
@@ -184,7 +186,7 @@ class PeriodicTaskService:
             async_result = celery_app.send_task(task_name, args=args, kwargs=kwargs)
             logger.info("PeriodicTaskService: Manually triggered task '%s' (Task ID: %s)", task_name, async_result.id)
             return str(async_result.id)
-        except Exception as err:
+        except (CeleryError, KombuError, OSError) as err:
             logger.error("PeriodicTaskService: Failed to trigger task '%s': %s", task_name, err)
             raise
 

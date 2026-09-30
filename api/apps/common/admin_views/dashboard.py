@@ -5,6 +5,7 @@ Main Admin Dashboard View for Starlette-Admin portal.
 import logging
 from typing import Any
 
+import asyncpg
 from starlette.requests import Request
 from starlette_admin.views import CustomView
 from starlette_admin.widgets import CardRowWidget, ColumnWidget, PanelWidget, StatWidget, TableWidget
@@ -49,7 +50,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
             logger.exception("Error fetching total users for dashboard: %s", err)
             return 0
 
@@ -66,7 +67,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users WHERE is_active = true", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
             logger.exception("Error fetching active users for dashboard: %s", err)
             return 0
 
@@ -83,7 +84,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM roles WHERE is_deleted = false", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
             logger.exception("Error fetching total roles for dashboard: %s", err)
             return 0
 
@@ -100,7 +101,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM permissions", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
             logger.exception("Error fetching total permissions for dashboard: %s", err)
             return 0
 
@@ -133,7 +134,7 @@ class DashboardView(CustomView):
                 ]
                 for r in records
             ]
-        except Exception as err:  # pylint: disable=broad-exception-caught
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
             logger.exception("Error fetching recent roles for dashboard: %s", err)
             return []
 

@@ -4,6 +4,7 @@ Base Admin View for all domain models in the application.
 
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from starlette.requests import Request
 from starlette_admin.filters import FilterGroup, FilterRegistry
@@ -27,6 +28,31 @@ class BaseAppAdminView(BaseModelView):
     page_size = AdminConstants.DEFAULT_PAGE_SIZE
     page_size_options = AdminConstants.DEFAULT_PAGE_SIZE_OPTIONS
     additional_css_links = AdminConstants.DEFAULT_ADDITIONAL_CSS_LINKS
+    name: str | None = None
+    label: str | None = None
+    identity: str | None = None
+    key: str | None = None
+    _display_name: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        """
+        Return the singular display name for the model view used in 'New/Create %(name)s' buttons.
+        Falls back to self.name, self.label, self.identity, or self.key.
+        """
+        if self._display_name:
+            return self._display_name
+        if self.name and self.name.strip():
+            return self.name.strip()
+        if self.label and self.label.strip():
+            return self.label.strip()
+        if self.identity and self.identity.strip():
+            return self.identity.strip()
+        return self.key or "Item"
+
+    @display_name.setter
+    def display_name(self, value: str | None) -> None:
+        self._display_name = value
 
     async def find_all(
         self,
@@ -73,7 +99,7 @@ class BaseAppAdminView(BaseModelView):
         """Extract primary key value from object or dict."""
         if isinstance(obj, dict):
             return obj.get("id")
-        return getattr(obj, "id", None)
+        return obj.id
 
     async def repr(self, obj: Any, request: Request) -> str:
         """
@@ -90,12 +116,14 @@ class BaseAppAdminView(BaseModelView):
             str: Human-readable display string.
         """
         for key in AdminConstants.DEFAULT_DISPLAY_KEYS:
-            val = getattr(obj, key, None) if not isinstance(obj, dict) else obj.get(key)
+            val = (
+                obj.get(key) if isinstance(obj, dict) else (obj.__dict__.get(key) if hasattr(obj, "__dict__") else None)
+            )
             if val is not None and str(val).strip():
                 return str(val)
 
         pk = await self.get_pk_value(request, obj)
-        view_name = getattr(self, "name", None) or getattr(self, "identity", "Item")
+        view_name = self.name or self.identity or "Item"
         return f"{view_name} ({pk})"
 
     def get_filter_registry(self) -> FilterRegistry:
@@ -103,3 +131,16 @@ class BaseAppAdminView(BaseModelView):
         Return the global FilterRegistry populated with date and text filters for UI filter builder.
         """
         return DEFAULT_FILTER_REGISTRY
+
+    @staticmethod
+    def get_current_admin_user_id(request: Request) -> Any | None:
+        """
+        Extract authenticated admin user UUID from Starlette session if present.
+        """
+        admin_data = request.session.get("admin_user")
+        if admin_data and isinstance(admin_data, dict) and admin_data.get("id"):
+            try:
+                return UUID(str(admin_data["id"]))
+            except (ValueError, TypeError):
+                return None
+        return None

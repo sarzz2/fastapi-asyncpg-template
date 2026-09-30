@@ -319,11 +319,12 @@ async def google_sudo_token(
             full_name=None,
             created_at=datetime.now(timezone.utc),
         )
-    except Exception as exc:
+    except (HTTPException, ValueError, TypeError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=trans("auth.invalid_access_token"),
         ) from exc
+
     return await svc.create_sudo_token_oauth(user_data)
 
 

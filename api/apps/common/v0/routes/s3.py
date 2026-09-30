@@ -1,3 +1,4 @@
+from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.apps.common.v0.schemas.s3 import S3UploadUrlRequest, S3UploadUrlResponse
@@ -21,7 +22,7 @@ def generate_upload_url(
     try:
         result = s3_service.generate_presigned_url(filename=request.filename, content_type=request.content_type)
         return S3UploadUrlResponse(**result)
-    except Exception as e:
+    except (ClientError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=trans("s3.upload_url_failed").format(error=str(e)),
@@ -40,7 +41,7 @@ def delete_file(
     try:
         s3_service.delete_file(key)
         return
-    except Exception as e:
+    except (ClientError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=trans("s3.delete_failed").format(error=str(e))
         ) from e
@@ -53,7 +54,7 @@ def get_file(key: str, s3_service: S3Service = Depends(get_s3_service)) -> str:
     """
     try:
         return s3_service.get_file_url(key)
-    except Exception as e:
+    except (ClientError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=trans("s3.get_failed").format(error=str(e))
         ) from e
