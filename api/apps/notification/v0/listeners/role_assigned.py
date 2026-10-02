@@ -1,6 +1,7 @@
 # pylint: disable=duplicate-code
 import logging
 
+from api.apps.common.constants import NotificationChannels
 from api.apps.notification.v0.listeners.utils import dispatch_user_notification
 from api.apps.notification.v0.schemas import NotificationType
 from api.core.config import settings
@@ -30,4 +31,5 @@ async def on_role_assigned(event: ApplicationEvent) -> None:
         message="An administrator has updated the roles assigned to your account.",
         template_path="email/notification.html",
         action_url=f"{settings.FRONTEND_URL}/dashboard",
+        channels=[NotificationChannels.EMAIL.value, NotificationChannels.SSE.value, NotificationChannels.FCM.value],
     )

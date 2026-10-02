@@ -1,9 +1,12 @@
 import logging
 from uuid import UUID
 
+from api.apps.common.constants import NotificationChannels
+from api.apps.notification.v0.dao.device import DeviceDAO
 from api.apps.notification.v0.schemas import NotificationType
-from api.apps.notification.v0.service import notification_service
+from api.apps.notification.v0.service import NotificationService
 from api.core.config import settings
+from api.core.database import DataBase
 from api.core.events.schema import ApplicationEvent
 
 logger = logging.getLogger("fastapi")
@@ -16,6 +19,7 @@ async def dispatch_user_notification(  # pylint: disable=too-many-arguments,too-
     message: str,
     template_path: str,
     action_url: str = settings.FRONTEND_URL,
+    channels: list[str | NotificationChannels] | None = None,
 ) -> None:
     """
     Helper function to extract standard user payload fields and send a notification.
@@ -34,7 +38,14 @@ async def dispatch_user_notification(  # pylint: disable=too-many-arguments,too-
         logger.error("Invalid user_id UUID format in %s payload.", event.event_name)
         return
 
-    await notification_service.notify(
+    selected_channels = channels or [
+        NotificationChannels.EMAIL.value,
+        NotificationChannels.SSE.value,
+        NotificationChannels.FCM.value,
+    ]
+
+    service = NotificationService(device_dao=DeviceDAO(DataBase()))
+    await service.notify(
         user_id=user_id,
         notification_type=notification_type,
         subject=subject,
@@ -45,5 +56,5 @@ async def dispatch_user_notification(  # pylint: disable=too-many-arguments,too-
             "email": email,
             "username": username,
         },
-        channels=["email"],
+        channels=selected_channels,
     )

@@ -1,66 +1,60 @@
+"""
+Celery background dispatcher tasks for high-level notification events and broadcasts.
+"""
+
 import logging
-import os
 from uuid import UUID
 
-import certifi
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import (
-    Attachment,
-    Bcc,
-    Cc,
-    Content,
-    Disposition,
-    Email,
-    FileContent,
-    FileName,
-    FileType,
-    Mail,
-    To,
-)
-
+from api.apps.notification.v0.dao.device import DeviceDAO
 from api.apps.notification.v0.schemas import NotificationType
+from api.apps.notification.v0.service import NotificationService
+from api.apps.notification.workers import send_email_worker_task, send_fcm_push_worker_task
 from api.core.celery_app import AsyncBaseTask, celery_app
-from api.core.config import settings
 
-# Fix for macOS local development SSL certificate errors:
-os.environ["SSL_CERT_FILE"] = certifi.where()
-os.environ["SSL_CERT_DIR"] = certifi.where()
+__all__ = [
+    "send_notification_task",
+    "broadcast_notification_task",
+    "send_email_worker_task",
+    "send_fcm_push_worker_task",
+]
 
 logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="send_notification_task", bind=True)
-def send_notification_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def send_notification_task(
     self: AsyncBaseTask,
     user_id_str: str,
     message: str,
     notification_type: str = NotificationType.INFO.value,
     subject: str | None = None,
     metadata: dict | None = None,
+    channels: list[str] | None = None,
 ) -> None:
     """
-    Celery task to send a notification background.
+    Celery task to send a notification in the background.
     """
     logger.info("Executing task: send_notification_task for user %s", user_id_str)
     user_id = UUID(user_id_str)
     type_enum = NotificationType(notification_type)
 
     async def _send() -> None:
-        await self.container.notification_service.notify(
+        service = NotificationService(device_dao=DeviceDAO(self.container.db))
+        await service.notify(
             user_id=user_id,
             message=message,
             notification_type=type_enum,
             subject=subject,
             metadata=metadata,
+            channels=channels,
         )
 
     coro = _send()
     try:
-        # Use the worker's event loop to run the async method
         self.loop.run_until_complete(coro)
-    except Exception as e:  # pylint: disable=broad-except
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError):
         coro.close()
-        logger.error("Error sending background notification to user %s: %s", user_id, e)
+        logger.exception("Error sending background notification to user %s", user_id)
 
 
 @celery_app.task(name="broadcast_notification_task", bind=True)
@@ -70,90 +64,27 @@ def broadcast_notification_task(
     notification_type: str = NotificationType.INFO.value,
     subject: str | None = None,
     metadata: dict | None = None,
+    channels: list[str] | None = None,
 ) -> None:
     """
-    Celery task to broadcast a notification in background.
+    Celery task to broadcast a notification in the background.
     """
     logger.info("Executing task: broadcast_notification_task")
     type_enum = NotificationType(notification_type)
 
     async def _broadcast() -> None:
-        await self.container.notification_service.broadcast_all(
+        service = NotificationService(device_dao=DeviceDAO(self.container.db))
+        await service.broadcast_all(
             message=message,
             notification_type=type_enum,
             subject=subject,
             metadata=metadata,
+            channels=channels,
         )
 
     coro = _broadcast()
     try:
         self.loop.run_until_complete(coro)
-    except Exception as e:  # pylint: disable=broad-except
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError):
         coro.close()
-        logger.error("Error broadcasting background notification: %s", e)
-
-
-@celery_app.task(name="send_email_worker_task", bind=True)
-def send_email_worker_task(  # pylint: disable=too-many-arguments,too-many-positional-arguments
-    _self: AsyncBaseTask,
-    to_email: str | list[str],
-    subject: str,
-    html_content: str,
-    cc_emails: list[str] | None = None,
-    bcc_emails: list[str] | None = None,
-    attachments: list[dict] | None = None,
-) -> None:
-    """
-    Celery task to send an email using SendGrid in the background.
-    Supports multiple recipients, cc, bcc, and attachments.
-    """
-    if not settings.SENDGRID_API_KEY or not settings.EMAILS_FROM_EMAIL:
-        logger.warning("SendGrid API Key or From Email not configured. Skipping email.")
-        return
-
-    logger.info("Executing task: send_email_worker_task to %s", to_email)
-
-    # Build primary To list
-    if isinstance(to_email, str):
-        to_list = [To(to_email)]
-    else:
-        to_list = [To(email) for email in to_email]
-
-    message = Mail(
-        from_email=Email(settings.EMAILS_FROM_EMAIL, settings.EMAILS_FROM_NAME or "FastAPI Template"),
-        to_emails=to_list,
-        subject=subject,
-        html_content=Content("text/html", html_content),
-    )
-
-    # Add CCs if present
-    if cc_emails:
-        message.cc = [Cc(email) for email in cc_emails]
-
-    # Add BCCs if present
-    if bcc_emails:
-        message.bcc = [Bcc(email) for email in bcc_emails]
-
-    # Add Attachments if present
-    if attachments:
-        sg_attachments = []
-        for att in attachments:
-            try:
-                attachment = Attachment()
-                attachment.file_content = FileContent(att.get("content"))
-                attachment.file_type = FileType(att.get("type", "application/octet-stream"))
-                attachment.file_name = FileName(att.get("filename", "attachment"))
-                attachment.disposition = Disposition(att.get("disposition", "attachment"))
-                sg_attachments.append(attachment)
-            except Exception as e:  # pylint: disable=broad-except
-                logger.error("Failed to parse attachment %s: %s", att.get("filename"), e)
-        if sg_attachments:
-            message.attachment = sg_attachments
-
-    try:
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-        response = sg.send(message)
-        logger.info("SendGrid email sent. Status code: %s", response.status_code)
-    except Exception as e:  # pylint: disable=broad-exception-caught
-        logger.error("Failed to send email to %s: %s", to_email, str(e))
-        raise e
+        logger.exception("Error broadcasting background notification")

@@ -1,5 +1,6 @@
 import logging
 
+from api.apps.common.constants import NotificationChannels
 from api.apps.notification.v0.listeners.utils import dispatch_user_notification
 from api.apps.notification.v0.schemas import NotificationType
 from api.core.events.bus import event_bus
@@ -23,4 +24,5 @@ async def on_user_created(event: ApplicationEvent) -> None:
         subject="Welcome to FastAPI Template!",
         message="Your registration was successful.",
         template_path="email/welcome.html",
+        channels=[NotificationChannels.EMAIL.value],
     )

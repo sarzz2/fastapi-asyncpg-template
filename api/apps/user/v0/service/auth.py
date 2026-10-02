@@ -5,12 +5,12 @@ import re
 import secrets
 import string
 import time
-from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi import Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 
+from api.apps.common.v0.dao.system_config import SystemConfigDAO
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.apps.user.v0.schemas.auth import (
@@ -26,7 +26,7 @@ from api.apps.user.v0.schemas.auth import (
     TwoFactorStatusResponse,
 )
 from api.apps.user.v0.schemas.role import RoleData
-from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate
+from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate, UserTwoFactorData
 from api.constants import AuditActions, AuditResources, TokenTypes
 from api.core.audit import AuditLogger
 from api.core.auth import (
@@ -69,6 +69,22 @@ class AuthService:
         self._user_dao = user_dao
         self._role_dao = role_dao
         self._redis = redis
+
+    async def check_mfa_enforcement(self, user_id: UUID) -> None:
+        """
+        Validate system MFA enforcement policy for a given user.
+        Uses SystemConfigDAO (which is cached via @cache decorator).
+        Raises HTTPException(403) if system config enforces MFA and user has not enabled 2FA.
+        """
+        config_dao = SystemConfigDAO(self._user_dao.db)
+        config = await config_dao.get_config()
+        if config.enforce_mfa:
+            two_factor_data = await self._user_dao.get_two_factor(user_id)
+            if not two_factor_data or not two_factor_data.is_enabled:
+                raise HTTPException(
+                    status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+                    detail=trans("auth.mfa_enforced"),
+                )
 
     async def _generate_unique_username(self, base_name: str) -> str:
         """
@@ -230,7 +246,7 @@ class AuthService:
             )
 
         two_factor_data = await self._user_dao.get_two_factor(user.id)
-        if two_factor_data and two_factor_data.get("is_enabled", False):
+        if two_factor_data and two_factor_data.is_enabled:
             challenge_token = uuid4().hex
             challenge_key = RedisKeys.TWO_FACTOR_CHALLENGE.format(token=challenge_token)
             await self._redis.set(
@@ -275,6 +291,9 @@ class AuthService:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=trans("auth.token_version_mismatch"),
             )
+
+        # Enforce MFA policy on token refresh
+        await self.check_mfa_enforcement(user.id)
 
         scopes = await self._get_user_scopes(user.roles)
         new_token_data = {
@@ -401,10 +420,10 @@ class AuthService:
             TwoFactorStatusResponse: 2FA status response
         """
         record = await self._user_dao.get_two_factor(user_id)
-        if not record or not record.get("is_enabled", False):
+        if not record or not record.is_enabled:
             return TwoFactorStatusResponse(is_enabled=False, backup_codes_remaining=0)
 
-        backup_codes = record.get("backup_codes", [])
+        backup_codes = record.backup_codes
         remaining = sum(1 for c in backup_codes if not c.get("used", False))
         return TwoFactorStatusResponse(is_enabled=True, backup_codes_remaining=remaining)
 
@@ -501,16 +520,16 @@ class AuthService:
             None
         """
         record = await self._user_dao.get_two_factor(user.id)
-        if not record or not record.get("is_enabled", False):
+        if not record or not record.is_enabled:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=trans("auth.two_factor_not_enabled"),
             )
 
         cleaned_code = code.strip()
-        secret = decrypt_secret(record["secret_encrypted"])
+        secret = decrypt_secret(record.secret_encrypted)
         if not verify_totp(secret, cleaned_code):
-            backup_codes = record.get("backup_codes", [])
+            backup_codes = record.backup_codes
             valid_backup, _ = verify_and_consume_backup_code(backup_codes, cleaned_code)
             if not valid_backup:
                 raise HTTPException(
@@ -543,16 +562,16 @@ class AuthService:
             list[str]: List of new backup codes
         """
         record = await self._user_dao.get_two_factor(user.id)
-        if not record or not record.get("is_enabled", False):
+        if not record or not record.is_enabled:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=trans("auth.two_factor_not_enabled"),
             )
 
         cleaned_code = code.strip()
-        secret = decrypt_secret(record["secret_encrypted"])
+        secret = decrypt_secret(record.secret_encrypted)
         if not verify_totp(secret, cleaned_code):
-            backup_codes = record.get("backup_codes", [])
+            backup_codes = record.backup_codes
             valid_backup, _ = verify_and_consume_backup_code(backup_codes, cleaned_code)
             if not valid_backup:
                 raise HTTPException(
@@ -566,10 +585,10 @@ class AuthService:
         return plaintext_codes
 
     async def _verify_2fa_code_or_backup(
-        self, user_id: UUID, two_factor_data: dict[str, Any], cleaned_code: str
+        self, user_id: UUID, two_factor_data: UserTwoFactorData, cleaned_code: str
     ) -> None:
         """Verify 2FA code via TOTP with replay prevention, or consume a valid backup code."""
-        secret = decrypt_secret(two_factor_data["secret_encrypted"])
+        secret = decrypt_secret(two_factor_data.secret_encrypted)
         if verify_totp(secret, cleaned_code):
             slice_idx = int(time.time() // 30)
             replay_key = RedisKeys.TWO_FACTOR_REPLAY.format(user_id=str(user_id), timestamp_slice=slice_idx)
@@ -581,9 +600,7 @@ class AuthService:
             await self._redis.set(replay_key, "1", ex=60)
             return
 
-        valid_backup, updated_codes = verify_and_consume_backup_code(
-            two_factor_data.get("backup_codes", []), cleaned_code
-        )
+        valid_backup, updated_codes = verify_and_consume_backup_code(two_factor_data.backup_codes, cleaned_code)
         if not valid_backup:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -615,7 +632,7 @@ class AuthService:
         user_id = UUID(user_id_raw.decode("utf-8") if isinstance(user_id_raw, bytes) else str(user_id_raw))
 
         two_factor_data = await self._user_dao.get_two_factor(user_id)
-        if not two_factor_data or not two_factor_data.get("is_enabled", False):
+        if not two_factor_data or not two_factor_data.is_enabled:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=trans("auth.two_factor_not_enabled"),

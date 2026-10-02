@@ -13,6 +13,7 @@ from api.apps.common.admin_views.audit_log import AuditLogAdminView
 from api.apps.common.admin_views.dashboard import DashboardView
 from api.apps.common.admin_views.dead_letter_task import DeadLetterTaskAdminView
 from api.apps.common.admin_views.periodic_task import PeriodicTaskAdminView
+from api.apps.common.admin_views.system_config import SystemConfigAdminView
 from api.apps.common.admin_views.version import AppVersionAdminView
 from api.apps.common.admin_views.webhook import WebhookEndpointAdminView
 from api.apps.common.admin_views.webhook_log import WebhookLogAdminView
@@ -172,6 +173,7 @@ def setup_admin(app: FastAPI) -> BaseAdmin:
     admin.add_view(ApiKeyAdminView(db=db))
     admin.add_view(WebhookEndpointAdminView(db=db))
     admin.add_view(WebhookLogAdminView(db=db))
+    admin.add_view(SystemConfigAdminView(db=db))
     admin.mount_to(app)
 
     logger.info("Starlette-Admin portal mounted successfully at /admin")

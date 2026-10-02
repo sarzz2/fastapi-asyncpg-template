@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     EMAILS_FROM_EMAIL: str | None = None
     EMAILS_FROM_NAME: str | None = "FastAPI Template"
 
+    # Firebase Cloud Messaging
+    FIREBASE_CREDENTIALS_PATH: str | None = None
+
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True, extra="ignore")
 
 

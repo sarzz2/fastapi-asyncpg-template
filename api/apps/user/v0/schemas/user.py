@@ -1,5 +1,7 @@
+import json
 from datetime import datetime
 from ipaddress import IPv4Address, IPv6Address
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
@@ -82,3 +84,44 @@ class UserRoleAssignment(BaseModel):
     """Schema for assigning roles to a user."""
 
     role_ids: list[UUID]
+
+
+class UserTwoFactorData(BaseModel):
+    """Schema for user two-factor authentication configuration."""
+
+    id: UUID
+    user_id: UUID
+    is_enabled: bool = False
+    secret_encrypted: str
+    backup_codes: list[dict[str, Any]] = Field(default_factory=list)
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+    def model_post_init(self, context: Any, /) -> None:
+        """Ensure backup_codes is parsed into list[dict[str, Any]] after model construction."""
+        if isinstance(self.backup_codes, str):
+            try:
+                loaded = json.loads(self.backup_codes)
+                if isinstance(loaded, str):
+                    loaded = json.loads(loaded)
+                self.backup_codes = [dict(c) for c in loaded] if isinstance(loaded, list) else []
+            except (json.JSONDecodeError, TypeError, ValueError):
+                self.backup_codes = []
+        elif isinstance(self.backup_codes, list):
+            self.backup_codes = [dict(c) for c in self.backup_codes if isinstance(c, dict)]
+        else:
+            self.backup_codes = []
+
+    @field_validator("backup_codes", mode="before")
+    @classmethod
+    def parse_backup_codes(cls, v: Any) -> list[dict[str, Any]]:
+        """Parse backup codes from JSON string if needed."""
+        if isinstance(v, str):
+            loaded: list[dict[str, Any]] = list(json.loads(v))
+            return loaded
+        if isinstance(v, list):
+            item_list: list[dict[str, Any]] = list(v)
+            return item_list
+        return []

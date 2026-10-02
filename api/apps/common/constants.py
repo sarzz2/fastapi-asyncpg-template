@@ -64,3 +64,11 @@ class WebhookEvents(str, Enum):
 # API Key Configuration Constants
 API_KEY_CACHE_TTL_SECONDS = 30 * 24 * 3600  # 30 days
 API_KEY_LAST_USED_THROTTLE_SECONDS = 300  # 5 minutes
+
+
+class NotificationChannels(str, Enum):
+    """Notification delivery channel names."""
+
+    SSE = "sse"
+    EMAIL = "email"
+    FCM = "fcm"

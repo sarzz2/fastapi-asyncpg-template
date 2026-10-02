@@ -48,6 +48,7 @@ dependencies = [
   "pyotp>=2.10.0",
   "segno>=1.6.6",
   "cryptography>=50.0.1",
+  "firebase-admin>=7.7.0",
 ]
 
 [dependency-groups]
@@ -83,6 +84,7 @@ entrypoint = "api.main:app"
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
+mypy_path = ["stubs"]
 exclude = ["^venv/"]
 
 disallow_untyped_defs = true
@@ -109,7 +111,6 @@ module = [
   "sendgrid.*",
   "opentelemetry.*",
   "pyroscope.*",
-
 ]
 ignore_missing_imports = true
 

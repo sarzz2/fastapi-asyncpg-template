@@ -7,6 +7,7 @@ from jinja2 import ChoiceLoader, Environment, FileSystemLoader
 
 from api.apps.notification.v0.channels.base import BaseNotificationChannel
 from api.apps.notification.v0.schemas import NotificationSchema
+from api.apps.notification.workers import send_email_worker_task
 from api.core.config import settings
 from api.utils.email import get_email_context
 
@@ -69,10 +70,6 @@ class EmailChannel(BaseNotificationChannel):
             user_id (UUID): User ID.
             notification (NotificationSchema): Notification to send.
         """
-        from api.apps.notification.tasks import (  # pylint: disable=cyclic-import, import-outside-toplevel
-            send_email_worker_task,
-        )
-
         # Expect the target email addresses and attachments in notification metadata
         to_email = notification.metadata.get("email")
         cc_emails = notification.metadata.get("cc", [])

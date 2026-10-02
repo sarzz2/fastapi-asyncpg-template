@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from redis.asyncio import Redis
 
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
-from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionData, UserUpdate
+from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionData, UserTwoFactorData, UserUpdate
 from api.core.auth import get_password_hash
 from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
@@ -199,6 +199,18 @@ class UserService:
         """
         await self._user_dao.assign_roles(user_id, role_ids)
         logger.info("UserService: Assigned %d role(s) to user_id=%s", len(role_ids), user_id)
+
+    async def get_two_factor(self, user_id: UUID) -> UserTwoFactorData | None:
+        """
+        Get two-factor authentication configuration for a user.
+
+        Args:
+            user_id (UUID): User ID.
+
+        Returns:
+            UserTwoFactorData | None: Two-factor authentication configuration.
+        """
+        return await self._user_dao.get_two_factor(user_id)
 
 
 async def get_user_service(user_dao: UserDAO = Depends(get_user_dao), redis: Redis = Depends(get_redis)) -> UserService:

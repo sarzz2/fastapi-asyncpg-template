@@ -29,7 +29,7 @@ async def test_email_channel_send_success(notification: NotificationSchema) -> N
     channel = EmailChannel()
     user_id = uuid4()
 
-    with patch("api.apps.notification.tasks.send_email_worker_task.delay") as mock_delay:
+    with patch("api.apps.notification.v0.channels.email.send_email_worker_task.delay") as mock_delay:
         await channel.send(user_id, notification)
 
         # Verify Celery task was called

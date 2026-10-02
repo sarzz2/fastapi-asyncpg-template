@@ -28,3 +28,10 @@ class RedisKeys:
 
     # User Impersonation
     IMPERSONATION_SESSION = "impersonation:session:{jti}"
+
+    # System Configuration Cache (String)
+    SYSTEM_CONFIG_CACHE = "system_config:singleton"
+
+    # Notifications (Pub/Sub & SSE)
+    NOTIFICATION_USER_CHANNEL = "notifications:user:{user_id}"
+    NOTIFICATION_BROADCAST_CHANNEL = "notifications:broadcast"

@@ -1,5 +1,6 @@
 import logging
 
+from api.apps.common.constants import NotificationChannels
 from api.apps.notification.v0.listeners.utils import dispatch_user_notification
 from api.apps.notification.v0.schemas import NotificationType
 from api.core.events.bus import event_bus
@@ -27,6 +28,7 @@ async def on_two_factor_enabled(event: ApplicationEvent) -> None:
         message="Two-Factor Authentication (2FA) was successfully enabled on your account. "
         "If you did not make this change, please contact support immediately.",
         template_path="email/notification.html",
+        channels=[NotificationChannels.EMAIL.value, NotificationChannels.SSE.value, NotificationChannels.FCM.value],
     )
 
 
@@ -48,4 +50,5 @@ async def on_two_factor_disabled(event: ApplicationEvent) -> None:
         message="Two-Factor Authentication (2FA) was disabled on your account. "
         "If you did not make this change, please contact support immediately.",
         template_path="email/notification.html",
+        channels=[NotificationChannels.EMAIL.value, NotificationChannels.SSE.value, NotificationChannels.FCM.value],
     )

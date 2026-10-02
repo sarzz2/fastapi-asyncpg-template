@@ -20,7 +20,8 @@
         "cannot_impersonate_self": "Cannot impersonate yourself",
         "cannot_impersonate_inactive_user": "Cannot impersonate an inactive user",
         "cannot_impersonate_admin": "Cannot impersonate administrative or superuser accounts",
-        "impersonation_session_not_found": "Session is not an active impersonation session"
+        "impersonation_session_not_found": "Session is not an active impersonation session",
+        "mfa_enforced": "MFA enrollment is required by system policy."
     },
     "user": {
         "not_found": "User not found",

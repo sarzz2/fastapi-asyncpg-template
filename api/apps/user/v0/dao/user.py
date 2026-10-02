@@ -5,7 +5,14 @@ from uuid import UUID
 
 from fastapi import Depends
 
-from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate, UserSessionData, UserUpdate
+from api.apps.user.v0.schemas.user import (
+    UserCreate,
+    UserData,
+    UserSessionCreate,
+    UserSessionData,
+    UserTwoFactorData,
+    UserUpdate,
+)
 from api.constants import OAuthProviders
 from api.core.database import DataBase, get_db
 from api.core.events import ApplicationEvent, EventNames, event_bus
@@ -470,18 +477,18 @@ class UserDAO:
                 )
             )
 
-    async def get_two_factor(self, user_id: UUID) -> dict[str, Any] | None:
+    async def get_two_factor(self, user_id: UUID) -> UserTwoFactorData | None:
         """
         Fetch two-factor authentication configuration for a user.
+
+        Args:
+            user_id (UUID): User ID.
+
+        Returns:
+            UserTwoFactorData | None: Two-factor authentication configuration.
         """
         query = "SELECT * FROM user_two_factor WHERE user_id = $1"
-        record = await self.db.fetch(query, user_id, fetch_row=True)
-        if not record:
-            return None
-        data = dict(record)
-        if isinstance(data.get("backup_codes"), str):
-            data["backup_codes"] = json.loads(data["backup_codes"])
-        return data
+        return await self.db.fetch(query, user_id, model=UserTwoFactorData, fetch_row=True)
 
     async def upsert_two_factor(
         self,

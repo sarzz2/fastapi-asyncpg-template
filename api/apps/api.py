@@ -4,6 +4,7 @@ from api.apps.common.v0.routes.api_key import router as api_key_v0_router
 from api.apps.common.v0.routes.dead_letter_task import router as dead_letter_task_v0_router
 from api.apps.common.v0.routes.periodic_task import router as periodic_task_v0_router
 from api.apps.common.v0.routes.s3 import router as s3_v0_router
+from api.apps.common.v0.routes.system_config import router as system_config_v0_router
 from api.apps.common.v0.routes.version import router as version_v0_router
 from api.apps.common.v0.routes.webhook import router as webhook_v0_router
 from api.apps.notification.v0.routes import router as notification_router
@@ -28,3 +29,6 @@ api_router.include_router(webhook_v0_router, prefix=f"{settings.API_V0_STR}/comm
 api_router.include_router(role_v0_router, prefix=f"{settings.API_V0_STR}/roles", tags=["Roles"])
 api_router.include_router(notification_router, prefix=f"{settings.API_V0_STR}/notifications", tags=["Notifications"])
 api_router.include_router(version_v0_router, prefix=f"{settings.API_V0_STR}/app", tags=["App Version"])
+api_router.include_router(
+    system_config_v0_router, prefix=f"{settings.API_V0_STR}/system-config", tags=["System Config"]
+)

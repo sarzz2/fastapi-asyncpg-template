@@ -19,32 +19,40 @@ def test_send_notification_task() -> None:
 
         importlib.reload(tasks)
 
-        mock_service = AsyncMock()
-        mock_self = MagicMock()
-        mock_loop = MagicMock()
-        mock_self.loop = mock_loop
-        mock_self.container.notification_service = mock_service
+        with patch("api.apps.notification.tasks.NotificationService") as mock_service_cls:
+            mock_service = AsyncMock()
+            mock_service_cls.return_value = mock_service
+            mock_self = MagicMock()
+            mock_loop = MagicMock()
+            mock_self.loop = mock_loop
 
-        tasks.send_notification_task(
-            mock_self, str(user_id), message, NotificationType.INFO.value, "Subject", {"key": "value"}
-        )
+            tasks.send_notification_task(
+                mock_self,
+                str(user_id),
+                message,
+                NotificationType.INFO.value,
+                "Subject",
+                {"key": "value"},
+                ["email"],
+            )
 
-        mock_loop.run_until_complete.assert_called_once()
+            mock_loop.run_until_complete.assert_called_once()
 
-        args = mock_loop.run_until_complete.call_args[0]
-        coro = args[0]
+            args = mock_loop.run_until_complete.call_args[0]
+            coro = args[0]
 
-        import asyncio
+            import asyncio
 
-        asyncio.run(coro)
+            asyncio.run(coro)
 
-        mock_service.notify.assert_awaited_once_with(
-            user_id=user_id,
-            message=message,
-            notification_type=NotificationType.INFO,
-            subject="Subject",
-            metadata={"key": "value"},
-        )
+            mock_service.notify.assert_awaited_once_with(
+                user_id=user_id,
+                message=message,
+                notification_type=NotificationType.INFO,
+                subject="Subject",
+                metadata={"key": "value"},
+                channels=["email"],
+            )
 
 
 def test_send_notification_task_error() -> None:
@@ -60,11 +68,11 @@ def test_send_notification_task_error() -> None:
 
         with patch("api.apps.notification.tasks.logger") as mock_log:
             mock_self = MagicMock()
-            mock_self.loop.run_until_complete.side_effect = Exception("Boom")
+            mock_self.loop.run_until_complete.side_effect = RuntimeError("Boom")
 
             tasks.send_notification_task(mock_self, str(user_id), "msg")
 
-            mock_log.error.assert_called_once()
+            mock_log.exception.assert_called_once()
 
 
 def test_broadcast_notification_task() -> None:
@@ -78,28 +86,38 @@ def test_broadcast_notification_task() -> None:
 
         importlib.reload(tasks)
 
-        mock_service = AsyncMock()
-        mock_self = MagicMock()
-        mock_loop = MagicMock()
-        mock_self.loop = mock_loop
-        mock_self.container.notification_service = mock_service
+        with patch("api.apps.notification.tasks.NotificationService") as mock_service_cls:
+            mock_service = AsyncMock()
+            mock_service_cls.return_value = mock_service
+            mock_self = MagicMock()
+            mock_loop = MagicMock()
+            mock_self.loop = mock_loop
 
-        tasks.broadcast_notification_task(
-            mock_self, message, NotificationType.WARNING.value, "Subject", {"key": "data"}
-        )
+            tasks.broadcast_notification_task(
+                mock_self,
+                message,
+                NotificationType.WARNING.value,
+                "Subject",
+                {"key": "data"},
+                ["fcm"],
+            )
 
-        mock_loop.run_until_complete.assert_called_once()
+            mock_loop.run_until_complete.assert_called_once()
 
-        args = mock_loop.run_until_complete.call_args[0]
-        coro = args[0]
+            args = mock_loop.run_until_complete.call_args[0]
+            coro = args[0]
 
-        import asyncio
+            import asyncio
 
-        asyncio.run(coro)
+            asyncio.run(coro)
 
-        mock_service.broadcast_all.assert_awaited_once_with(
-            message=message, notification_type=NotificationType.WARNING, subject="Subject", metadata={"key": "data"}
-        )
+            mock_service.broadcast_all.assert_awaited_once_with(
+                message=message,
+                notification_type=NotificationType.WARNING,
+                subject="Subject",
+                metadata={"key": "data"},
+                channels=["fcm"],
+            )
 
 
 def test_broadcast_notification_task_error() -> None:
@@ -113,8 +131,8 @@ def test_broadcast_notification_task_error() -> None:
 
         with patch("api.apps.notification.tasks.logger") as mock_log:
             mock_self = MagicMock()
-            mock_self.loop.run_until_complete.side_effect = Exception("Boom")
+            mock_self.loop.run_until_complete.side_effect = RuntimeError("Boom")
 
             tasks.broadcast_notification_task(mock_self, "msg")
 
-            mock_log.error.assert_called_once()
+            mock_log.exception.assert_called_once()

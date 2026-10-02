@@ -1,8 +1,12 @@
+import json
 from uuid import uuid4
 
 import pyotp
 import pytest
 from httpx import AsyncClient
+
+from api.core.redis import redis_client
+from api.shared.redis_keys import RedisKeys
 
 
 async def register_and_login_user(client: AsyncClient, prefix: str = "2fa") -> tuple[str, str, dict[str, str]]:
@@ -287,3 +291,39 @@ async def test_regenerate_backup_codes(client: AsyncClient) -> None:
         json={"two_factor_token": challenge_token, "code": new_codes[0]},
     )
     assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_refresh_token_enforces_mfa(client: AsyncClient) -> None:
+    """
+    Verify that token refresh blocks users when MFA is enforced by system policy
+    until the user configures two-factor authentication.
+    """
+    user_email = f"mfa_refresh_{uuid4().hex[:8]}@example.com"
+    user_pass = "Str0ngP@ssw0rd!123"
+    await client.post(
+        "/api/v0/users/register",
+        json={"username": user_email, "email": user_email, "password": user_pass, "full_name": "Test User"},
+    )
+    login_data = (await client.post("/api/v0/auth/login", json={"username": user_email, "password": user_pass})).json()
+    refresh_token = login_data["token"]["refresh_token"]
+
+    # When MFA is NOT enforced, refresh succeeds
+    resp = await client.post("/api/v0/auth/refresh", json={"refresh_token": refresh_token})
+    assert resp.status_code == 200
+    new_refresh_token = resp.json()["token"]["refresh_token"]
+
+    # Enforce MFA in system configuration
+    await redis_client.client.set(
+        RedisKeys.SYSTEM_CONFIG_CACHE,
+        json.dumps({"id": 1, "enforce_mfa": True, "updated_at": "2026-01-01T00:00:00Z"}),
+    )
+
+    try:
+        # Refresh without 2FA enabled should fail with 428 Precondition Required
+        resp = await client.post("/api/v0/auth/refresh", json={"refresh_token": new_refresh_token})
+        assert resp.status_code == 428
+        assert "MFA enrollment is required by system policy" in resp.json()["detail"]
+    finally:
+        # Revert system config cache
+        await redis_client.client.delete(RedisKeys.SYSTEM_CONFIG_CACHE)
