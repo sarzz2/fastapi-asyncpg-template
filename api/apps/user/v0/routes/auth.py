@@ -26,7 +26,7 @@ from api.apps.user.v0.schemas.auth import (
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.auth import AuthService, get_auth_service
 from api.core.config import settings
-from api.core.dependencies import get_current_user, get_sudo_user
+from api.core.dependencies import disallow_impersonation, get_current_user, get_sudo_user
 from api.core.i18n import trans
 from api.core.rate_limit import limiter
 from api.core.redis import get_redis
@@ -178,6 +178,7 @@ async def setup_two_factor(
     request: Request,  # pylint: disable=unused-argument
     current_user: UserData = Depends(get_current_user),
     svc: AuthService = Depends(get_auth_service),
+    _guard: None = Depends(disallow_impersonation),
 ) -> TwoFactorSetupResponse:
     """
     Initiate 2FA setup. Generates a TOTP secret and QR code for scanning.
@@ -192,6 +193,7 @@ async def confirm_two_factor(
     confirm_data: TwoFactorConfirmRequest,
     current_user: UserData = Depends(get_current_user),
     svc: AuthService = Depends(get_auth_service),
+    _guard: None = Depends(disallow_impersonation),
 ) -> TwoFactorConfirmResponse:
     """
     Confirm 2FA setup by providing code from authenticator app.
@@ -295,6 +297,7 @@ async def google_sudo_token(
     request: Request,  # pylint: disable=unused-argument
     sudo_request: OAuthSudoTokenRequest,
     svc: AuthService = Depends(get_auth_service),
+    _guard: None = Depends(disallow_impersonation),
 ) -> SudoTokenResponse:
     """
     Create a sudo token for OAuth (Google) user for privileged operations.

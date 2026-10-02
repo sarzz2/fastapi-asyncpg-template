@@ -25,3 +25,6 @@ class RedisKeys:
 
     # API Key Cache (String)
     API_KEY_CACHE = "api_key:cache:{hashed_key}"
+
+    # User Impersonation
+    IMPERSONATION_SESSION = "impersonation:session:{jti}"

@@ -64,6 +64,8 @@ class AuditActions(str, Enum):
 
     DLQ_TASK_TRIGGER = "DLQ_TASK_TRIGGER"
     PERIODIC_TASK_TRIGGER = "PERIODIC_TASK_TRIGGER"
+    USER_IMPERSONATION_START = "USER_IMPERSONATION_START"
+    USER_IMPERSONATION_STOP = "USER_IMPERSONATION_STOP"
 
 
 class AuditResources(str, Enum):
@@ -71,6 +73,7 @@ class AuditResources(str, Enum):
 
     DLQ_TASK = "dlq_task"
     PERIODIC_TASK = "periodic_task"
+    USER = "user"
 
 
 # Default TTL for idempotency keys is 24 hours

@@ -1,6 +1,7 @@
+from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.apps.user.v0.schemas.user import UserData
 from api.utils.pydantic_utils import StrongPassword
@@ -38,6 +39,9 @@ class TokenData(BaseModel):
     type: str = "Bearer"
     scopes: list[str] = []
     token_version: int = 1
+    is_impersonation: bool = False
+    impersonator_id: UUID | None = None
+    impersonator_username: str | None = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -113,3 +117,25 @@ class TwoFactorVerifyRequest(BaseModel):
 
     two_factor_token: str
     code: str
+
+
+class ImpersonateRequest(BaseModel):
+    """Schema for initiating an impersonation session."""
+
+    reason: str = Field(..., min_length=3, max_length=255, description="Reason for audit log")
+
+
+class ImpersonatorInfo(BaseModel):
+    """Information about the administrator performing impersonation."""
+
+    id: UUID
+    username: str
+
+
+class ImpersonationResponse(BaseModel):
+    """Response returned upon successfully starting an impersonation session."""
+
+    token: Token
+    target_user: UserData
+    impersonator: ImpersonatorInfo
+    expires_at: datetime

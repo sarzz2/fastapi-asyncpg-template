@@ -13,3 +13,5 @@ class EventNames(str, Enum):
     USER_ROLE_ASSIGNED = "user.role.assigned"
     USER_2FA_ENABLED = "user.2fa.enabled"
     USER_2FA_DISABLED = "user.2fa.disabled"
+    USER_IMPERSONATION_STARTED = "user.impersonation.started"
+    USER_IMPERSONATION_STOPPED = "user.impersonation.stopped"

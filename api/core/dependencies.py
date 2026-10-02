@@ -11,7 +11,7 @@ from api.apps.common.v0.service.api_key import ApiKeyService, get_api_key_servic
 from api.apps.user.v0.schemas.user import UserData
 from api.apps.user.v0.service.user import UserService, get_user_service
 from api.core.auth import verify_token
-from api.core.context import CURRENT_ACTOR_ID
+from api.core.context import CURRENT_ACTOR_ID, CURRENT_IMPERSONATOR_ID
 from api.core.redis import get_redis
 
 oauth2_scheme = HTTPBearer()
@@ -66,6 +66,10 @@ async def get_current_user(
         )
         raise credentials_exception
     CURRENT_ACTOR_ID.set(str(user.id))
+    if token_data.is_impersonation and token_data.impersonator_id:
+        CURRENT_IMPERSONATOR_ID.set(str(token_data.impersonator_id))
+    else:
+        CURRENT_IMPERSONATOR_ID.set(None)
     return user
 
 
@@ -91,6 +95,11 @@ async def get_sudo_user(
         if user is None:
             logger.warning("Sudo user not found for valid token: user_id=%s", token_data.id)
             raise credentials_exception
+        if token_data.is_impersonation:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Sudo access cannot be performed during an active impersonation session.",
+            )
         if token_data.type != "sudo":
             logger.warning("Invalid token type for sudo access: %s", token_data.type)
             raise HTTPException(
@@ -145,3 +154,16 @@ async def get_api_key(
     actor_id = api_key_data.created_by or api_key_data.id
     CURRENT_ACTOR_ID.set(str(actor_id))
     return api_key_data
+
+
+async def disallow_impersonation(
+    token: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+    redis: Redis = Depends(get_redis),
+) -> None:
+    """Disallows execution of endpoint if accessed with an impersonated token."""
+    token_data = await verify_token(token.credentials, redis)
+    if token_data.is_impersonation:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This operation cannot be performed during an active impersonation session.",
+        )

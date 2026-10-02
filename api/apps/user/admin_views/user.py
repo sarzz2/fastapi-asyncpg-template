@@ -12,9 +12,12 @@ from starlette_admin import row_action
 from starlette_admin.fields import BooleanField, DateTimeField, EmailField, StringField, TagsField, UUIDField
 from starlette_admin.filters import FilterGroup
 
+from api.apps.user.v0.dao.role import RoleDAO
 from api.apps.user.v0.dao.user import UserDAO
 from api.apps.user.v0.schemas.user import UserData, UserUpdate
+from api.apps.user.v0.service.auth import AuthService
 from api.core.database import DataBase
+from api.core.redis import redis_client
 from api.utils.admin_view import BaseAppAdminView
 
 
@@ -238,3 +241,42 @@ class UserAdminView(BaseAppAdminView):
 
         status_text = "activated" if new_status else "deactivated"
         return f"User '{user.email}' has been successfully {status_text}."
+
+    @row_action(
+        name="impersonate",
+        text="Impersonate",
+        icon_class="fa-solid fa-user-secret",
+        confirmation=(
+            "Are you sure you want to generate an impersonation token for this user? "
+            "All actions will be audited under your administrator ID."
+        ),
+    )
+    async def impersonate_action(self, request: Request, pk: Any) -> str:
+        """
+        Row action to generate an impersonation token for a target user.
+        """
+        admin_data = request.session.get("admin_user")
+        if not admin_data or not admin_data.get("id"):
+            raise ValueError("Admin session invalid or expired.")
+
+        admin_id = UUID(str(admin_data["id"]))
+        admin_user = await self.dao.get_by_id(admin_id)
+        if not admin_user:
+            raise ValueError("Admin user not found.")
+
+        target_id = UUID(str(pk))
+        auth_service = AuthService(
+            user_dao=self.dao,
+            role_dao=RoleDAO(self.db),
+            redis=redis_client.client,
+        )
+        impersonation = await auth_service.impersonate_user(
+            admin_user=admin_user,
+            target_user_id=target_id,
+            reason="Admin portal row action impersonation",
+            request=request,
+        )
+        return (
+            f"Impersonation token generated for '{impersonation.target_user.username}'. "
+            f"Token: Bearer {impersonation.token.access_token}"
+        )

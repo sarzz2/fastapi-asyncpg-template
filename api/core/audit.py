@@ -11,7 +11,7 @@ from uuid import UUID
 from starlette.background import BackgroundTasks
 from starlette.requests import Request
 
-from api.core.context import CLIENT_IP, CURRENT_ACTOR_ID
+from api.core.context import CLIENT_IP, CURRENT_ACTOR_ID, CURRENT_IMPERSONATOR_ID
 from api.core.database import DataBase
 from api.utils.serialization import json_serialize_safe
 
@@ -31,6 +31,7 @@ class AuditLogger:
         resource_id: str,
         details: dict[str, Any],
         ip_address: str | None,
+        impersonator_id: str | None = None,
     ) -> None:
         """
         Execute raw SQL insert into the audit_logs table.
@@ -42,15 +43,17 @@ class AuditLogger:
             resource_id: The ID of the specific resource.
             details: A dictionary containing event details.
             ip_address: The IP address of the actor.
+            impersonator_id: The ID of the administrator impersonating the actor (if any).
         """
         query = """
-            INSERT INTO audit_logs (actor_id, action, resource, resource_id, details, ip_address)
-            VALUES ($1::uuid, $2, $3, $4, $5::jsonb, $6)
+            INSERT INTO audit_logs (actor_id, impersonator_id, action, resource, resource_id, details, ip_address)
+            VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::jsonb, $7)
         """
         try:
             await DataBase.execute(
                 query,
                 actor_id,
+                impersonator_id,
                 action,
                 resource,
                 str(resource_id),
@@ -68,7 +71,7 @@ class AuditLogger:
             logger.error("Failed to save audit log for action=%s, resource=%s: %s", action, resource, e)
 
     @classmethod
-    def log(
+    def log(  # pylint: disable=too-many-locals
         cls,
         action: str,
         resource: str,
@@ -76,6 +79,7 @@ class AuditLogger:
         details: dict[str, Any] | None = None,
         *,
         actor_id: str | UUID | None = None,
+        impersonator_id: str | UUID | None = None,
         request: Request | None = None,
         background_tasks: BackgroundTasks | None = None,
     ) -> None:
@@ -99,6 +103,7 @@ class AuditLogger:
             background_tasks: Optional FastAPI BackgroundTasks instance.
         """
         resolved_actor_id = actor_id or CURRENT_ACTOR_ID.get()
+        resolved_impersonator_id = impersonator_id or CURRENT_IMPERSONATOR_ID.get()
         if not resolved_actor_id and request:
             admin_user = request.session.get("admin_user") or {}
             resolved_actor_id = admin_user.get("id")
@@ -149,6 +154,7 @@ class AuditLogger:
                 resource_id=str(resource_id),
                 details=details_payload,
                 ip_address=ip_address,
+                impersonator_id=str(resolved_impersonator_id) if resolved_impersonator_id else None,
             )
         else:
             task_coro = cls._save_audit_log(
@@ -158,6 +164,7 @@ class AuditLogger:
                 resource_id=str(resource_id),
                 details=details_payload,
                 ip_address=ip_address,
+                impersonator_id=str(resolved_impersonator_id) if resolved_impersonator_id else None,
             )
             try:
                 loop = asyncio.get_running_loop()

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 import secrets
@@ -13,6 +14,8 @@ from redis.asyncio import Redis
 from api.apps.user.v0.dao.role import RoleDAO, get_role_dao
 from api.apps.user.v0.dao.user import UserDAO, get_user_dao
 from api.apps.user.v0.schemas.auth import (
+    ImpersonationResponse,
+    ImpersonatorInfo,
     LoginResponse,
     SudoTokenResponse,
     Token,
@@ -24,9 +27,11 @@ from api.apps.user.v0.schemas.auth import (
 )
 from api.apps.user.v0.schemas.role import RoleData
 from api.apps.user.v0.schemas.user import UserCreate, UserData, UserSessionCreate
-from api.constants import TokenTypes
+from api.constants import AuditActions, AuditResources, TokenTypes
+from api.core.audit import AuditLogger
 from api.core.auth import (
     create_access_token,
+    create_impersonation_token,
     create_refresh_token,
     create_sudo_token,
     get_password_hash,
@@ -34,6 +39,7 @@ from api.core.auth import (
     verify_token,
 )
 from api.core.config import settings
+from api.core.context import CURRENT_IMPERSONATOR_ID
 from api.core.events import ApplicationEvent, EventNames, event_bus
 from api.core.i18n import trans
 from api.core.redis import get_redis
@@ -626,6 +632,173 @@ class AuthService:
             )
 
         return await self.issue_tokens_and_session(user, request)
+
+    async def impersonate_user(
+        self,
+        admin_user: UserData,
+        target_user_id: UUID,
+        reason: str,
+        request: Request,
+        duration_minutes: int = 30,
+    ) -> ImpersonationResponse:
+        """
+        Start an impersonation session for a target user.
+
+        Args:
+            admin_user (UserData): The administrator performing the impersonation.
+            target_user_id (UUID): The target user ID to impersonate.
+            reason (str): Reason for impersonation (for auditing).
+            request (Request): FastAPI request object.
+            duration_minutes (int): Session duration in minutes. Defaults to 30.
+
+        Returns:
+            ImpersonationResponse: Access token and target user information.
+        """
+        # 1. Prevent nested/chained impersonation
+        if CURRENT_IMPERSONATOR_ID.get():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.cannot_nest_impersonation"),
+            )
+
+        # 2. Prevent self-impersonation
+        if admin_user.id == target_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.cannot_impersonate_self"),
+            )
+
+        # 3. Retrieve target user
+        target_user = await self._user_dao.get_by_id(target_user_id)
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=trans("user.not_found"),
+            )
+        if not target_user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=trans("auth.cannot_impersonate_inactive_user"),
+            )
+
+        # 4. Prevent impersonating superusers or administrators
+        is_target_privileged = getattr(target_user, "is_superuser", False) or any(
+            r.name in ["Super Admin", "Admin"] for r in target_user.roles
+        )
+        if is_target_privileged:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=trans("auth.cannot_impersonate_admin"),
+            )
+
+        # 5. Build token payload with RFC 8693 actor claim
+        scopes = await self._get_user_scopes(target_user.roles)
+        token_data = {
+            "sub": target_user.username,
+            "id": str(target_user.id),
+            "scopes": scopes,
+            "token_version": target_user.token_version,
+            "is_impersonation": True,
+            "act": {
+                "id": str(admin_user.id),
+                "sub": admin_user.username,
+            },
+        }
+
+        # 6. Issue bounded access token (no refresh token)
+        token_details = create_impersonation_token(token_data, expire_minutes=duration_minutes)
+
+        # 7. Store ephemeral session in Redis with TTL
+        session_key = RedisKeys.IMPERSONATION_SESSION.format(jti=token_details["jti"])
+        session_meta = {
+            "admin_id": str(admin_user.id),
+            "admin_username": admin_user.username,
+            "target_user_id": str(target_user.id),
+            "target_username": target_user.username,
+            "reason": reason,
+            "issued_at": get_utc_now().isoformat(),
+            "expires_at": token_details["expires_at"].isoformat(),
+        }
+        await self._redis.set(session_key, json.dumps(session_meta), ex=duration_minutes * 60)
+
+        # 8. Record operational audit log
+        AuditLogger.log(
+            action=AuditActions.USER_IMPERSONATION_START,
+            resource=AuditResources.USER,
+            resource_id=str(target_user.id),
+            actor_id=admin_user.id,
+            impersonator_id=admin_user.id,
+            details={
+                "reason": reason,
+                "target_username": target_user.username,
+                "jti": token_details["jti"],
+                "duration_minutes": duration_minutes,
+            },
+            request=request,
+        )
+
+        # 9. Publish domain event
+        await event_bus.publish(
+            ApplicationEvent(
+                event_name=EventNames.USER_IMPERSONATION_STARTED,
+                payload={
+                    "admin_id": str(admin_user.id),
+                    "target_user_id": str(target_user.id),
+                    "reason": reason,
+                    "jti": token_details["jti"],
+                },
+            )
+        )
+
+        return ImpersonationResponse(
+            token=Token(access_token=token_details["token"], refresh_token=""),  # nosec B106
+            target_user=target_user,
+            impersonator=ImpersonatorInfo(id=admin_user.id, username=admin_user.username),
+            expires_at=token_details["expires_at"],
+        )
+
+    async def stop_impersonation(self, jti: str, admin_id: UUID) -> None:
+        """
+        Terminate an active impersonation session and blacklist the token.
+
+        Args:
+            jti (str): The JWT ID of the impersonation token.
+            admin_id (UUID): The admin user ID.
+        """
+        # 1. Blacklist token in Redis immediately
+        blacklist_key = f"blacklist:access:{jti}"
+        await self._redis.set(blacklist_key, "1", ex=3600)
+
+        # 2. Retrieve & delete ephemeral session
+        session_key = RedisKeys.IMPERSONATION_SESSION.format(jti=jti)
+        session_raw = await self._redis.get(session_key)
+        target_id: str | None = None
+        if session_raw:
+            meta = json.loads(session_raw)
+            target_id = meta.get("target_user_id")
+            await self._redis.delete(session_key)
+
+        # 3. Log audit event
+        AuditLogger.log(
+            action=AuditActions.USER_IMPERSONATION_STOP,
+            resource=AuditResources.USER,
+            resource_id=target_id or str(admin_id),
+            actor_id=admin_id,
+            impersonator_id=admin_id,
+            details={"jti": jti, "target_user_id": target_id},
+        )
+
+        # 4. Publish domain event
+        await event_bus.publish(
+            ApplicationEvent(
+                event_name=EventNames.USER_IMPERSONATION_STOPPED,
+                payload={
+                    "admin_id": str(admin_id),
+                    "target_user_id": target_id,
+                    "jti": jti,
+                },
+            )
+        )
 
 
 async def get_auth_service(

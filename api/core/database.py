@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_fixed
 
 from api.core.config import settings
-from api.core.context import CLIENT_IP, CURRENT_ACTOR_ID
+from api.core.context import CLIENT_IP, CURRENT_ACTOR_ID, CURRENT_IMPERSONATOR_ID
 from api.core.metrics import (
     DB_POOL_CONNECTIONS_IN_USE,
     DB_QUERY_DURATION_SECONDS,
@@ -425,14 +425,18 @@ class DataBase(BaseModel):
         pool, _ = await cls.get_pool(use_primary)
         actor_id = CURRENT_ACTOR_ID.get() or ""
         client_ip = CLIENT_IP.get() or ""
+        impersonator_id = CURRENT_IMPERSONATOR_ID.get() or ""
         async with pool.acquire() as conn:
             async with conn.transaction():
-                if actor_id or client_ip:
+                if actor_id or client_ip or impersonator_id:
                     try:
                         await conn.execute(
-                            "SELECT set_config('app.actor_id', $1, true), set_config('app.client_ip', $2, true)",
+                            "SELECT set_config('app.actor_id', $1, true), "
+                            "set_config('app.client_ip', $2, true), "
+                            "set_config('app.impersonator_id', $3, true)",
                             actor_id,
                             client_ip,
+                            impersonator_id,
                         )
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.debug("Could not set transaction settings for audit: %s", exc)
@@ -592,14 +596,18 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         actor_id = CURRENT_ACTOR_ID.get() or ""
         client_ip = CLIENT_IP.get() or ""
+        impersonator_id = CURRENT_IMPERSONATOR_ID.get() or ""
         if isinstance(pool, asyncpg.Pool):
             async with pool.acquire() as conn:
-                if actor_id or client_ip:
+                if actor_id or client_ip or impersonator_id:
                     try:
                         await conn.execute(
-                            "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                            "SELECT set_config('app.actor_id', $1, false), "
+                            "set_config('app.client_ip', $2, false), "
+                            "set_config('app.impersonator_id', $3, false)",
                             actor_id,
                             client_ip,
+                            impersonator_id,
                         )
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.debug("Could not set session settings for audit: %s", exc)
@@ -698,16 +706,20 @@ class DataBase(BaseModel):
         start_time = time.perf_counter()
         actor_id = CURRENT_ACTOR_ID.get() or ""
         client_ip = CLIENT_IP.get() or ""
+        impersonator_id = CURRENT_IMPERSONATOR_ID.get() or ""
 
         target = cls.write_pool if con is None else con
         if isinstance(target, asyncpg.Pool):
             async with target.acquire() as connection:
-                if actor_id or client_ip:
+                if actor_id or client_ip or impersonator_id:
                     try:
                         await connection.execute(
-                            "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                            "SELECT set_config('app.actor_id', $1, false), "
+                            "set_config('app.client_ip', $2, false), "
+                            "set_config('app.impersonator_id', $3, false)",
                             actor_id,
                             client_ip,
+                            impersonator_id,
                         )
                     except Exception as exc:  # pylint: disable=broad-except
                         logger.debug("Could not set session settings for audit: %s", exc)

@@ -78,6 +78,19 @@ def create_access_token(data: dict) -> dict:
     return _create_token(data, expire, token_type=TokenTypes.ACCESS.value)
 
 
+def create_impersonation_token(data: dict, expire_minutes: int = 30) -> dict:
+    """
+    Create an impersonation access JWT token with short TTL.
+    Args:
+        data (dict): The data to include in the token payload.
+        expire_minutes (int): Expiration time in minutes.
+    Returns:
+        dict: A dictionary containing the encoded token and its metadata.
+    """
+    expire = datetime.datetime.now(datetime.UTC) + timedelta(minutes=expire_minutes)
+    return _create_token(data, expire, token_type=TokenTypes.ACCESS.value)
+
+
 def create_refresh_token(data: dict) -> str:
     """
     Create a refresh JWT token.
@@ -151,6 +164,7 @@ async def verify_token(token: str, redis: Redis, token_type: str | None = "acces
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Sudo token has been revoked.",
                 )
+        act: dict = payload.get("act") or {}
         return TokenData(
             username=username,
             id=user_id,
@@ -159,6 +173,9 @@ async def verify_token(token: str, redis: Redis, token_type: str | None = "acces
             type=jwt_token_type,
             scopes=scopes,
             token_version=token_version,
+            is_impersonation=payload.get("is_impersonation", False),
+            impersonator_id=act.get("id"),
+            impersonator_username=act.get("sub"),
         )
     except jwt.PyJWTError as exc:
         logger.warning("JWT verification failed for token type '%s': %s", token_type, exc)

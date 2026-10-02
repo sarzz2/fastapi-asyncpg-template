@@ -15,7 +15,12 @@
         "two_factor_challenge_expired": "Two-factor authentication challenge has expired or is invalid",
         "two_factor_not_enabled": "Two-factor authentication is not enabled for this account",
         "two_factor_replay_detected": "Verification code has already been used. Please wait for the next code.",
-        "two_factor_invalid_code_or_backup": "Invalid verification code or backup code"
+        "two_factor_invalid_code_or_backup": "Invalid verification code or backup code",
+        "cannot_nest_impersonation": "Cannot start impersonation from an active impersonation session",
+        "cannot_impersonate_self": "Cannot impersonate yourself",
+        "cannot_impersonate_inactive_user": "Cannot impersonate an inactive user",
+        "cannot_impersonate_admin": "Cannot impersonate administrative or superuser accounts",
+        "impersonation_session_not_found": "Session is not an active impersonation session"
     },
     "user": {
         "not_found": "User not found",
