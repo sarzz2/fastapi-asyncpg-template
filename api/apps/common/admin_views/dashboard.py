@@ -50,7 +50,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, RuntimeError) as err:
             logger.exception("Error fetching total users for dashboard: %s", err)
             return 0
 
@@ -67,7 +67,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users WHERE is_active = true", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, RuntimeError) as err:
             logger.exception("Error fetching active users for dashboard: %s", err)
             return 0
 
@@ -82,9 +82,9 @@ class DashboardView(CustomView):
             int: Total count of active role records.
         """
         try:
-            record = await self.db.fetch("SELECT COUNT(*) as cnt FROM roles WHERE is_deleted = false", fetch_row=True)
+            record = await self.db.fetch("SELECT COUNT(*) as cnt FROM roles", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, RuntimeError) as err:
             logger.exception("Error fetching total roles for dashboard: %s", err)
             return 0
 
@@ -101,7 +101,7 @@ class DashboardView(CustomView):
         try:
             record = await self.db.fetch("SELECT COUNT(*) as cnt FROM permissions", fetch_row=True)
             return int(record["cnt"]) if record else 0
-        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, RuntimeError) as err:
             logger.exception("Error fetching total permissions for dashboard: %s", err)
             return 0
 
@@ -119,7 +119,6 @@ class DashboardView(CustomView):
             query = """
                 SELECT name, description, created_at
                 FROM roles
-                WHERE is_deleted = false
                 ORDER BY created_at DESC
                 LIMIT 5
             """
@@ -134,7 +133,7 @@ class DashboardView(CustomView):
                 ]
                 for r in records
             ]
-        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as err:
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, RuntimeError) as err:
             logger.exception("Error fetching recent roles for dashboard: %s", err)
             return []
 

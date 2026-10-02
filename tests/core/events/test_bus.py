@@ -19,14 +19,15 @@ class DummyEvent(ApplicationEvent):
 def mock_redis_client() -> Generator[MagicMock, None, None]:
     """
     Provide a pre-configured mock Redis client for EventBus tests.
-    Ensures that pubsub() returns a mock object and not a coroutine.
     """
     with patch("api.core.events.bus.redis_event_bus.client") as mock_client:
         mock_client.pubsub = MagicMock()
-        mock_pubsub = AsyncMock()
-        mock_client.pubsub.return_value = mock_pubsub
         mock_client.publish = AsyncMock()
         mock_client.set = AsyncMock()
+        mock_client.xadd = AsyncMock()
+        mock_client.xgroup_create = AsyncMock()
+        mock_client.xreadgroup = AsyncMock()
+        mock_client.xack = AsyncMock()
         yield mock_client
 
 
@@ -49,7 +50,7 @@ def test_event_bus_subscription() -> None:
 @pytest.mark.asyncio
 async def test_event_bus_publish(mock_redis_client: MagicMock) -> None:  # pylint: disable=redefined-outer-name
     """
-    Verify that publishing an event correctly sends it to the Redis broadcast channel.
+    Verify that publishing an event correctly sends it to the Redis Stream.
     """
     bus = EventBus()
     event = DummyEvent(payload={"data": "test_payload"})
@@ -57,7 +58,12 @@ async def test_event_bus_publish(mock_redis_client: MagicMock) -> None:  # pylin
     try:
         await bus.publish(event)
 
-        mock_redis_client.publish.assert_called_once_with("event_bus:broadcast", event.model_dump_json())
+        mock_redis_client.xadd.assert_called_once_with(
+            "event_bus:stream",
+            {"data": event.model_dump_json(), "event_name": event.event_name, "event_id": str(event.event_id)},
+            maxlen=50000,
+            approximate=True,
+        )
     finally:
         await bus.stop()
 

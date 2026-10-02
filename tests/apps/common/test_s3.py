@@ -148,7 +148,7 @@ def test_route_generate_upload_url_error() -> None:
     Test generate_upload_url route with error.
     """
     mock_service = MagicMock()
-    mock_service.generate_presigned_url.side_effect = Exception("Error")
+    mock_service.generate_presigned_url.side_effect = ClientError({}, "GeneratePresignedUrl")
 
     request = S3UploadUrlRequest(filename="test.jpg", content_type="image/jpeg")
 
@@ -174,7 +174,7 @@ def test_route_delete_file_error() -> None:
     Test delete_file route with error.
     """
     mock_service = MagicMock()
-    mock_service.delete_file.side_effect = Exception("Error")
+    mock_service.delete_file.side_effect = ClientError({}, "DeleteObject")
 
     with pytest.raises(HTTPException) as exc:
         delete_file(key="test_key", s3_service=mock_service, _current_user=MagicMock())
@@ -200,7 +200,7 @@ def test_route_get_file_error() -> None:
     Test get_file route with error.
     """
     mock_service = MagicMock()
-    mock_service.get_file_url.side_effect = Exception("Error")
+    mock_service.get_file_url.side_effect = ClientError({}, "GetFileUrl")
 
     with pytest.raises(HTTPException) as exc:
         get_file(key="test_key", s3_service=mock_service)

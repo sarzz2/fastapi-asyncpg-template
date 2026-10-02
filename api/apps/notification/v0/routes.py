@@ -46,6 +46,8 @@ async def websocket_endpoint(
                 # Keep connection alive, listen for messages (optional bi-directional)
                 await websocket.receive_text()
         except WebSocketDisconnect:
+            pass
+        finally:
             await connection_manager.disconnect(websocket, user_id)
 
     except Exception:  # pylint: disable=broad-except

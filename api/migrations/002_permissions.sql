@@ -39,8 +39,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
 
 ALTER TABLE users ADD COLUMN IF NOT EXISTS token_version INTEGER DEFAULT 1;
 
+CREATE INDEX IF NOT EXISTS idx_user_roles_role_id ON user_roles(role_id);
+
 -- down
 ALTER TABLE users DROP COLUMN IF EXISTS token_version;
+DROP INDEX IF EXISTS idx_user_roles_role_id;
 DROP TABLE IF EXISTS user_roles;
 DROP TABLE IF EXISTS role_permissions;
 DROP TABLE IF EXISTS roles;

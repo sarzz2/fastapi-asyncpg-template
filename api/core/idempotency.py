@@ -83,11 +83,13 @@ class IdempotentRoute(APIRoute):
         original_route_handler = super().get_route_handler()
 
         async def custom_route_handler(request: Request) -> Response:
-            idempotency_key = await IdempotencyManager.get_key(request)
+            raw_key = await IdempotencyManager.get_key(request)
 
             # If no idempotency key is provided, just run normally
-            if not idempotency_key:
+            if not raw_key:
                 return await original_route_handler(request)
+
+            idempotency_key = f"{request.method}:{request.url.path}:{raw_key}"
 
             # Check if we already have a cached response
             cached_response = await IdempotencyManager.get_cached_response(idempotency_key)

@@ -1,5 +1,4 @@
 # pylint: disable=duplicate-code
-import asyncio
 from typing import Any
 from uuid import UUID
 
@@ -166,7 +165,7 @@ class RoleDAO:
         record = await self.db.fetch(query, name, model=RoleData, fetch_row=True)
         return record
 
-    @cache_invalidate(key_pattern=RedisKeys.ROLE_FIELD_ALL, hash_key=RedisKeys.ROLES_CACHE)
+    @cache_invalidate(hash_key=RedisKeys.ROLES_CACHE, invalidate_hash=True)
     async def create_role(self, role_create: RoleCreate) -> RoleData:
         """
         Create a new role.
@@ -201,9 +200,7 @@ class RoleDAO:
             raise ValueError("Failed to fetch created role")
         return role
 
-    @cache_invalidate(
-        key_pattern=[RedisKeys.ROLE_FIELD_ALL, RedisKeys.ROLE_FIELD_BY_ID], hash_key=RedisKeys.ROLES_CACHE
-    )
+    @cache_invalidate(hash_key=RedisKeys.ROLES_CACHE, invalidate_hash=True)
     async def update_role(self, role_id: UUID, role_update: RoleUpdate) -> RoleData | None:
         """
         Update a role.
@@ -255,21 +252,20 @@ class RoleDAO:
         # Return updated role with permissions
         return await self._get_role_by_id(role_id)
 
-    @cache_invalidate(
-        key_pattern=[RedisKeys.ROLE_FIELD_ALL, RedisKeys.ROLE_FIELD_BY_ID], hash_key=RedisKeys.ROLES_CACHE
-    )
+    @cache_invalidate(hash_key=RedisKeys.ROLES_CACHE, invalidate_hash=True)
     async def delete_role(self, role_id: UUID) -> None:
         """
         Delete a role and its associated permissions.
         Args:
             role_id: Role ID.
         """
-        # Delete associated permissions and the role concurrently
-        await asyncio.gather(
-            self.db.execute("DELETE FROM role_permissions WHERE role_id = $1", role_id),
-            self.db.execute("DELETE FROM roles WHERE id = $1", role_id),
-            self.db.execute("UPDATE users SET token_version = token_version + 1 WHERE id = $1", role_id),
-        )
+        async with self.db.transaction() as conn:
+            await conn.execute(
+                "UPDATE users SET token_version = token_version + 1 "
+                "WHERE id IN (SELECT user_id FROM user_roles WHERE role_id = $1)",
+                role_id,
+            )
+            await conn.execute("DELETE FROM roles WHERE id = $1", role_id)
 
     async def get_all_permissions(self, limit: int = 20, cursor: UUID | None = None) -> list[PermissionData]:
         """

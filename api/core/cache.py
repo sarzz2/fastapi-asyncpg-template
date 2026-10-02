@@ -163,15 +163,17 @@ def cache(
 
 
 def cache_invalidate(
-    key_pattern: str | list[str],
+    key_pattern: str | list[str] | None = None,
     hash_key: str | None = None,
+    invalidate_hash: bool = False,
 ) -> Callable[[Callable[P, Awaitable[R]]], Callable[P, Awaitable[R]]]:
     """
     Decorator to invalidate cache keys after function execution.
 
     Args:
         key_pattern: The Redis key pattern(s) to delete. Can be a single string or list.
-        hash_key: Optional. If provided, deletes fields from this Hash.
+        hash_key: Optional. If provided, deletes fields from this Hash (or entire hash if invalidate_hash=True).
+        invalidate_hash: Optional. If True and hash_key is provided, deletes the entire Redis Hash.
     Returns:
         Callable: The decorated function.
     """
@@ -184,23 +186,27 @@ def cache_invalidate(
 
             # 2. Invalidate Cache
             try:
-                patterns = [key_pattern] if isinstance(key_pattern, str) else key_pattern
+                if invalidate_hash and hash_key:
+                    await redis_client.client.delete(hash_key)
+                    logger.debug("Invalidated entire hash %s", hash_key)
+                elif key_pattern:
+                    patterns = [key_pattern] if isinstance(key_pattern, str) else key_pattern
 
-                keys_to_delete = []
-                for pattern in patterns:
-                    try:
-                        k = _generate_key(pattern, func, args, kwargs)
-                        keys_to_delete.append(k)
-                    except ValueError as e:
-                        logger.error(str(e))
+                    keys_to_delete = []
+                    for pattern in patterns:
+                        try:
+                            k = _generate_key(pattern, func, args, kwargs)
+                            keys_to_delete.append(k)
+                        except ValueError as e:
+                            logger.error(str(e))
 
-                if keys_to_delete:
-                    if hash_key:
-                        await redis_client.client.hdel(hash_key, *keys_to_delete)
-                        logger.debug("Invalidated hash fields %s in %s", keys_to_delete, hash_key)
-                    else:
-                        await redis_client.client.delete(*keys_to_delete)
-                        logger.debug("Invalidated keys %s", keys_to_delete)
+                    if keys_to_delete:
+                        if hash_key:
+                            await redis_client.client.hdel(hash_key, *keys_to_delete)
+                            logger.debug("Invalidated hash fields %s in %s", keys_to_delete, hash_key)
+                        else:
+                            await redis_client.client.delete(*keys_to_delete)
+                            logger.debug("Invalidated keys %s", keys_to_delete)
 
             except Exception as e:  # pylint: disable=broad-except
                 logger.warning("Error invalidating cache: %s", e)

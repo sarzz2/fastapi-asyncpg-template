@@ -7,7 +7,7 @@ class RedisKeys:
 
     # Roles Cache (Hash)
     ROLES_CACHE = "roles_cache"
-    ROLE_FIELD_ALL = "all"
+    ROLE_FIELD_ALL = "all:{limit}:{cursor}"
     ROLE_FIELD_BY_ID = "{role_id}"
 
     # App Version Cache (String)

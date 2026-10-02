@@ -222,8 +222,7 @@ class DeadLetterTaskDAO:
             query = "DELETE FROM dead_letter_tasks WHERE task_name = $1;"
             res = await self.db.execute(query, task_name)
         else:
-            query = "DELETE FROM dead_letter_tasks;"
-            res = await self.db.execute(query)
+            return 0
 
         try:
             return int(res.split()[-1])

@@ -183,7 +183,7 @@ def validate_webhook_url(url: str) -> None:
             detail="Could not resolve webhook hostname.",
         ) from exc
 
-    if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved:
+    if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_reserved or ip_obj.is_unspecified:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Webhook URL points to a forbidden private or local network address.",

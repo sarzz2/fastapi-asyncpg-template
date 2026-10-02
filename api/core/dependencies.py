@@ -95,6 +95,14 @@ async def get_sudo_user(
         if user is None:
             logger.warning("Sudo user not found for valid token: user_id=%s", token_data.id)
             raise credentials_exception
+        if user.token_version != token_data.token_version:
+            logger.warning(
+                "Token version mismatch for sudo user %s. Token: %s, DB: %s",
+                user.id,
+                token_data.token_version,
+                user.token_version,
+            )
+            raise credentials_exception
         if token_data.is_impersonation:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

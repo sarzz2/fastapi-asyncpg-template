@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import time
@@ -111,8 +112,10 @@ def send_webhook_event(
         body_bytes = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            for endpoint in endpoints:
-                await _deliver_to_endpoint(client, endpoint, timestamp, body_bytes)
+            await asyncio.gather(
+                *[_deliver_to_endpoint(client, endpoint, timestamp, body_bytes) for endpoint in endpoints],
+                return_exceptions=True,
+            )
 
     coro = _deliver()
     try:

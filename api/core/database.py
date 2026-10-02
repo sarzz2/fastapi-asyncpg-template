@@ -599,18 +599,17 @@ class DataBase(BaseModel):
         impersonator_id = CURRENT_IMPERSONATOR_ID.get() or ""
         if isinstance(pool, asyncpg.Pool):
             async with pool.acquire() as conn:
-                if actor_id or client_ip or impersonator_id:
-                    try:
-                        await conn.execute(
-                            "SELECT set_config('app.actor_id', $1, false), "
-                            "set_config('app.client_ip', $2, false), "
-                            "set_config('app.impersonator_id', $3, false)",
-                            actor_id,
-                            client_ip,
-                            impersonator_id,
-                        )
-                    except Exception as exc:  # pylint: disable=broad-except
-                        logger.debug("Could not set session settings for audit: %s", exc)
+                try:
+                    await conn.execute(
+                        "SELECT set_config('app.actor_id', $1, false), "
+                        "set_config('app.client_ip', $2, false), "
+                        "set_config('app.impersonator_id', $3, false)",
+                        actor_id,
+                        client_ip,
+                        impersonator_id,
+                    )
+                except (asyncpg.PostgresError, asyncpg.InterfaceError) as exc:
+                    logger.debug("Could not set session settings for audit: %s", exc)
 
                 record = await conn.fetchrow(query, *args, timeout=timeout)
         else:
@@ -711,29 +710,30 @@ class DataBase(BaseModel):
         target = cls.write_pool if con is None else con
         if isinstance(target, asyncpg.Pool):
             async with target.acquire() as connection:
-                if actor_id or client_ip or impersonator_id:
-                    try:
-                        await connection.execute(
-                            "SELECT set_config('app.actor_id', $1, false), "
-                            "set_config('app.client_ip', $2, false), "
-                            "set_config('app.impersonator_id', $3, false)",
-                            actor_id,
-                            client_ip,
-                            impersonator_id,
-                        )
-                    except Exception as exc:  # pylint: disable=broad-except
-                        logger.debug("Could not set session settings for audit: %s", exc)
-                result = await connection.execute(query, *args, timeout=timeout)
-        else:
-            if actor_id or client_ip:
                 try:
-                    await target.execute(
-                        "SELECT set_config('app.actor_id', $1, false), set_config('app.client_ip', $2, false)",
+                    await connection.execute(
+                        "SELECT set_config('app.actor_id', $1, false), "
+                        "set_config('app.client_ip', $2, false), "
+                        "set_config('app.impersonator_id', $3, false)",
                         actor_id,
                         client_ip,
+                        impersonator_id,
                     )
-                except Exception as exc:  # pylint: disable=broad-except
+                except (asyncpg.PostgresError, asyncpg.InterfaceError) as exc:
                     logger.debug("Could not set session settings for audit: %s", exc)
+                result = await connection.execute(query, *args, timeout=timeout)
+        else:
+            try:
+                await target.execute(
+                    "SELECT set_config('app.actor_id', $1, false), "
+                    "set_config('app.client_ip', $2, false), "
+                    "set_config('app.impersonator_id', $3, false)",
+                    actor_id,
+                    client_ip,
+                    impersonator_id,
+                )
+            except (asyncpg.PostgresError, asyncpg.InterfaceError) as exc:
+                logger.debug("Could not set session settings for audit: %s", exc)
             result = await target.execute(query, *args, timeout=timeout)
 
         duration = time.perf_counter() - start_time
@@ -787,6 +787,23 @@ class DataBase(BaseModel):
             including number of healthy pools, total pools, and average latency.
         """
         results = {}
+        if cls.write_pool:
+            is_healthy = True
+            latency: float | None = None
+            try:
+                t0 = time.perf_counter()
+                async with cls.write_pool.acquire() as conn:
+                    await conn.fetchval("SELECT 1")
+                latency = time.perf_counter() - t0
+            except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError):
+                is_healthy = False
+
+            results["primary_write"] = {
+                "healthy_pools": 1 if is_healthy else 0,
+                "total_pools": 1,
+                "avg_latency": latency,
+            }
+
         for region, metas in cls.read_pools_by_region.items():
             results[region] = {
                 "healthy_pools": sum(1 for m in metas if m.healthy),

@@ -3,55 +3,90 @@ import importlib
 import logging
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
-from redis.asyncio.client import PubSub
+from redis.exceptions import RedisError, ResponseError
 
 from api.core.events.constants import EventNames
 from api.core.events.schema import ApplicationEvent
-from api.core.redis import listen_to_pubsub, redis_event_bus
+from api.core.redis import redis_event_bus
 
 logger = logging.getLogger("fastapi")
 
 
 class EventBus:
     """
-    A lightweight, in-memory event bus for decoupling application components.
+    A persistent, distributed event bus built on Redis Streams and Consumer Groups.
+    Provides at-least-once message durability, load-balanced consumer dispatch,
+    and automatic memory management via rolling stream trimming.
     """
+
+    STREAM_NAME: str = "event_bus:stream"
+    GROUP_NAME: str = "event_bus:workers"
+    MAX_STREAM_LEN: int = 50000
 
     def __init__(self) -> None:
         self._subscribers: dict[str, list[Callable[[ApplicationEvent], Any]]] = {}
-        self.pubsub: PubSub | None = None
         self.listener_task: asyncio.Task | None = None
+        self.consumer_name: str = f"worker:{uuid4()}"
+        self._running: bool = False
 
     async def start(self) -> None:
-        """Starts the Redis Pub/Sub listener."""
-        if self.pubsub is None:
-            self.pubsub = redis_event_bus.client.pubsub()
+        """Starts the Redis Stream consumer group listener."""
+        self._running = True
+        try:
+            await redis_event_bus.client.xgroup_create(
+                name=self.STREAM_NAME,
+                groupname=self.GROUP_NAME,
+                id="$",
+                mkstream=True,
+            )
+        except ResponseError as e:
+            if "BUSYGROUP" not in str(e):
+                logger.error("Could not initialize Redis Stream group: %s", e)
 
-        if self.pubsub:
-            await self.pubsub.subscribe("event_bus:broadcast")
-            self.listener_task = asyncio.create_task(self._redis_listener())
-            logger.info("EventBus Redis listener started.")
+        self.listener_task = asyncio.create_task(self._redis_listener())
+        logger.info("EventBus Redis Stream listener started (consumer: %s).", self.consumer_name)
 
     async def stop(self) -> None:
-        """Stops the Redis Pub/Sub listener."""
-        if self.pubsub:
-            await self.pubsub.unsubscribe("event_bus:broadcast")
-            await self.pubsub.aclose()
+        """Stops the Redis Stream listener."""
+        self._running = False
         if self.listener_task:
             self.listener_task.cancel()
-        logger.info("EventBus Redis listener stopped.")
+            try:
+                await self.listener_task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+        logger.info("EventBus Redis Stream listener stopped.")
 
     async def _redis_listener(self) -> None:
-        """Listens to Redis for broadcasted events."""
-        try:
-            async for channel, data in listen_to_pubsub(self.pubsub):
-                if channel == "event_bus:broadcast":
-                    await self._process_remote_event(data)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:  # pylint: disable=broad-except
-            logger.error("EventBus Redis listener error: %s", e)
+        """Listens to the Redis Stream using consumer groups."""
+        while self._running:
+            try:
+                entries: Any = await redis_event_bus.client.xreadgroup(
+                    groupname=self.GROUP_NAME,
+                    consumername=self.consumer_name,
+                    streams={self.STREAM_NAME: ">"},
+                    count=10,
+                    block=2000,
+                )
+                if not entries:
+                    continue
+
+                for _stream_name, messages in entries:
+                    for message_id, message_data in messages:
+                        raw_data = message_data.get("data")
+                        if raw_data:
+                            await self._process_remote_event(raw_data)
+                        await redis_event_bus.client.xack(self.STREAM_NAME, self.GROUP_NAME, message_id)
+            except asyncio.CancelledError:
+                break
+            except (RedisError, ConnectionError, OSError) as err:
+                logger.warning("EventBus Redis Stream listener error: %s", err)
+                await asyncio.sleep(1)
+            except Exception as e:  # pylint: disable=broad-except
+                logger.error("EventBus unexpected listener error: %s", e)
+                await asyncio.sleep(1)
 
     def on(self, event_name: EventNames | str) -> Callable:
         """
@@ -119,16 +154,21 @@ class EventBus:
 
     async def publish(self, event: ApplicationEvent) -> None:
         """
-        Publish an event to the Redis EventBus asynchronously.
+        Publish an event to the Redis EventBus Stream asynchronously.
         Args:
             event: The event to publish.
         """
         payload = event.model_dump_json()
-        await redis_event_bus.client.publish("event_bus:broadcast", payload)
-        logger.debug("Published %s to Redis EventBus.", event.event_name)
+        await redis_event_bus.client.xadd(
+            self.STREAM_NAME,
+            {"data": payload, "event_name": event.event_name, "event_id": str(event.event_id)},
+            maxlen=self.MAX_STREAM_LEN,
+            approximate=True,
+        )
+        logger.debug("Published %s to Redis Stream %s.", event.event_name, self.STREAM_NAME)
 
     async def _process_remote_event(self, raw_data: str) -> None:
-        """Processes an event received from Redis, using a lock to ensure exactly-once execution."""
+        """Processes an event received from Redis Stream with idempotent deduplication."""
         try:
             event = ApplicationEvent.model_validate_json(raw_data)
 
