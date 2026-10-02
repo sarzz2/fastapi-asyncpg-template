@@ -143,11 +143,10 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
             host=settings.REDIS_HOST, port=settings.REDIS_PORT, db=settings.REDIS_DB_EVENT_BUS, decode_responses=True
         )
 
-        # Clean reset of pubsub listeners
+        # Clean reset of event bus and notification listeners
         await event_bus.stop()
         await connection_manager.stop()
 
-        event_bus.pubsub = redis_event_bus.client.pubsub()
         connection_manager.pubsub = redis_socket.client.pubsub()
         event_bus.listener_task = None
         connection_manager.listener_task = None
