@@ -237,3 +237,70 @@ async def test_database_error_handling() -> None:
     DataBase.read_pools_by_region = {}
     with pytest.raises(RuntimeError):
         await DataBase.fetch("SELECT 1")
+
+
+@pytest.mark.asyncio
+async def test_get_table_approximate_count_invalid_table() -> None:
+    """Test validation of table names against SQL injection."""
+    with pytest.raises(ValueError, match="Invalid table name"):
+        await DataBase.get_table_approximate_count("invalid table; name")
+
+
+@pytest.mark.asyncio
+async def test_get_table_approximate_count_timescaledb_success() -> None:
+    """Test get_table_approximate_count using TimescaleDB approximate_row_count."""
+    DataBase._has_timescaledb_approx_count = None
+    with patch.object(DataBase, "fetchval", new_callable=AsyncMock) as mock_fetchval:
+        mock_fetchval.side_effect = ["approximate_row_count", 42]
+        count = await DataBase.get_table_approximate_count("audit_logs")
+        assert count == 42
+        assert DataBase._has_timescaledb_approx_count is True
+        assert mock_fetchval.call_count == 2
+        mock_fetchval.assert_any_call("SELECT to_regproc('approximate_row_count')")
+        mock_fetchval.assert_any_call("SELECT approximate_row_count('audit_logs')")
+
+
+@pytest.mark.asyncio
+async def test_get_table_approximate_count_fallback_reltuples() -> None:
+    """Test fallback to PostgreSQL pg_class reltuples when TimescaleDB is absent."""
+    DataBase._has_timescaledb_approx_count = None
+    with patch.object(DataBase, "fetchval", new_callable=AsyncMock) as mock_fetchval:
+        # 1. to_regproc -> None (TimescaleDB not installed)
+        # 2. reltuples -> 1500
+        mock_fetchval.side_effect = [None, 1500]
+        count = await DataBase.get_table_approximate_count("audit_logs")
+        assert count == 1500
+        assert DataBase._has_timescaledb_approx_count is False
+
+
+@pytest.mark.asyncio
+async def test_get_table_approximate_count_fallback_exact_count() -> None:
+    """Test fallback to exact COUNT(*) when TimescaleDB is absent and table is unanalyzed."""
+    DataBase._has_timescaledb_approx_count = False
+    with patch.object(DataBase, "fetchval", new_callable=AsyncMock) as mock_fetchval:
+        # 1. reltuples -> -1 (unanalyzed)
+        # 2. exact count -> 5
+        mock_fetchval.side_effect = [-1, 5]
+        count = await DataBase.get_table_approximate_count("audit_logs")
+        assert count == 5
+        mock_fetchval.assert_any_call("SELECT COUNT(*) FROM audit_logs")
+
+
+@pytest.mark.asyncio
+async def test_get_table_approximate_count_timescaledb_runtime_failure() -> None:
+    """Test fallback when TimescaleDB approximate_row_count raises an error at runtime."""
+    import asyncpg
+
+    DataBase._has_timescaledb_approx_count = True
+    with patch.object(DataBase, "fetchval", new_callable=AsyncMock) as mock_fetchval:
+        # 1. approximate_row_count -> raises UndefinedFunctionError
+        # 2. reltuples -> None
+        # 3. exact count -> 10
+        mock_fetchval.side_effect = [
+            asyncpg.UndefinedFunctionError("function approximate_row_count does not exist"),
+            None,
+            10,
+        ]
+        count = await DataBase.get_table_approximate_count("audit_logs")
+        assert count == 10
+        assert DataBase._has_timescaledb_approx_count is False

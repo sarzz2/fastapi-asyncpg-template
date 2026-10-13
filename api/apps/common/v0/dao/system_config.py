@@ -24,8 +24,7 @@ class SystemConfigDAO:
         if res is None:
             # Fallback guarantee: seed if missing
             seed_query = (
-                "INSERT INTO system_configurations (id) VALUES (1) "
-                "ON CONFLICT (id) DO UPDATE SET id = 1 RETURNING *;"
+                "INSERT INTO system_configurations (id) VALUES (1) ON CONFLICT (id) DO UPDATE SET id = 1 RETURNING *;"
             )
             res = await self.db.write(seed_query, model=SystemConfigData)
         return res

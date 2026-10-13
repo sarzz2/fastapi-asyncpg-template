@@ -120,6 +120,7 @@ class DataBase(BaseModel):
     # overall tasks
     _health_task: ClassVar[asyncio.Task | None] = None
     _region_priority: ClassVar[list[str]] = []
+    _has_timescaledb_approx_count: ClassVar[bool | None] = None
 
     @classmethod
     async def create_pool(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -850,6 +851,61 @@ class DataBase(BaseModel):
                 for meta in metas
             ]
         return stats
+
+    @classmethod
+    async def get_table_approximate_count(cls, table_name: str) -> int:
+        """Get approximate or exact row count for a table.
+
+        Attempts TimescaleDB approximate_row_count first if available.
+        If TimescaleDB is absent, fails, or the table is not a hypertable,
+        falls back to PostgreSQL catalog estimation (pg_class.reltuples) or exact COUNT(*).
+
+        Args:
+            table_name: The name of the table to count.
+
+        Returns:
+            int: Approximate or exact row count (never negative).
+        """
+        if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_]*$", table_name):
+            raise ValueError(f"Invalid table name: {table_name}")
+
+        if cls._has_timescaledb_approx_count is not False:
+            try:
+                if cls._has_timescaledb_approx_count is None:
+                    has_func = await cls.fetchval("SELECT to_regproc('approximate_row_count')")
+                    cls._has_timescaledb_approx_count = has_func is not None
+
+                if cls._has_timescaledb_approx_count:
+                    val = await cls.fetchval(f"SELECT approximate_row_count('{table_name}')")  # nosec B608
+                    if val is not None:
+                        return max(0, int(val))
+            except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as exc:
+                if isinstance(exc, asyncpg.UndefinedFunctionError):
+                    cls._has_timescaledb_approx_count = False
+                logger.debug(
+                    "TimescaleDB approximate_row_count failed for table %s (%s); falling back to PostgreSQL count.",
+                    table_name,
+                    exc,
+                )
+
+        # Fallback 1: PostgreSQL catalog estimation (fast O(1) for large tables)
+        try:
+            val = await cls.fetchval(
+                "SELECT reltuples::bigint FROM pg_class WHERE relname = $1",
+                table_name,
+            )
+            if val is not None and int(val) > 0:
+                return int(val)
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError):
+            pass
+
+        # Fallback 2: Exact COUNT(*) (safe for small or unanalyzed tables)
+        try:
+            val = await cls.fetchval(f"SELECT COUNT(*) FROM {table_name}")  # nosec B608
+            return max(0, int(val)) if val is not None else 0
+        except (asyncpg.PostgresError, asyncpg.InterfaceError, OSError) as exc:
+            logger.error("Failed to count rows for table %s: %s", table_name, exc)
+            return 0
 
 
 async def get_db() -> AsyncGenerator[type[DataBase], None]:

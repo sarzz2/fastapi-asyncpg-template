@@ -4,6 +4,7 @@ Admin views for Audit Log inspection.
 
 import contextlib
 import json
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -18,6 +19,8 @@ from starlette_admin.filters import FilterGroup, FilterRule
 from api.core.database import CustomRecord, DataBase
 from api.utils.admin_filters import extract_date_range
 from api.utils.admin_view import BaseAppAdminView
+
+logger = logging.getLogger(__name__)
 
 
 def _build_search_clause(params: list[Any], q: str | None) -> str | None:
@@ -297,7 +300,8 @@ class AuditLogAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count audit logs using TimescaleDB approximate row count.
+        Count audit logs using TimescaleDB approximate row count if available,
+        falling back to PostgreSQL catalog estimation or exact count.
 
         Args:
             request (Request): The incoming request.
@@ -307,7 +311,20 @@ class AuditLogAdminView(BaseAppAdminView):
         Returns:
             int: Approximate total row count.
         """
-        return int(await self.db.fetchval("SELECT approximate_row_count('audit_logs')"))
+        has_rules = bool(filters and hasattr(filters, "rules") and filters.rules)
+        if (q and q.strip()) or has_rules:
+            try:
+                query, params = self._build_filter_query(filters, limit=0, skip=0, q=q)
+                where_clause = query.split("WHERE", 1)[1].split("ORDER BY", 1)[0].strip()
+                filter_params = params[:-2]
+                base_query = "SELECT COUNT(*) FROM audit_logs a LEFT JOIN users u ON a.actor_id = u.id WHERE"
+                count_query = f"{base_query} {where_clause}"  # nosec B608
+                val = await self.db.fetchval(count_query, *filter_params)
+                return int(val) if val is not None else 0
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("Filtered audit log count failed: %s; falling back to table count.", exc)
+
+        return await self.db.get_table_approximate_count("audit_logs")
 
     async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
         """

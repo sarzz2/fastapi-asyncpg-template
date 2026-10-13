@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -12,6 +13,8 @@ from starlette_admin.filters import FilterGroup, FilterRule
 from api.core.database import CustomRecord, DataBase
 from api.utils.admin_filters import extract_date_range
 from api.utils.admin_view import BaseAppAdminView
+
+logger = logging.getLogger(__name__)
 
 
 class WebhookLogAdminView(BaseAppAdminView):
@@ -154,8 +157,23 @@ class WebhookLogAdminView(BaseAppAdminView):
         q: str | None = None,
         filters: FilterGroup | None = None,
     ) -> int:
-        val = await self.db.fetchval("SELECT approximate_row_count('webhook_logs')")
-        return int(val) if val is not None else 0
+        """
+        Count webhook logs using TimescaleDB approximate row count if available,
+        falling back to PostgreSQL catalog estimation or exact count.
+        """
+        has_rules = bool(filters and hasattr(filters, "rules") and filters.rules)
+        if (q and q.strip()) or has_rules:
+            try:
+                query, params = self._build_filter_query(filters, limit=0, skip=0, q=q)
+                where_clause = query.split("WHERE", 1)[1].split("ORDER BY", 1)[0].strip()
+                filter_params = params[:-2]
+                count_query = f"SELECT COUNT(*) FROM webhook_logs WHERE {where_clause}"  # nosec B608
+                val = await self.db.fetchval(count_query, *filter_params)
+                return int(val) if val is not None else 0
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.debug("Filtered webhook log count failed: %s; falling back to table count.", exc)
+
+        return await self.db.get_table_approximate_count("webhook_logs")
 
     async def find_by_pk(self, request: Request, pk: Any) -> Any | None:
         query = "SELECT * FROM webhook_logs WHERE id = $1 ORDER BY created_at DESC LIMIT 1"

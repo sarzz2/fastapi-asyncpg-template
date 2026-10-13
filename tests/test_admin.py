@@ -2,13 +2,15 @@
 Tests for Starlette-Admin integration and custom RoleAdminView.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 from starlette_admin.auth import AdminUser
 
+from api.apps.common.admin_views.audit_log import AuditLogAdminView
+from api.apps.common.admin_views.webhook_log import WebhookLogAdminView
 from api.main import app
 
 
@@ -142,3 +144,71 @@ async def test_dead_letter_task_admin_view_list_route() -> None:
             response = await client.get("/admin/dead_letter_task/list")
             assert response.status_code == 200
             assert "Dead Letter Queue" in response.text
+
+
+@pytest.mark.asyncio
+async def test_audit_log_admin_view_list_route() -> None:
+    """Verify that authenticated request to /admin/audit_log/list renders list page."""
+    with (
+        patch("api.core.admin.AdminAuthProvider.authenticate", new_callable=AsyncMock) as mock_auth,
+        patch("api.apps.common.admin_views.audit_log.AuditLogAdminView.count", new_callable=AsyncMock) as mock_count,
+        patch(
+            "api.apps.common.admin_views.audit_log.AuditLogAdminView.find_all", new_callable=AsyncMock
+        ) as mock_find_all,
+    ):
+        mock_auth.return_value = AdminUser(username="Super Admin")
+        mock_count.return_value = 0
+        mock_find_all.return_value = []
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/admin/audit_log/list")
+            assert response.status_code == 200
+            assert "Audit Logs" in response.text
+
+
+@pytest.mark.asyncio
+async def test_webhook_log_admin_view_list_route() -> None:
+    """Verify that authenticated request to /admin/webhook_log/list renders list page."""
+    with (
+        patch("api.core.admin.AdminAuthProvider.authenticate", new_callable=AsyncMock) as mock_auth,
+        patch(
+            "api.apps.common.admin_views.webhook_log.WebhookLogAdminView.count", new_callable=AsyncMock
+        ) as mock_count,
+        patch(
+            "api.apps.common.admin_views.webhook_log.WebhookLogAdminView.find_all", new_callable=AsyncMock
+        ) as mock_find_all,
+    ):
+        mock_auth.return_value = AdminUser(username="Super Admin")
+        mock_count.return_value = 0
+        mock_find_all.return_value = []
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/admin/webhook_log/list")
+            assert response.status_code == 200
+            assert "Webhook Logs" in response.text
+
+
+@pytest.mark.asyncio
+async def test_audit_log_admin_view_count_uses_approximate_count() -> None:
+    """Verify that AuditLogAdminView.count delegates to get_table_approximate_count."""
+    mock_db = MagicMock()
+    mock_db.get_table_approximate_count = AsyncMock(return_value=123)
+    view = AuditLogAdminView(db=mock_db)
+
+    mock_request = MagicMock()
+    count = await view.count(mock_request)
+    assert count == 123
+    mock_db.get_table_approximate_count.assert_called_once_with("audit_logs")
+
+
+@pytest.mark.asyncio
+async def test_webhook_log_admin_view_count_uses_approximate_count() -> None:
+    """Verify that WebhookLogAdminView.count delegates to get_table_approximate_count."""
+    mock_db = MagicMock()
+    mock_db.get_table_approximate_count = AsyncMock(return_value=456)
+    view = WebhookLogAdminView(db=mock_db)
+
+    mock_request = MagicMock()
+    count = await view.count(mock_request)
+    assert count == 456
+    mock_db.get_table_approximate_count.assert_called_once_with("webhook_logs")

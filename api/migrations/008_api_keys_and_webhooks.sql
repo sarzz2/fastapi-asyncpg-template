@@ -64,11 +64,15 @@ BEGIN
             RAISE NOTICE 'create extension timescaledb error: %', SQLERRM;
         END;
     END IF;
-    BEGIN
-        PERFORM create_hypertable('webhook_logs', 'created_at', if_not_exists => TRUE);
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'create_hypertable error: %', SQLERRM;
-    END;
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+        BEGIN
+            PERFORM create_hypertable('webhook_logs', 'created_at', if_not_exists => TRUE);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'create_hypertable error: %', SQLERRM;
+        END;
+    ELSE
+        RAISE NOTICE 'timescaledb extension not installed; skipping hypertable creation for webhook_logs';
+    END IF;
 END $$;
 
 CREATE INDEX IF NOT EXISTS idx_webhook_logs_direction ON webhook_logs (direction, created_at DESC);

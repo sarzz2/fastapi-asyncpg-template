@@ -22,11 +22,15 @@ BEGIN
             RAISE NOTICE 'create extension timescaledb error: %', SQLERRM;
         END;
     END IF;
-    BEGIN
-        PERFORM create_hypertable('audit_logs', 'created_at', if_not_exists => TRUE);
-    EXCEPTION WHEN OTHERS THEN
-        RAISE NOTICE 'create_hypertable error: %', SQLERRM;
-    END;
+    IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
+        BEGIN
+            PERFORM create_hypertable('audit_logs', 'created_at', if_not_exists => TRUE);
+        EXCEPTION WHEN OTHERS THEN
+            RAISE NOTICE 'create_hypertable error: %', SQLERRM;
+        END;
+    ELSE
+        RAISE NOTICE 'timescaledb extension not installed; skipping hypertable creation for audit_logs';
+    END IF;
 END $$;
 
 -- Create indices
