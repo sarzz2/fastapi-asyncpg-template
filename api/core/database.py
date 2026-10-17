@@ -5,6 +5,7 @@ import logging
 import re
 import secrets
 import time
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any, AsyncGenerator, ClassVar, Literal, TypeVar, cast, overload
@@ -25,13 +26,14 @@ from api.core.metrics import (
 from api.middlewares.region_middleware import CLIENT_REGION
 
 BM = TypeVar("BM", bound="DataBase")
+F = TypeVar("F", bound=Callable[..., Any])
 logger = logging.getLogger("fastapi")
 
 
 T = TypeVar("T", bound=BaseModel)
 
 _clean_query_regex = re.compile(r"\s+")
-_db_retry_strategy = retry(
+_db_retry = retry(
     stop=stop_after_attempt(3),
     wait=wait_fixed(0.5),
     retry=retry_if_exception_type(
@@ -39,6 +41,11 @@ _db_retry_strategy = retry(
     ),
     reraise=True,
 )
+
+
+def _db_retry_strategy(fn: F) -> F:
+    """Apply retry strategy to a database operation while preserving its type signature."""
+    return cast(F, _db_retry(fn))
 
 
 class CustomRecord(Record):
