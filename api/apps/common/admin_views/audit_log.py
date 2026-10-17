@@ -243,25 +243,32 @@ class AuditLogAdminView(BaseAppAdminView):
         params.extend([limit, skip])
         where_clause = " AND ".join(conditions)
 
-        query = f"""
-            SELECT
-                a.id,
-                a.actor_id,
-                COALESCE(NULLIF(u.full_name, ''), u.username, 'Unknown') AS actor_name,
-                u.username AS actor_username,
-                u.email AS actor_email,
-                a.action,
-                a.resource,
-                a.resource_id,
-                a.details,
-                a.ip_address,
-                a.created_at
-            FROM audit_logs a
-            LEFT JOIN users u ON a.actor_id = u.id
-            WHERE {where_clause}
-            ORDER BY a.created_at DESC
-            LIMIT ${len(params) - 1} OFFSET ${len(params)}
-        """  # nosec B608
+        query = " ".join(
+            [
+                """
+                SELECT
+                    a.id,
+                    a.actor_id,
+                    COALESCE(NULLIF(u.full_name, ''), u.username, 'Unknown') AS actor_name,
+                    u.username AS actor_username,
+                    u.email AS actor_email,
+                    a.action,
+                    a.resource,
+                    a.resource_id,
+                    a.details,
+                    a.ip_address,
+                    a.created_at
+                FROM audit_logs a
+                LEFT JOIN users u ON a.actor_id = u.id
+                WHERE
+                """,
+                where_clause,
+                "ORDER BY a.created_at DESC LIMIT",
+                f"${len(params) - 1}",
+                "OFFSET",
+                f"${len(params)};",
+            ]
+        )
         return query, params
 
     async def find_all(
@@ -317,8 +324,12 @@ class AuditLogAdminView(BaseAppAdminView):
                 query, params = self._build_filter_query(filters, limit=0, skip=0, q=q)
                 where_clause = query.split("WHERE", 1)[1].split("ORDER BY", 1)[0].strip()
                 filter_params = params[:-2]
-                base_query = "SELECT COUNT(*) FROM audit_logs a LEFT JOIN users u ON a.actor_id = u.id WHERE"
-                count_query = f"{base_query} {where_clause}"  # nosec B608
+                count_query = " ".join(
+                    [
+                        "SELECT COUNT(*) FROM audit_logs a LEFT JOIN users u ON a.actor_id = u.id WHERE",
+                        where_clause,
+                    ]
+                )
                 val = await self.db.fetchval(count_query, *filter_params)
                 return int(val) if val is not None else 0
             except Exception as exc:  # pylint: disable=broad-except

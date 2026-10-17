@@ -32,6 +32,67 @@ class PeriodicTaskDAO:
         """
         return await self.db.fetch(query, model=PeriodicTaskResponse, fetch_row=False)
 
+    async def list_tasks_paginated(
+        self,
+        limit: int = 100,
+        skip: int = 0,
+        search: str | None = None,
+    ) -> list[PeriodicTaskResponse]:
+        """
+        Retrieve paginated list of periodic tasks with offset pagination and optional search.
+        """
+        if search and search.strip():
+            query = (
+                "SELECT * FROM periodic_tasks "
+                "WHERE (name ILIKE $1 OR task ILIKE $1) "
+                "ORDER BY created_at DESC LIMIT $2 OFFSET $3;"
+            )
+            records = await self.db.fetch(
+                query,
+                f"%{search.strip()}%",
+                limit,
+                skip,
+                model=PeriodicTaskResponse,
+                fetch_row=False,
+            )
+        else:
+            query = "SELECT * FROM periodic_tasks ORDER BY created_at DESC LIMIT $1 OFFSET $2;"
+            records = await self.db.fetch(query, limit, skip, model=PeriodicTaskResponse, fetch_row=False)
+        return records or []
+
+    async def count_tasks(self, search: str | None = None) -> int:
+        """
+        Count total number of periodic task records with optional search.
+        """
+        if search and search.strip():
+            val = await self.db.fetchval(
+                "SELECT COUNT(*) FROM periodic_tasks WHERE (name ILIKE $1 OR task ILIKE $1);",
+                f"%{search.strip()}%",
+            )
+        else:
+            val = await self.db.fetchval("SELECT COUNT(*) FROM periodic_tasks;")
+        return int(val) if val else 0
+
+    async def get_by_ids(self, task_ids: list[UUID]) -> list[PeriodicTaskResponse]:
+        """
+        Find multiple periodic tasks by primary keys in a single bulk query.
+        """
+        if not task_ids:
+            return []
+        query = "SELECT * FROM periodic_tasks WHERE id = ANY($1::uuid[]) ORDER BY created_at DESC;"
+        records = await self.db.fetch(query, task_ids, model=PeriodicTaskResponse, fetch_row=False)
+        return records or []
+
+    async def delete_tasks(self, task_ids: list[UUID]) -> int:
+        """
+        Delete multiple periodic tasks by primary keys in a single bulk query.
+        """
+        if not task_ids:
+            return 0
+        query = "DELETE FROM periodic_tasks WHERE id = ANY($1::uuid[]) RETURNING id;"
+        rows = await self.db.fetch(query, task_ids, fetch_row=False)
+        return len(rows) if rows else 0
+
     async def get_task_by_id(self, task_id: UUID) -> PeriodicTaskResponse | None:
         """
         Fetch a periodic task by UUID as a Pydantic model.

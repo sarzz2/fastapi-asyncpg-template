@@ -1,3 +1,4 @@
+import contextlib
 from uuid import UUID
 
 from fastapi import Depends
@@ -6,6 +7,7 @@ from api.apps.common.constants import API_KEY_CACHE_TTL_SECONDS
 from api.apps.common.v0.schemas.api_key import ApiKeyCreateInternal, ApiKeyData, ApiKeyUpdate
 from api.core.cache import cache
 from api.core.database import DataBase, get_db
+from api.core.redis import redis_client
 from api.shared.redis_keys import RedisKeys
 
 
@@ -181,6 +183,37 @@ class ApiKeyDAO:
         query = "DELETE FROM api_keys WHERE id = $1"
         res = await self.db.execute(query, key_id)
         return " 0" not in res
+
+    async def delete_api_keys(self, key_ids: list[UUID]) -> int:
+        """
+        Delete multiple API keys in bulk and invalidate Redis caches.
+
+        Args:
+            key_ids: List of UUIDs to delete.
+
+        Returns:
+            int: Number of deleted records.
+        """
+        if not key_ids:
+            return 0
+        select_query = "SELECT hashed_key FROM api_keys WHERE id = ANY($1::uuid[]);"
+        rows_to_delete = await self.db.fetch(select_query, key_ids, fetch_row=False)
+
+        delete_query = "DELETE FROM api_keys WHERE id = ANY($1::uuid[]) RETURNING id;"
+        deleted_rows = await self.db.fetch(delete_query, key_ids, fetch_row=False)
+        deleted_count = len(deleted_rows) if deleted_rows else 0
+
+        if deleted_count > 0 and rows_to_delete:
+            cache_keys = [
+                RedisKeys.API_KEY_CACHE.format(hashed_key=r["hashed_key"])
+                for r in rows_to_delete
+                if r.get("hashed_key")
+            ]
+            if cache_keys:
+                with contextlib.suppress(Exception):
+                    await redis_client.client.delete(*cache_keys)
+
+        return deleted_count
 
 
 async def get_api_key_dao(db: DataBase = Depends(get_db)) -> ApiKeyDAO:

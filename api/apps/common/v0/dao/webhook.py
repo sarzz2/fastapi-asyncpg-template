@@ -156,6 +156,20 @@ class WebhookDAO:
         res = await self.db.execute(query, endpoint_id)
         return " 0" not in res
 
+    async def delete_endpoints(self, endpoint_ids: list[UUID]) -> int:
+        """
+        Delete multiple webhook endpoints in bulk.
+        Args:
+            endpoint_ids (list[UUID]): List of endpoint UUIDs to delete.
+        Returns:
+            int: Number of deleted endpoints.
+        """
+        if not endpoint_ids:
+            return 0
+        query = "DELETE FROM webhook_endpoints WHERE id = ANY($1::uuid[]) RETURNING id;"
+        rows = await self.db.fetch(query, endpoint_ids, fetch_row=False)
+        return len(rows) if rows else 0
+
 
 async def get_webhook_dao(db: DataBase = Depends(get_db)) -> WebhookDAO:
     """FastAPI dependency for WebhookDAO."""

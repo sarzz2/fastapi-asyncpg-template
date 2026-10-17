@@ -23,7 +23,7 @@ from api.utils.admin_view import BaseAppAdminView
 
 class UserAdminView(BaseAppAdminView):
     """
-    Custom Starlette-Admin view for managing Users via raw SQL and UserDAO.
+    Custom Starlette-Admin view for managing Users via UserDAO.
     """
 
     key = "user"
@@ -34,6 +34,10 @@ class UserAdminView(BaseAppAdminView):
     icon = "fa-solid fa-users"
     pk_attr = "id"
 
+    def can_create(self, request: Request) -> bool:
+        """Direct user creation via admin portal is disabled."""
+        return False
+
     fields = [
         UUIDField("id", label="ID", read_only=True),
         EmailField("email", label="Email", required=True),
@@ -41,7 +45,7 @@ class UserAdminView(BaseAppAdminView):
         StringField("full_name", label="Full Name"),
         BooleanField("is_active", label="Is Active"),
         BooleanField("is_superuser", label="Is Superuser"),
-        TagsField("roles", label="Roles"),
+        TagsField("roles", label="Roles", read_only=True),
         DateTimeField("created_at", label="Created At", read_only=True),
         DateTimeField("updated_at", label="Updated At", read_only=True),
     ]
@@ -83,7 +87,7 @@ class UserAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> Sequence[Any]:
         """
-        Retrieve paginated list of users with associated roles.
+        Retrieve paginated list of users with associated roles and optional search via UserDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -96,7 +100,7 @@ class UserAdminView(BaseAppAdminView):
         Returns:
             Sequence[Any]: List of user data objects with formatted role tags.
         """
-        users = await self.dao.get_all_paginated(limit=limit, skip=skip)
+        users = await self.dao.get_all_paginated(limit=limit, skip=skip, search=q)
         return [self._to_admin_object(u) for u in users]
 
     async def count(
@@ -106,7 +110,7 @@ class UserAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count total number of user records in database.
+        Count total number of user records in database with optional search via UserDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -116,8 +120,7 @@ class UserAdminView(BaseAppAdminView):
         Returns:
             int: Total count of user records.
         """
-        record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users", fetch_row=True)
-        return int(record["cnt"]) if record else 0
+        return await self.dao.count_users(search=q)
 
     async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
         """
@@ -168,7 +171,7 @@ class UserAdminView(BaseAppAdminView):
 
     async def edit(self, request: Request, pk: UUID | str, data: dict[str, Any]) -> Any:
         """
-        Update an existing user's details (full name, active status, superuser status).
+        Update an existing user's details (full name, email, username, active status, superuser status).
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -184,18 +187,37 @@ class UserAdminView(BaseAppAdminView):
         user_id = UUID(str(pk))
         user_update = UserUpdate(
             full_name=data.get("full_name"),
-            is_active=data.get("is_active"),
-            is_superuser=data.get("is_superuser"),
+            email=data.get("email"),
+            username=data.get("username"),
         )
         user = await self.dao.update_user(user_id, user_update)
         if not user:
             raise ValueError(f"User with ID {pk} not found")
 
+        is_active = data.get("is_active")
+        is_superuser = data.get("is_superuser")
+        if is_active is not None or is_superuser is not None:
+            await self.db.execute(
+                """
+                UPDATE users SET
+                    is_active = COALESCE($1, is_active),
+                    is_superuser = COALESCE($2, is_superuser),
+                    updated_at = NOW()
+                WHERE id = $3;
+                """,
+                is_active,
+                is_superuser,
+                user_id,
+            )
+            user = await self.dao.get_by_id(user_id)
+            if not user:
+                raise ValueError(f"User with ID {pk} not found")
+
         return self._to_admin_object(user)
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete users by primary keys.
+        Delete users by primary keys in bulk via UserDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -204,14 +226,9 @@ class UserAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted user records.
         """
-        count_deleted = 0
-        for pk in pks:
-            user_id = UUID(str(pk))
-            query = "DELETE FROM users WHERE id = $1 RETURNING id;"
-            row = await self.db.fetch(query, user_id, fetch_row=True)
-            if row:
-                count_deleted += 1
-        return count_deleted
+        if not pks:
+            return 0
+        return await self.dao.delete_users([UUID(str(pk)) for pk in pks])
 
     @row_action(
         name="toggle_active",

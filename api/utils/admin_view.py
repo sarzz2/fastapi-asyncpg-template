@@ -3,10 +3,12 @@ Base Admin View for all domain models in the application.
 """
 
 from collections.abc import Sequence
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
 from starlette.requests import Request
+from starlette_admin.exceptions import ActionFailed
 from starlette_admin.filters import FilterGroup, FilterRegistry
 from starlette_admin.views import BaseModelView
 
@@ -32,6 +34,7 @@ class BaseAppAdminView(BaseModelView):
     label: str | None = None
     identity: str | None = None
     key: str | None = None
+    pk_attr: str = "id"
     _display_name: str | None = None
 
     @property
@@ -85,21 +88,42 @@ class BaseAppAdminView(BaseModelView):
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """Create a new record."""
-        raise NotImplementedError
+        view_label = self.name or self.label or self.identity or "This model"
+        raise ActionFailed(f"Direct creation is not supported for {view_label}.")
 
     async def edit(self, request: Request, pk: Any, data: dict[str, Any]) -> Any:
         """Edit an existing record."""
-        raise NotImplementedError
+        view_label = self.name or self.label or self.identity or "This model"
+        raise ActionFailed(f"Editing is not supported for {view_label}.")
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """Delete records by primary keys."""
-        raise NotImplementedError
+        view_label = self.name or self.label or self.identity or "This model"
+        raise ActionFailed(f"Deletion is not supported for {view_label}.")
 
     async def get_pk_value(self, request: Request, obj: Any) -> Any:
-        """Extract primary key value from object or dict."""
+        """Extract primary key value from object or dict dynamically using pk_attr."""
+        pk_attr = getattr(self, "pk_attr", "id")
         if isinstance(obj, dict):
-            return obj.get("id")
-        return obj.id
+            return obj.get(pk_attr, obj.get("id"))
+        return getattr(obj, pk_attr, getattr(obj, "id", None))
+
+    @staticmethod
+    def to_admin_object(obj: Any) -> SimpleNamespace:
+        """
+        Convert a database record, Pydantic model, or mapping into a Starlette-Admin compatible SimpleNamespace.
+        """
+        if hasattr(obj, "model_dump"):
+            data = obj.model_dump()
+        elif isinstance(obj, dict):
+            data = dict(obj)
+        elif hasattr(obj, "__dict__"):
+            data = dict(obj.__dict__)
+        else:
+            data = dict(obj)
+        return SimpleNamespace(**data)
+
+    _to_admin_object = to_admin_object
 
     async def repr(self, obj: Any, request: Request) -> str:
         """

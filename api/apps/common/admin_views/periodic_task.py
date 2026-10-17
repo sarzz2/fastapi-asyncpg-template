@@ -98,7 +98,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> Sequence[Any]:
         """
-        Retrieve paginated list of periodic tasks.
+        Retrieve paginated list of periodic tasks with offset pagination and optional search.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -111,8 +111,8 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         Returns:
             Sequence[Any]: List of matching periodic task objects.
         """
-        tasks = await self.dao.list_tasks()
-        return [self._to_admin_object(task) for task in tasks[skip : skip + limit]]
+        tasks = await self.dao.list_tasks_paginated(limit=limit, skip=skip, search=q)
+        return [self._to_admin_object(task) for task in tasks]
 
     async def count(
         self,
@@ -121,7 +121,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count total number of periodic task records.
+        Count total number of periodic task records with optional search.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -131,8 +131,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         Returns:
             int: Total count of periodic task records.
         """
-        record = await self.db.fetch("SELECT COUNT(*) as cnt FROM periodic_tasks", fetch_row=True)
-        return int(record["cnt"]) if record else 0
+        return await self.dao.count_tasks(search=q)
 
     async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
         """
@@ -165,9 +164,8 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         if not pks:
             return []
         task_ids = [UUID(str(pk)) for pk in pks]
-        query = "SELECT * FROM periodic_tasks WHERE id = ANY($1::uuid[]) ORDER BY created_at DESC;"
-        records = await self.db.fetch(query, task_ids, model=PeriodicTaskResponse, fetch_row=False)
-        return [self._to_admin_object(r) for r in records]
+        tasks = await self.dao.get_by_ids(task_ids)
+        return [self._to_admin_object(r) for r in tasks]
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """
@@ -248,9 +246,7 @@ class PeriodicTaskAdminView(BaseAppAdminView):
         if not pks:
             return 0
         task_ids = [UUID(str(pk)) for pk in pks]
-        query = "DELETE FROM periodic_tasks WHERE id = ANY($1::uuid[]) RETURNING id;"
-        rows = await self.db.fetch(query, task_ids, fetch_row=False)
-        return len(rows) if rows else 0
+        return await self.dao.delete_tasks(task_ids)
 
     @row_action(
         name="trigger_now",
