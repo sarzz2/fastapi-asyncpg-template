@@ -257,7 +257,7 @@ class ApiKeyAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete multiple API keys by primary key.
+        Delete multiple API keys by primary key via ApiKeyDAO.
 
         Args:
             request (Request): Starlette request.
@@ -266,15 +266,10 @@ class ApiKeyAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted records.
         """
-        deleted_count = 0
-        for pk in pks:
-            key_id = UUID(str(pk))
-            existing = await self.dao.get_api_key_by_id(key_id)
-            if await self.dao.delete_api_key(key_id):
-                deleted_count += 1
-                if existing and existing.hashed_key:
-                    await redis_client.client.delete(RedisKeys.API_KEY_CACHE.format(hashed_key=existing.hashed_key))
-        return deleted_count
+        if not pks:
+            return 0
+        key_ids = [UUID(str(pk)) for pk in pks]
+        return await self.dao.delete_api_keys(key_ids)
 
     @row_action(
         name="rotate_key",

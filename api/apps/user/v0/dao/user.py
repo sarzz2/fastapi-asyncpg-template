@@ -25,78 +25,98 @@ class UserDAO:
         self.db = db
 
     async def _get_user_with_roles(self, where_clause: str, *args: Any) -> UserData | None:
-        query = f"""
-            SELECT
-                u.*,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'id', r.id,
-                            'name', r.name,
-                            'description', r.description,
-                            'created_at', r.created_at,
-                            'updated_at', r.updated_at,
-                            'permissions', (
-                                SELECT COALESCE(json_agg(
-                                    json_build_object(
-                                        'id', p.id,
-                                        'name', p.name,
-                                        'description', p.description,
-                                        'created_at', p.created_at
-                                    )
-                                ), '[]')
-                                FROM role_permissions rp
-                                JOIN permissions p ON rp.permission_id = p.id
-                                WHERE rp.role_id = r.id
-                            )
-                        )
-                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
-                ) as roles
-            FROM users u
-            LEFT JOIN user_roles ur ON u.id = ur.user_id
-            LEFT JOIN roles r ON ur.role_id = r.id
-            WHERE {where_clause}
-            GROUP BY u.id
-        """  # nosec
+        base_query = (
+            "SELECT u.*, COALESCE(json_agg(json_build_object("
+            "'id', r.id, 'name', r.name, 'description', r.description, "
+            "'created_at', r.created_at, 'updated_at', r.updated_at, "
+            "'permissions', (SELECT COALESCE(json_agg(json_build_object("
+            "'id', p.id, 'name', p.name, 'description', p.description, 'created_at', p.created_at"
+            ")), '[]') FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = r.id)"
+            ")) FILTER (WHERE r.id IS NOT NULL), '[]') as roles "
+            "FROM users u LEFT JOIN user_roles ur ON u.id = ur.user_id LEFT JOIN roles r ON ur.role_id = r.id"
+        )
+        query = " ".join([base_query, "WHERE", where_clause, "GROUP BY u.id;"])
         record = await self.db.fetch(query, *args, fetch_row=True)
         return UserData.model_validate(dict(record)) if record else None
 
-    async def get_all_paginated(self, limit: int = 100, skip: int = 0) -> list[UserData]:
+    async def get_all_paginated(
+        self,
+        limit: int = 100,
+        skip: int = 0,
+        search: str | None = None,
+    ) -> list[UserData]:
         """
-        Retrieve paginated list of users with associated roles.
+        Retrieve paginated list of users with associated roles and optional search.
 
         Args:
             limit (int): Maximum records to return. Defaults to 100.
             skip (int): Offset records count. Defaults to 0.
+            search (str | None): Optional search query matching username, email, or full name.
 
         Returns:
             list[UserData]: List of user objects with loaded roles.
         """
-        query = """
-            SELECT
-                u.*,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'id', r.id,
-                            'name', r.name,
-                            'description', r.description,
-                            'created_at', r.created_at,
-                            'updated_at', r.updated_at
-                        )
-                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
-                ) as roles
-            FROM users u
-            LEFT JOIN user_roles ur ON u.id = ur.user_id
-            LEFT JOIN roles r ON ur.role_id = r.id
-            GROUP BY u.id
-            ORDER BY u.created_at DESC
-            LIMIT $1 OFFSET $2
-        """
-        records = await self.db.fetch(query, limit, skip, fetch_row=False)
+        base_query = (
+            "SELECT u.*, COALESCE(json_agg(json_build_object("
+            "'id', r.id, 'name', r.name, 'description', r.description, "
+            "'created_at', r.created_at, 'updated_at', r.updated_at, "
+            "'permissions', (SELECT COALESCE(json_agg(json_build_object("
+            "'id', p.id, 'name', p.name, 'description', p.description, 'created_at', p.created_at"
+            ")), '[]') FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = r.id)"
+            ")) FILTER (WHERE r.id IS NOT NULL), '[]') as roles "
+            "FROM users u LEFT JOIN user_roles ur ON u.id = ur.user_id LEFT JOIN roles r ON ur.role_id = r.id"
+        )
+        if search and search.strip():
+            query = " ".join(
+                [
+                    base_query,
+                    "WHERE (u.username ILIKE $1 OR u.email ILIKE $1 OR u.full_name ILIKE $1)",
+                    "GROUP BY u.id ORDER BY u.created_at DESC LIMIT $2 OFFSET $3;",
+                ]
+            )
+            records = await self.db.fetch(query, f"%{search.strip()}%", limit, skip, fetch_row=False)
+        else:
+            query = " ".join([base_query, "GROUP BY u.id ORDER BY u.created_at DESC LIMIT $1 OFFSET $2;"])
+            records = await self.db.fetch(query, limit, skip, fetch_row=False)
         if not records:
             return []
         return [UserData.model_validate(dict(r)) for r in records]
+
+    async def count_users(self, search: str | None = None) -> int:
+        """
+        Count total number of user records, optionally matching search query.
+
+        Args:
+            search (str | None): Optional search query matching username, email, or full name.
+
+        Returns:
+            int: Total count of matching users.
+        """
+        if search and search.strip():
+            query = (
+                "SELECT COUNT(*) as cnt FROM users "
+                "WHERE (username ILIKE $1 OR email ILIKE $1 OR full_name ILIKE $1);"
+            )
+            record = await self.db.fetch(query, f"%{search.strip()}%", fetch_row=True)
+        else:
+            record = await self.db.fetch("SELECT COUNT(*) as cnt FROM users;", fetch_row=True)
+        return int(record["cnt"]) if record else 0
+
+    async def delete_users(self, user_ids: list[UUID]) -> int:
+        """
+        Delete multiple users by ID list in a single bulk SQL statement.
+
+        Args:
+            user_ids (list[UUID]): List of user UUIDs to delete.
+
+        Returns:
+            int: Number of deleted user records.
+        """
+        if not user_ids:
+            return 0
+        query = "DELETE FROM users WHERE id = ANY($1::uuid[]) RETURNING id;"
+        rows = await self.db.fetch(query, user_ids, fetch_row=False)
+        return len(rows) if rows else 0
 
     async def get_by_ids(self, pks: list[UUID]) -> list[UserData]:
         """
@@ -110,26 +130,17 @@ class UserDAO:
         """
         if not pks:
             return []
-        query = """
-            SELECT
-                u.*,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'id', r.id,
-                            'name', r.name,
-                            'description', r.description,
-                            'created_at', r.created_at,
-                            'updated_at', r.updated_at
-                        )
-                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
-                ) as roles
-            FROM users u
-            LEFT JOIN user_roles ur ON u.id = ur.user_id
-            LEFT JOIN roles r ON ur.role_id = r.id
-            WHERE u.id = ANY($1::uuid[])
-            GROUP BY u.id
-        """
+        base_query = (
+            "SELECT u.*, COALESCE(json_agg(json_build_object("
+            "'id', r.id, 'name', r.name, 'description', r.description, "
+            "'created_at', r.created_at, 'updated_at', r.updated_at, "
+            "'permissions', (SELECT COALESCE(json_agg(json_build_object("
+            "'id', p.id, 'name', p.name, 'description', p.description, 'created_at', p.created_at"
+            ")), '[]') FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = r.id)"
+            ")) FILTER (WHERE r.id IS NOT NULL), '[]') as roles "
+            "FROM users u LEFT JOIN user_roles ur ON u.id = ur.user_id LEFT JOIN roles r ON ur.role_id = r.id"
+        )
+        query = " ".join([base_query, "WHERE u.id = ANY($1::uuid[]) GROUP BY u.id;"])
         records = await self.db.fetch(query, pks, fetch_row=False)
         if not records:
             return []
@@ -144,41 +155,18 @@ class UserDAO:
         Returns:
             UserData | None: User if found, None otherwise.
         """
-        # For this one, we need to join user_identities as well
-        query = """
-            SELECT
-                u.*,
-                COALESCE(
-                    json_agg(
-                        json_build_object(
-                            'id', r.id,
-                            'name', r.name,
-                            'description', r.description,
-                            'created_at', r.created_at,
-                            'updated_at', r.updated_at,
-                            'permissions', (
-                                SELECT COALESCE(json_agg(
-                                    json_build_object(
-                                        'id', p.id,
-                                        'name', p.name,
-                                        'description', p.description,
-                                        'created_at', p.created_at
-                                    )
-                                ), '[]')
-                                FROM role_permissions rp
-                                JOIN permissions p ON rp.permission_id = p.id
-                                WHERE rp.role_id = r.id
-                            )
-                        )
-                    ) FILTER (WHERE r.id IS NOT NULL), '[]'
-                ) as roles
-            FROM users u
-            JOIN user_identities i ON u.id = i.user_id
-            LEFT JOIN user_roles ur ON u.id = ur.user_id
-            LEFT JOIN roles r ON ur.role_id = r.id
-            WHERE i.provider = 'google' AND i.provider_user_id = $1
-            GROUP BY u.id
-        """
+        query = (
+            "SELECT u.*, COALESCE(json_agg(json_build_object("
+            "'id', r.id, 'name', r.name, 'description', r.description, "
+            "'created_at', r.created_at, 'updated_at', r.updated_at, "
+            "'permissions', (SELECT COALESCE(json_agg(json_build_object("
+            "'id', p.id, 'name', p.name, 'description', p.description, 'created_at', p.created_at"
+            ")), '[]') FROM role_permissions rp JOIN permissions p ON rp.permission_id = p.id WHERE rp.role_id = r.id)"
+            ")) FILTER (WHERE r.id IS NOT NULL), '[]') as roles "
+            "FROM users u JOIN user_identities i ON u.id = i.user_id "
+            "LEFT JOIN user_roles ur ON u.id = ur.user_id LEFT JOIN roles r ON ur.role_id = r.id "
+            "WHERE i.provider = 'google' AND i.provider_user_id = $1 GROUP BY u.id;"
+        )
         record = await self.db.fetch(query, sub, fetch_row=True)
         return UserData.model_validate(dict(record)) if record else None
 

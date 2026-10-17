@@ -1,6 +1,3 @@
-# pylint: disable=duplicate-code
-import logging
-
 from api.apps.common.constants import NotificationChannels
 from api.apps.notification.v0.listeners.utils import dispatch_user_notification
 from api.apps.notification.v0.schemas import NotificationType
@@ -8,8 +5,6 @@ from api.core.config import settings
 from api.core.events.bus import event_bus
 from api.core.events.constants import EventNames
 from api.core.events.schema import ApplicationEvent
-
-logger = logging.getLogger("fastapi")
 
 
 @event_bus.on(EventNames.USER_ROLE_ASSIGNED)
@@ -22,7 +17,6 @@ async def on_role_assigned(event: ApplicationEvent) -> None:
         event (ApplicationEvent): The application event containing user_id, email,
                                     username, and role_ids in its payload.
     """
-    logger.info("Notification app received %s via EventBus.", event.event_name)
 
     await dispatch_user_notification(
         event=event,

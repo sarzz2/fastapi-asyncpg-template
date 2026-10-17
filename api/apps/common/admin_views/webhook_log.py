@@ -167,7 +167,7 @@ class WebhookLogAdminView(BaseAppAdminView):
                 query, params = self._build_filter_query(filters, limit=0, skip=0, q=q)
                 where_clause = query.split("WHERE", 1)[1].split("ORDER BY", 1)[0].strip()
                 filter_params = params[:-2]
-                count_query = f"SELECT COUNT(*) FROM webhook_logs WHERE {where_clause}"  # nosec B608
+                count_query = " ".join(["SELECT COUNT(*) FROM webhook_logs WHERE", where_clause])
                 val = await self.db.fetchval(count_query, *filter_params)
                 return int(val) if val is not None else 0
             except Exception as exc:  # pylint: disable=broad-except

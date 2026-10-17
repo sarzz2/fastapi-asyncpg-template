@@ -19,7 +19,7 @@ from api.utils.admin_view import BaseAppAdminView
 
 class RoleAdminView(BaseAppAdminView):
     """
-    Custom Starlette-Admin view for managing Roles via raw SQL and RoleDAO.
+    Custom Starlette-Admin view for managing Roles via RoleDAO.
     """
 
     key = "role"
@@ -76,7 +76,7 @@ class RoleAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> Sequence[Any]:
         """
-        Retrieve paginated list of roles.
+        Retrieve paginated list of roles with offset pagination and optional search via RoleDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -89,7 +89,7 @@ class RoleAdminView(BaseAppAdminView):
         Returns:
             Sequence[Any]: List of role data objects.
         """
-        roles = await self.dao.get_all_roles(limit=limit)
+        roles = await self.dao.get_roles_paginated(limit=limit, skip=skip, search=q)
         return [self._to_admin_object(role) for role in roles]
 
     async def count(
@@ -99,7 +99,7 @@ class RoleAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count total number of role records in database.
+        Count total number of role records in database with optional search via RoleDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -109,8 +109,7 @@ class RoleAdminView(BaseAppAdminView):
         Returns:
             int: Total count of role records.
         """
-        record = await self.db.fetch("SELECT COUNT(*) as cnt FROM roles", fetch_row=True)
-        return int(record["cnt"]) if record else 0
+        return await self.dao.count_roles(search=q)
 
     async def find_by_pk(self, request: Request, pk: UUID | str) -> Any | None:
         """
@@ -206,7 +205,7 @@ class RoleAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete roles by primary keys.
+        Delete roles by primary keys in bulk via RoleDAO.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -215,9 +214,6 @@ class RoleAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted role records.
         """
-        count_deleted = 0
-        for pk in pks:
-            role_id = UUID(str(pk))
-            await self.dao.delete_role(role_id)
-            count_deleted += 1
-        return count_deleted
+        if not pks:
+            return 0
+        return await self.dao.delete_roles([UUID(str(pk)) for pk in pks])

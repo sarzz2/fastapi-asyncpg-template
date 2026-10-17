@@ -24,6 +24,7 @@ async def dispatch_user_notification(  # pylint: disable=too-many-arguments,too-
     """
     Helper function to extract standard user payload fields and send a notification.
     """
+    logger.info("Notification app received %s via EventBus.", event.event_name)
     user_id_str = event.payload.get("user_id")
     email = event.payload.get("email")
     username = event.payload.get("username")

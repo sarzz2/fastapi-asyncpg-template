@@ -264,7 +264,7 @@ class WebhookEndpointAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete multiple webhook endpoints by primary key.
+        Delete multiple webhook endpoints by primary key via WebhookDAO.
 
         Args:
             request (Request): Starlette request.
@@ -273,9 +273,7 @@ class WebhookEndpointAdminView(BaseAppAdminView):
         Returns:
             int: Number of deleted records.
         """
-        deleted_count = 0
-        for pk in pks:
-            endpoint_id = UUID(str(pk))
-            if await self.dao.delete_endpoint(endpoint_id):
-                deleted_count += 1
-        return deleted_count
+        if not pks:
+            return 0
+        endpoint_ids = [UUID(str(pk)) for pk in pks]
+        return await self.dao.delete_endpoints(endpoint_ids)

@@ -64,21 +64,6 @@ class AppVersionAdminView(BaseAppAdminView):
         """
         return SimpleNamespace(**version.model_dump())
 
-    async def get_pk_value(self, request: Request, obj: Any) -> Any:
-        """
-        Extract primary key (platform) from app version object or dictionary.
-
-        Args:
-            request (Request): The incoming Starlette/FastAPI HTTP request.
-            obj (Any): The app version data object or dictionary.
-
-        Returns:
-            Any: The primary key (platform) value.
-        """
-        if isinstance(obj, dict):
-            return obj.get("platform")
-        return getattr(obj, "platform", None)
-
     async def find_all(
         self,
         request: Request,
@@ -89,7 +74,7 @@ class AppVersionAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> Sequence[Any]:
         """
-        Retrieve paginated list of app version configurations.
+        Retrieve paginated list of app version configurations with optional search.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -102,11 +87,7 @@ class AppVersionAdminView(BaseAppAdminView):
         Returns:
             Sequence[Any]: List of app version objects.
         """
-        query = "SELECT * FROM app_versions ORDER BY platform LIMIT $1 OFFSET $2"
-        records = await self.db.fetch(query, limit, skip, fetch_row=False)
-        if not records:
-            return []
-        versions = [AppVersionData.model_validate(dict(r)) for r in records]
+        versions = await self.dao.list_versions(limit=limit, skip=skip, search=q)
         return [self._to_admin_object(v) for v in versions]
 
     async def count(
@@ -116,7 +97,7 @@ class AppVersionAdminView(BaseAppAdminView):
         filters: FilterGroup | None = None,
     ) -> int:
         """
-        Count total number of app version records in database.
+        Count total number of app version records in database with optional search.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -126,8 +107,7 @@ class AppVersionAdminView(BaseAppAdminView):
         Returns:
             int: Total count of app version records.
         """
-        record = await self.db.fetch("SELECT COUNT(*) as cnt FROM app_versions", fetch_row=True)
-        return int(record["cnt"]) if record else 0
+        return await self.dao.count_versions(search=q)
 
     async def find_by_pk(self, request: Request, pk: Any) -> Any | None:
         """
@@ -148,7 +128,7 @@ class AppVersionAdminView(BaseAppAdminView):
 
     async def find_by_pks(self, request: Request, pks: list[Any]) -> Sequence[Any]:
         """
-        Find multiple app versions by primary keys (platforms) in a single bulk SQL query.
+        Find multiple app versions by primary keys (platforms) in a single bulk query.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -160,16 +140,12 @@ class AppVersionAdminView(BaseAppAdminView):
         if not pks:
             return []
         platforms = [str(pk).lower() for pk in pks]
-        query = "SELECT * FROM app_versions WHERE platform = ANY($1::varchar[])"
-        records = await self.db.fetch(query, platforms, fetch_row=False)
-        if not records:
-            return []
-        versions = [AppVersionData.model_validate(dict(r)) for r in records]
+        versions = await self.dao.get_by_platforms(platforms)
         return [self._to_admin_object(v) for v in versions]
 
     async def create(self, request: Request, data: dict[str, Any]) -> Any:
         """
-        Create a new platform app version configuration.
+        Create a new platform app version configuration and invalidate Redis cache.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -178,21 +154,7 @@ class AppVersionAdminView(BaseAppAdminView):
         Returns:
             Any: Created app version object.
         """
-        query = """
-            INSERT INTO app_versions (platform, min_build, latest_build, force_update, update_message, update_url)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING *
-        """
-        record = await self.db.write(
-            query,
-            data["platform"].lower(),
-            data["min_build"],
-            data["latest_build"],
-            data.get("force_update", False),
-            data.get("update_message"),
-            data.get("update_url"),
-        )
-        version = AppVersionData.model_validate(dict(record))
+        version = await self.dao.create_version(data)
         return self._to_admin_object(version)
 
     async def edit(self, request: Request, pk: Any, data: dict[str, Any]) -> Any:
@@ -226,7 +188,8 @@ class AppVersionAdminView(BaseAppAdminView):
 
     async def delete(self, request: Request, pks: list[Any]) -> int:
         """
-        Delete app version configurations by primary keys (platforms) in a single bulk query.
+        Delete app version configurations by primary keys (platforms) in a single bulk query
+        and invalidate Redis cache.
 
         Args:
             request (Request): The incoming Starlette/FastAPI HTTP request.
@@ -238,6 +201,4 @@ class AppVersionAdminView(BaseAppAdminView):
         if not pks:
             return 0
         platforms = [str(pk).lower() for pk in pks]
-        query = "DELETE FROM app_versions WHERE platform = ANY($1::varchar[]) RETURNING platform;"
-        rows = await self.db.fetch(query, platforms, fetch_row=False)
-        return len(rows) if rows else 0
+        return await self.dao.delete_versions(platforms)

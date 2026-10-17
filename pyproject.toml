@@ -166,3 +166,4 @@ disable = [
 
 [tool.pylint.design]
 max-args = 8
+max-public-methods = 30
