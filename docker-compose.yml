@@ -33,10 +33,7 @@ services:
       - .:/app
 
   db:
-    build:
-      context: .
-      dockerfile: db.Dockerfile
-    image: fastapi-template-db
+    image: postgres:18
     container_name: fastapi_db
     environment:
       - POSTGRES_USER=user
@@ -62,134 +59,79 @@ services:
     networks:
       - app_network
 
-  # localstack:
-  #   image: localstack/localstack
-  #   container_name: fastapi_localstack
-  #   ports:
-  #     - "4566:4566"
-  #   environment:
-  #     - SERVICES=s3
-  #     - DEBUG=1
-  #     - DATA_DIR=/var/lib/localstack/data
-  #     - PERSISTENCE=1
-  #   volumes:
-  #     - localstack_data:/var/lib/localstack
-  #     - ./scripts/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   networks:
-  #     - app_network
-
-  # celery_worker:
-  #   build: .
-  #   container_name: fastapi_celery_worker
-  #   command: celery -A api.core.celery_app worker --loglevel=info
-  #   environment:
-  #     - PRIMARY_DATABASE_URL=postgresql://user:password@db:5432/fastapi_template
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
-  #     - S3_ENDPOINT_URL=http://localstack:4566
-  #     - AWS_ACCESS_KEY=test
-  #     - AWS_SECRET_ACCESS_KEY=test
-  #     - SECRET_KEY=your_secret_key_here
-  #   depends_on:
-  #     - app
-  #     - redis
-  #     - db
-  #   networks:
-  #     - app_network
-  #   volumes:
-  #     - .:/app
-
-  # celery_beat:
-  #   build: .
-  #   container_name: fastapi_celery_beat
-  #   command: celery -A api.core.celery_app beat --loglevel=info
-  #   environment:
-  #     - PRIMARY_DATABASE_URL=postgresql://user:password@db:5432/fastapi_template
-  #     - REDIS_HOST=redis
-  #     - REDIS_PORT=6379
-  #     - S3_ENDPOINT_URL=http://localstack:4566
-  #     - AWS_ACCESS_KEY=test
-  #     - AWS_SECRET_ACCESS_KEY=test
-  #     - SECRET_KEY=your_secret_key_here
-  #   depends_on:
-  #     - app
-  #     - redis
-  #     - db
-  #   networks:
-  #     - app_network
-  #   volumes:
-  #     - .:/app
-
-  postgres_exporter:
-    image: prometheuscommunity/postgres-exporter
-    container_name: fastapi_postgres_exporter
-    environment:
-      DATA_SOURCE_NAME: postgresql://user:password@db:5432/fastapi_template?sslmode=disable
+  localstack:
+    image: localstack/localstack
+    container_name: fastapi_localstack
     ports:
-      - "9187:9187"
+      - "4566:4566"
+    environment:
+      - SERVICES=s3
+      - DEBUG=1
+      - DATA_DIR=/var/lib/localstack/data
+      - PERSISTENCE=1
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./scripts/init-s3.sh:/etc/localstack/init/ready.d/init-s3.sh
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - app_network
-    depends_on:
-      - db
 
-  redis_exporter:
-    image: oliver006/redis_exporter
-    container_name: fastapi_redis_exporter
+  celery_worker:
+    build: .
+    container_name: fastapi_celery_worker
+    command: celery -A api.core.celery_app worker --loglevel=info
     environment:
-      - REDIS_ADDR=redis://redis:6379
+      - PRIMARY_DATABASE_URL=postgresql://user:password@db:5432/fastapi_template
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SECRET_KEY=your_secret_key_here
+    depends_on:
+      - app
+      - redis
+      - db
+    networks:
+      - app_network
+    volumes:
+      - .:/app
+
+  celery_beat:
+    build: .
+    container_name: fastapi_celery_beat
+    command: celery -A api.core.celery_app beat --loglevel=info
+    environment:
+      - PRIMARY_DATABASE_URL=postgresql://user:password@db:5432/fastapi_template
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - S3_ENDPOINT_URL=http://localstack:4566
+      - AWS_ACCESS_KEY=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - SECRET_KEY=your_secret_key_here
+    depends_on:
+      - app
+      - redis
+      - db
+    networks:
+      - app_network
+    volumes:
+      - .:/app
+
+  flower:
+    image: mher/flower
+    container_name: fastapi_flower
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_PORT=5555
     ports:
-      - "9121:9121"
+      - "5555:5555"
     networks:
       - app_network
     depends_on:
       - redis
+      - celery_worker
 
-  # flower:
-  #   image: mher/flower
-  #   container_name: fastapi_flower
-  #   environment:
-  #     - CELERY_BROKER_URL=redis://redis:6379/0
-  #     - FLOWER_PORT=5555
-  #   ports:
-  #     - "5555:5555"
-  #   networks:
-  #     - app_network
-  #   depends_on:
-  #     - redis
-  #     - celery_worker
-
-  prometheus:
-    image: prom/prometheus
-    container_name: fastapi_prometheus
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--web.enable-lifecycle'
-      - '--web.enable-remote-write-receiver'
-    ports:
-      - "9090:9090"
-    networks:
-      - app_network
-
-  grafana:
-    image: grafana/grafana
-    container_name: fastapi_grafana
-    ports:
-      - "3000:3000"
-    networks:
-      - app_network
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -257,6 +199,4 @@ networks:
 volumes:
   postgres_data:
   # localstack_data:
-  prometheus_data:
-  grafana_data:
   clickhouse_data:

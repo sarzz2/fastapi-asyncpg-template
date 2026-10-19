@@ -74,15 +74,10 @@ Use uv to install the project dependencies.
 uv sync
 ```
 
-### 3. Install DB extensions Run Database Migrations
+### 3. Run Database Migrations
 
-Using 2 extensions
+PostgreSQL 18+ includes native `uuidv7()` support out of the box (with automatic fallback on older PostgreSQL versions), so no external C extensions need to be installed.
 
-```bash
-brew install pgxnclient
-pgxn install pg_uuidv7 --pg_config /opt/homebrew/opt/postgresql@17/bin/pg_config
-brew services restart postgresql@17
-```
 
 Activate the virtual environment and run the migration script to set up your database schema.
 

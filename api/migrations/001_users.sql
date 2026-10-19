@@ -1,5 +1,34 @@
 -- up
-CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+-- PostgreSQL 18+ provides native uuidv7() in pg_catalog.
+-- Map uuid_generate_v7() to native uuidv7(), or fallback for older PostgreSQL versions.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'uuidv7') THEN
+        EXECUTE 'CREATE OR REPLACE FUNCTION uuid_generate_v7() RETURNS uuid AS $f$ SELECT uuidv7(); $f$ LANGUAGE sql;';
+    ELSIF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_uuidv7') THEN
+        CREATE EXTENSION IF NOT EXISTS pg_uuidv7;
+    ELSIF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'uuid_generate_v7') THEN
+        EXECUTE $f$
+        CREATE OR REPLACE FUNCTION uuid_generate_v7() RETURNS uuid AS $func$
+        BEGIN
+            RETURN encode(
+                set_bit(
+                    set_bit(
+                        overlay(uuid_send(gen_random_uuid())
+                                placing substring(int8send(floor(extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
+                                from 1 for 6
+                        ),
+                        52, 1
+                    ),
+                    53, 1
+                ),
+                'hex'
+            )::uuid;
+        END;
+        $func$ LANGUAGE plpgsql VOLATILE;
+        $f$;
+    END IF;
+END $$;
 
 -- Sets NEW.updated_at = now() if such a column exists on the table.
 CREATE OR REPLACE FUNCTION set_updated_at_if_exists()
@@ -154,3 +183,4 @@ DROP TABLE IF EXISTS users;
 DROP EVENT TRIGGER IF EXISTS et_updated_at_auto_attach;
 DROP FUNCTION IF EXISTS attach_updated_at_triggers_after_ddl();
 DROP FUNCTION IF EXISTS set_updated_at_if_exists();
+DROP FUNCTION IF EXISTS uuid_generate_v7();
