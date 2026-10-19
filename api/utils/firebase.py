@@ -1,5 +1,6 @@
 import logging
 import os
+from typing import Any
 
 import firebase_admin
 from firebase_admin import credentials
@@ -9,7 +10,7 @@ from api.core.config import settings
 logger = logging.getLogger("fastapi")
 
 
-def get_firebase_app() -> firebase_admin.App | None:
+def get_firebase_app() -> Any | None:
     """
     Retrieve or initialize the Firebase Admin app instance.
     Returns None if credentials path is not configured or file is not found.

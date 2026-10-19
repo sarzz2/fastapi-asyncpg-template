@@ -84,7 +84,6 @@ entrypoint = "api.main:app"
 [tool.mypy]
 python_version = "3.12"
 plugins = ["pydantic.mypy"]
-mypy_path = ["stubs"]
 exclude = ["^venv/"]
 
 disallow_untyped_defs = true
@@ -102,6 +101,7 @@ module = [
   "celery.*",
   "boto3.*",
   "botocore.*",
+  "firebase_admin.*",
   "psutil.*",
   "uvicorn.*",
   "slowapi.*",
