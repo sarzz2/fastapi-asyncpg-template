@@ -1,0 +1,62 @@
+apiVersion: v1alpha1
+kind: Installation
+metadata:
+  name: signoz
+spec:
+  deployment:
+    flavor: compose
+    mode: docker
+  ingester:
+    spec:
+      config:
+        data:
+          ingester.yaml: |
+            receivers:
+              hostmetrics:
+                collection_interval: 15s
+                scrapers:
+                  cpu: {}
+                  memory: {}
+                  disk: {}
+                  filesystem: {}
+                  load: {}
+                  network: {}
+              postgresql:
+                endpoint: "host.docker.internal:5432"
+                transport: tcp
+                username: "sarzz"
+                password: "Welcome"
+                databases:
+                  - "fastapi_template"
+                collection_interval: 10s
+                tls:
+                  insecure: true
+                metrics:
+                  postgresql.database.locks:
+                    enabled: true
+                  postgresql.deadlocks:
+                    enabled: true
+                  postgresql.table.size:
+                    enabled: true
+                  postgresql.table.count:
+                    enabled: true
+                  postgresql.index.scans:
+                    enabled: true
+                  postgresql.rows:
+                    enabled: true
+                  postgresql.operations:
+                    enabled: true
+              redis:
+                endpoint: "host.docker.internal:6379"
+                collection_interval: 10s
+            processors:
+              resource/host:
+                attributes:
+                  - action: upsert
+                    key: host.name
+                    value: "Sarthaks-MacBook-Air.local"
+            service:
+              pipelines:
+                metrics:
+                  receivers: [otlp, postgresql, redis, hostmetrics]
+                  processors: [batch, resource/host]

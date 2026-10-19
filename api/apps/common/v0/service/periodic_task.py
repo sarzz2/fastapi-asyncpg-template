@@ -40,6 +40,9 @@ class PeriodicTaskService:
             HTTPException: If the task is not registered in Celery.
         """
         if task_name not in celery_app.tasks:
+            celery_app.loader.import_default_modules()
+
+        if task_name not in celery_app.tasks:
             logger.warning("Validation failed: Task '%s' is not registered in Celery tasks.", task_name)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

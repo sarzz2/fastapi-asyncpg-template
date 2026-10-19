@@ -6,10 +6,12 @@ import asyncio
 import json
 import logging
 import os
+import socket
 import traceback as traceback_module
 from typing import Any, cast
 
-from celery import Celery, Task
+from celery import Celery, Task, current_app
+from celery.app.trace import build_tracer, setup_worker_optimizations
 from celery.signals import task_failure, worker_process_init, worker_process_shutdown
 from opentelemetry.instrumentation.celery import CeleryInstrumentor
 
@@ -96,9 +98,20 @@ def init_worker_process(**_kwargs: dict[str, Any]) -> None:
     """
     logger.info("Initializing worker process resources...")
 
+    hostname = socket.gethostname()
+
+    # Rebuild execution tracer for all tasks if not already initialized
+    for name, task in current_app.tasks.items():
+        if getattr(task, "__trace__", None) is None:
+            task.__trace__ = build_tracer(name, task, current_app.loader, hostname, app=current_app)
+
+    # Populate worker optimizations and _localized for fast_trace_task in spawn child processes on macOS
+    setup_worker_optimizations(current_app, hostname)
+
     main_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(main_loop)
     celery_app.main_loop = main_loop
+    current_app.main_loop = main_loop
 
     db_instance = DataBase()
     main_loop.run_until_complete(
@@ -109,12 +122,16 @@ def init_worker_process(**_kwargs: dict[str, Any]) -> None:
         )
     )
     celery_app.db_instance = db_instance
+    current_app.db_instance = db_instance
 
     redis_instance = RedisClient()
     main_loop.run_until_complete(redis_instance.connect())
     celery_app.redis_instance = redis_instance
+    current_app.redis_instance = redis_instance
 
-    celery_app.container = TaskContainer(db=db_instance, redis=redis_instance)
+    container = TaskContainer(db=db_instance, redis=redis_instance)
+    celery_app.container = container
+    current_app.container = container
 
     logger.info("Worker process resources initialized.")
 
@@ -128,9 +145,10 @@ def shutdown_worker_process(**_kwargs: dict[str, Any]) -> None:
         **_kwargs (dict[str, Any]): Additional signal parameters.
     """
     logger.info("Shutting down worker process resources...")
-    main_loop = celery_app.main_loop
-    db_instance = celery_app.db_instance
-    redis_instance = celery_app.redis_instance
+
+    main_loop = getattr(current_app, "main_loop", None) or celery_app.main_loop
+    db_instance = getattr(current_app, "db_instance", None) or celery_app.db_instance
+    redis_instance = getattr(current_app, "redis_instance", None) or celery_app.redis_instance
 
     if main_loop and db_instance:
         main_loop.run_until_complete(db_instance.close_pool())
@@ -218,8 +236,6 @@ class AsyncBaseTask(Task):  # pylint: disable=abstract-method
 
 
 celery_app.Task = AsyncBaseTask
-
-celery_app.loader.import_default_modules()
 
 
 # ==============================================================================

@@ -58,8 +58,9 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
 
     # OpenTelemetry
-    OTEL_ENABLED: bool = False
-    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://signoz-otel-collector:4317"
+    OTEL_ENABLED: bool = True
+    OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://localhost:4317"
+    OTEL_METRIC_EXPORT_INTERVAL_MS: int = 1500
 
     # CORS
     CORS_ORIGINS: list[str] = [
