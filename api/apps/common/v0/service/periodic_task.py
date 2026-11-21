@@ -3,7 +3,7 @@ from uuid import UUID
 
 from celery.exceptions import CeleryError
 from fastapi import Depends, HTTPException, status
-from kombu.exceptions import KombuError  # type: ignore[import-untyped]
+from kombu.exceptions import KombuError
 from redis.asyncio import Redis
 
 from api.apps.common.constants import CeleryRedisKeys

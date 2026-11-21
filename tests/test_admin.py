@@ -44,7 +44,7 @@ def test_admin_login_failed() -> None:
         client = TestClient(app)
         get_resp = client.get("/admin/login")
         assert get_resp.status_code == 200
-        csrf_token = get_resp.cookies.get("starlette_admin_csrftoken", "")
+        csrf_token = get_resp.cookies.get("starlette_admin_csrftoken") or ""
 
         response = client.post(
             "/admin/login",

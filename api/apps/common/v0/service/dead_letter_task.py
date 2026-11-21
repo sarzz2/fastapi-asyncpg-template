@@ -11,7 +11,7 @@ from uuid import UUID
 from celery.exceptions import CeleryError
 from fastapi import Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
-from kombu.exceptions import KombuError  # type: ignore[import-untyped]
+from kombu.exceptions import KombuError
 
 from api.apps.common.v0.dao.dead_letter_task import DeadLetterTaskDAO, get_dead_letter_task_dao
 from api.apps.common.v0.schemas.dead_letter_task import (
