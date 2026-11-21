@@ -1,6 +1,6 @@
 
 # Builder stage
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -30,7 +30,7 @@ RUN uv sync --frozen --no-install-project
 
 
 # Runtime stage
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
